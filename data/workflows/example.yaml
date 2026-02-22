@@ -1,0 +1,18 @@
+name: example
+description: Example workflow demonstrating multi-step chains
+trigger: manual
+enabled: true
+steps:
+  - name: check-status
+    tool: shell_exec
+    args:
+      command: "echo 'System status: OK'"
+  - name: read-notes
+    tool: read_file
+    args:
+      path: "data/memory/MEMORY.md"
+  - name: sensitive-action
+    tool: shell_exec
+    args:
+      command: "echo 'This step requires approval'"
+    requires_approval: true

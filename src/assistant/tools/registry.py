@@ -43,6 +43,14 @@ class ToolRegistry:
             "input_schema": input_schema,
         })
 
+    def unregister(self, name: str) -> bool:
+        """Remove a tool by name. Returns True if found and removed."""
+        if name not in self._handlers:
+            return False
+        del self._handlers[name]
+        self._definitions = [d for d in self._definitions if d["name"] != name]
+        return True
+
     @property
     def definitions(self) -> list[dict[str, Any]]:
         return self._definitions
@@ -76,9 +84,14 @@ class ToolRegistry:
                 is_error=True,
             )
 
+        # Sanitize inputs before execution
+        from assistant.tools.sanitize import sanitize_tool_input
+
+        sanitized_input = sanitize_tool_input(tool_call.input)
+
         start = time.monotonic()
         try:
-            result_text = await handler(tool_call.input)
+            result_text = await handler(sanitized_input)
             duration_ms = int((time.monotonic() - start) * 1000)
             self._audit.log(
                 "tool_call",

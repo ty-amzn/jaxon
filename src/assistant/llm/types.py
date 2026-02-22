@@ -12,6 +12,11 @@ class Role(str, Enum):
     ASSISTANT = "assistant"
 
 
+class Provider(str, Enum):
+    CLAUDE = "claude"
+    OLLAMA = "ollama"
+
+
 @dataclass
 class Message:
     role: Role
@@ -49,6 +54,7 @@ class StreamEventType(str, Enum):
     TOOL_USE_DELTA = "tool_use_delta"
     TOOL_USE_COMPLETE = "tool_use_complete"
     MESSAGE_COMPLETE = "message_complete"
+    ROUTING_INFO = "routing_info"  # Phase 2: LLM routing notification
     ERROR = "error"
 
 
@@ -58,3 +64,16 @@ class StreamEvent:
     text: str = ""
     tool_call: ToolCall | None = None
     error: str = ""
+    provider: Provider | None = None  # For ROUTING_INFO events
+    model: str = ""  # For ROUTING_INFO events
+
+
+@dataclass
+class LLMConfig:
+    """Configuration for LLM client."""
+
+    provider: Provider
+    model: str
+    max_tokens: int = 8192
+    base_url: str = ""  # For Ollama
+    api_key: str = ""  # For Claude

@@ -32,8 +32,9 @@ class SearchIndex:
 
     def index_message(
         self, role: str, content: str, session_id: str = ""
-    ) -> None:
-        self._db["messages"].insert(
+    ) -> int | None:
+        """Index a message. Returns the row ID or None on failure."""
+        result = self._db["messages"].insert(
             {
                 "timestamp": datetime.now(timezone.utc).isoformat(),
                 "role": role,
@@ -41,6 +42,7 @@ class SearchIndex:
                 "session_id": session_id,
             }
         )
+        return result.last_pk
 
     def search(self, query: str, limit: int = 20) -> list[dict]:
         try:

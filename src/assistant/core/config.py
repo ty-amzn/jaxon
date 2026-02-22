@@ -34,6 +34,57 @@ class Settings(BaseSettings):
     # Permissions
     auto_approve_reads: bool = True
 
+    # Ollama (Phase 2)
+    ollama_enabled: bool = False
+    ollama_base_url: str = "http://localhost:11434"
+    ollama_model: str = "llama3.2"
+
+    # Routing (Phase 2)
+    local_model_threshold_tokens: int = 1000
+
+    # Web Search (Phase 2)
+    web_search_enabled: bool = False
+    searxng_url: str = "http://localhost:8888"
+
+    # Vector Search (Phase 2)
+    vector_search_enabled: bool = False
+    embedding_model: str = "nomic-embed-text"
+
+    # Media (Phase 2)
+    max_media_size_mb: int = 10
+
+    # Telegram (Phase 3)
+    telegram_enabled: bool = False
+    telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
+    telegram_allowed_user_ids: list[int] = Field(default_factory=list)
+    telegram_webhook_url: str = ""
+
+    # Scheduler (Phase 3)
+    scheduler_enabled: bool = False
+    scheduler_timezone: str = "UTC"
+
+    # Plugins (Phase 4)
+    plugins_enabled: bool = False
+
+    # Agents (Phase 4)
+    agents_enabled: bool = False
+
+    # Watchdog (Phase 3)
+    watchdog_enabled: bool = False
+    watchdog_paths: list[str] = Field(default_factory=list)
+    watchdog_debounce_seconds: float = 2.0
+    watchdog_analyze: bool = False
+
+    # Webhooks (Phase 4)
+    webhook_enabled: bool = False
+    webhook_secret: str = ""
+
+    # DND (Phase 4)
+    dnd_enabled: bool = False
+    dnd_start: str = "23:00"
+    dnd_end: str = "07:00"
+    dnd_allow_urgent: bool = True
+
     @property
     def memory_dir(self) -> Path:
         return self.data_dir / "memory"
@@ -61,6 +112,38 @@ class Settings(BaseSettings):
     @property
     def search_db_path(self) -> Path:
         return self.data_dir / "db" / "search.db"
+
+    @property
+    def skills_dir(self) -> Path:
+        return self.data_dir / "skills"
+
+    @property
+    def threads_dir(self) -> Path:
+        return self.data_dir / "threads"
+
+    @property
+    def embeddings_db_path(self) -> Path:
+        return self.data_dir / "db" / "embeddings.db"
+
+    @property
+    def plugins_dir(self) -> Path:
+        return self.data_dir / "plugins"
+
+    @property
+    def agents_dir(self) -> Path:
+        return self.data_dir / "agents"
+
+    @property
+    def scheduler_db_path(self) -> Path:
+        return self.data_dir / "db" / "scheduler.db"
+
+    @property
+    def workflow_dir(self) -> Path:
+        return self.data_dir / "workflows"
+
+    @property
+    def backup_dir(self) -> Path:
+        return self.data_dir / "backups"
 
 
 _settings: Settings | None = None

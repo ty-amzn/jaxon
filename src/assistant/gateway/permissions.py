@@ -62,6 +62,13 @@ class PermissionManager:
 
     def __init__(self, approval_callback: ApprovalCallback) -> None:
         self._approve = approval_callback
+        self._tool_categories: dict[str, ActionCategory] = {}
+
+    def register_tool_category(self, tool_name: str, category: str | ActionCategory) -> None:
+        """Register the action category for a plugin/dynamic tool."""
+        if isinstance(category, str):
+            category = ActionCategory(category)
+        self._tool_categories[tool_name] = category
 
     def classify_tool_call(
         self, tool_name: str, tool_input: dict[str, Any]
@@ -97,6 +104,35 @@ class PermissionManager:
                 action_category=category,
                 details=tool_input,
                 description=f"{method} {tool_input.get('url', '')}",
+            )
+        elif tool_name == "web_search":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Search: {tool_input.get('query', '')}",
+            )
+        elif tool_name == "schedule_reminder":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.WRITE,
+                details=tool_input,
+                description=f"Schedule: {tool_input.get('description', '')}",
+            )
+        elif tool_name == "run_workflow":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.WRITE,
+                details=tool_input,
+                description=f"Run workflow: {tool_input.get('name', '')}",
+            )
+        elif tool_name in self._tool_categories:
+            category = self._tool_categories[tool_name]
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=category,
+                details=tool_input,
+                description=f"Plugin tool: {tool_name}",
             )
         else:
             return PermissionRequest(

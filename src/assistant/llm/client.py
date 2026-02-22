@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import json
 import logging
-from collections.abc import AsyncGenerator, Callable, Awaitable
+from collections.abc import AsyncGenerator
 from typing import Any
 
 import anthropic
 
+from assistant.llm.base import BaseLLMClient, ToolExecutor
 from assistant.llm.types import (
-    Message,
-    Role,
+    LLMConfig,
+    Provider,
     StreamEvent,
     StreamEventType,
     ToolCall,
@@ -20,22 +21,40 @@ from assistant.llm.types import (
 
 logger = logging.getLogger(__name__)
 
-# Type for the tool executor callback
-ToolExecutor = Callable[[ToolCall], Awaitable[ToolResult]]
 
-
-class ClaudeClient:
+class ClaudeClient(BaseLLMClient):
     """Streaming Claude client with tool-use loop."""
 
-    def __init__(
-        self,
+    def __init__(self, config: LLMConfig) -> None:
+        super().__init__(config)
+        self._client = anthropic.AsyncAnthropic(api_key=config.api_key)
+
+    @classmethod
+    def from_settings(
+        cls,
         api_key: str,
         model: str = "claude-sonnet-4-20250514",
         max_tokens: int = 8192,
-    ) -> None:
-        self._client = anthropic.AsyncAnthropic(api_key=api_key)
-        self._model = model
-        self._max_tokens = max_tokens
+    ) -> "ClaudeClient":
+        """Create a ClaudeClient from individual settings (backward compatibility)."""
+        config = LLMConfig(
+            provider=Provider.CLAUDE,
+            model=model,
+            max_tokens=max_tokens,
+            api_key=api_key,
+        )
+        return cls(config)
+
+    async def is_available(self) -> bool:
+        """Check if Claude API is available."""
+        if not self._config.api_key:
+            return False
+        try:
+            # Quick check by listing models or making a minimal request
+            await self._client.models.list()
+            return True
+        except Exception:
+            return False
 
     async def stream_with_tool_loop(
         self,
@@ -61,8 +80,8 @@ class ClaudeClient:
             current_tool_id = ""
 
             kwargs: dict[str, Any] = {
-                "model": self._model,
-                "max_tokens": self._max_tokens,
+                "model": self._config.model,
+                "max_tokens": self._config.max_tokens,
                 "system": system,
                 "messages": current_messages,
             }

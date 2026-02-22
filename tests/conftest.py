@@ -16,6 +16,8 @@ def tmp_data_dir(tmp_path: Path) -> Path:
     (tmp_path / "memory" / "daily").mkdir(parents=True)
     (tmp_path / "logs").mkdir()
     (tmp_path / "db").mkdir()
+    (tmp_path / "skills").mkdir()
+    (tmp_path / "threads").mkdir()
 
     identity = tmp_path / "memory" / "IDENTITY.md"
     identity.write_text("# Test Identity\nYou are a test assistant.")

@@ -35,7 +35,66 @@ def chat() -> None:
     command_registry = CommandRegistry()
     interface.set_command_registry(command_registry)
 
-    asyncio.run(interface.run())
+    asyncio.run(_run_chat(interface, settings))
+
+
+async def _run_chat(interface, settings) -> None:
+    """Async wrapper that starts scheduler/watchdog if enabled, then runs chat."""
+    from assistant.core.notifications import NotificationDispatcher
+
+    dispatcher = NotificationDispatcher()
+
+    # Console notification sink
+    async def console_sink(msg: str) -> None:
+        interface._console.print(f"\n[bold yellow]Notification:[/bold yellow] {msg}\n")
+
+    dispatcher.register(console_sink)
+
+    # Start scheduler if enabled
+    scheduler_manager = None
+    if settings.scheduler_enabled:
+        from assistant.scheduler.store import JobStore
+        from assistant.scheduler.manager import SchedulerManager
+        from assistant.scheduler.tool import create_schedule_reminder_handler
+
+        job_store = JobStore(settings.scheduler_db_path)
+        scheduler_manager = SchedulerManager(
+            job_store=job_store,
+            dispatcher=dispatcher,
+            chat_interface=interface,
+            timezone=settings.scheduler_timezone,
+        )
+        await scheduler_manager.start()
+        interface._scheduler_manager = scheduler_manager
+
+        # Wire the real handler into the tool registry
+        handler = create_schedule_reminder_handler(scheduler_manager)
+        interface._tool_registry._handlers["schedule_reminder"] = handler
+
+    # Start watchdog if enabled
+    file_monitor = None
+    if settings.watchdog_enabled:
+        from assistant.watchdog_monitor.monitor import FileMonitor
+
+        file_monitor = FileMonitor(
+            dispatcher=dispatcher,
+            debounce_seconds=settings.watchdog_debounce_seconds,
+            analyze=settings.watchdog_analyze,
+        )
+        file_monitor.start()
+        interface._file_monitor = file_monitor
+
+        # Watch configured paths
+        for path in settings.watchdog_paths:
+            file_monitor.add_path(path)
+
+    try:
+        await interface.run()
+    finally:
+        if scheduler_manager:
+            await scheduler_manager.stop()
+        if file_monitor:
+            file_monitor.stop()
 
 
 @cli.command()
