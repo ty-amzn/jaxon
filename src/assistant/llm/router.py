@@ -1,4 +1,4 @@
-"""LLM Router — routes between local (Ollama) and cloud (Claude) models."""
+"""LLM Router — routes between multiple LLM providers."""
 
 from __future__ import annotations
 
@@ -9,7 +9,9 @@ from typing import Any
 from assistant.core.config import Settings
 from assistant.llm.base import BaseLLMClient, ToolExecutor
 from assistant.llm.client import ClaudeClient
+from assistant.llm.gemini import GeminiClient
 from assistant.llm.ollama import OllamaClient
+from assistant.llm.openai_client import OpenAIClient
 from assistant.llm.types import (
     LLMConfig,
     Provider,
@@ -21,12 +23,14 @@ logger = logging.getLogger(__name__)
 
 
 class LLMRouter(BaseLLMClient):
-    """Routes requests between Ollama (local) and Claude (cloud) based on rules."""
+    """Routes requests between multiple LLM providers based on config."""
 
     def __init__(self, settings: Settings) -> None:
         self._settings = settings
         self._claude_client: ClaudeClient | None = None
         self._ollama_client: OllamaClient | None = None
+        self._openai_client: OpenAIClient | None = None
+        self._gemini_client: GeminiClient | None = None
         self._ollama_available: bool | None = None
 
         # Create config for router (used for metadata)
@@ -60,6 +64,30 @@ class LLMRouter(BaseLLMClient):
             self._ollama_client = OllamaClient(config)
         return self._ollama_client
 
+    def _get_openai_client(self) -> OpenAIClient:
+        """Get or create OpenAI client."""
+        if self._openai_client is None:
+            config = LLMConfig(
+                provider=Provider.OPENAI,
+                model=self._settings.openai_model,
+                max_tokens=self._settings.max_tokens,
+                api_key=self._settings.openai_api_key,
+            )
+            self._openai_client = OpenAIClient(config)
+        return self._openai_client
+
+    def _get_gemini_client(self) -> GeminiClient:
+        """Get or create Gemini client."""
+        if self._gemini_client is None:
+            config = LLMConfig(
+                provider=Provider.GEMINI,
+                model=self._settings.gemini_model,
+                max_tokens=self._settings.max_tokens,
+                api_key=self._settings.gemini_api_key,
+            )
+            self._gemini_client = GeminiClient(config)
+        return self._gemini_client
+
     async def _check_ollama_available(self) -> bool:
         """Check if Ollama is available (cached)."""
         if self._ollama_available is None:
@@ -76,36 +104,61 @@ class LLMRouter(BaseLLMClient):
         messages: list[dict],
         tools: list[dict] | None,
     ) -> bool:
-        """Determine if Ollama should be used based on routing rules.
+        """Determine if Ollama should be used for simple queries.
 
         Routing rules:
-        1. Tool use → Claude (Ollama tool support varies)
-        2. Complex reasoning (long messages) → Claude
-        3. Ollama unavailable → Claude
-        4. Simple query → Ollama
+        1. Tool use → skip Ollama
+        2. Complex reasoning (long messages) → skip Ollama
+        3. Simple query → Ollama
         """
-        # Rule 1: Tool use always goes to Claude
         if tools:
-            logger.debug("Routing to Claude: tool use required")
+            logger.debug("Skipping Ollama: tool use required")
             return False
 
-        # Rule 2: Check message complexity
-        total_chars = sum(
-            len(str(m.get("content", "")))
-            for m in messages
-        )
-        # Approximate token count (rough: ~4 chars per token)
+        total_chars = sum(len(str(m.get("content", ""))) for m in messages)
         approx_tokens = total_chars // 4
 
         if approx_tokens > self._settings.local_model_threshold_tokens:
             logger.debug(
-                "Routing to Claude: complex reasoning (%d approx tokens)",
+                "Skipping Ollama: complex reasoning (%d approx tokens)",
                 approx_tokens,
             )
             return False
 
-        # Simple query → Ollama (if available)
         return True
+
+    def _get_default_client(self) -> tuple[BaseLLMClient, Provider, str]:
+        """Get the configured default provider's client.
+
+        Returns (client, provider_enum, model_name).
+        """
+        default = self._settings.default_provider
+
+        if default == "openai" and self._settings.openai_enabled:
+            return (
+                self._get_openai_client(),
+                Provider.OPENAI,
+                self._settings.openai_model,
+            )
+        if default == "gemini" and self._settings.gemini_enabled:
+            return (
+                self._get_gemini_client(),
+                Provider.GEMINI,
+                self._settings.gemini_model,
+            )
+        if default == "ollama" and self._settings.ollama_enabled:
+            return (
+                self._get_ollama_client(),
+                Provider.OLLAMA,
+                self._settings.ollama_model,
+            )
+
+        # Default or fallback: Claude
+        return (
+            self._get_claude_client(),
+            Provider.CLAUDE,
+            self._settings.model,
+        )
 
     @property
     def provider(self) -> str:
@@ -119,10 +172,12 @@ class LLMRouter(BaseLLMClient):
 
     async def is_available(self) -> bool:
         """Check if any LLM provider is available."""
-        # Claude is always available if API key is set
         if self._settings.anthropic_api_key:
             return True
-        # Fall back to checking Ollama
+        if self._settings.openai_enabled and self._settings.openai_api_key:
+            return True
+        if self._settings.gemini_enabled and self._settings.gemini_api_key:
+            return True
         return await self._check_ollama_available()
 
     async def stream_with_tool_loop(
@@ -136,32 +191,26 @@ class LLMRouter(BaseLLMClient):
         """Route to appropriate LLM and stream response."""
         use_ollama = False
 
-        # Check if Ollama is enabled
-        if self._settings.ollama_enabled:
-            # Check routing rules
+        # Check if Ollama should intercept simple queries
+        if self._settings.ollama_enabled and self._settings.default_provider != "ollama":
             use_ollama = self._should_use_ollama(messages, tools)
-
-            if use_ollama:
-                # Verify Ollama is available
-                if not await self._check_ollama_available():
-                    logger.info("Ollama not available, falling back to Claude")
-                    use_ollama = False
+            if use_ollama and not await self._check_ollama_available():
+                logger.info("Ollama not available, using default provider")
+                use_ollama = False
 
         # Select client
         if use_ollama:
-            client = self._get_ollama_client()
-            self._config = LLMConfig(
-                provider=Provider.OLLAMA,
-                model=self._settings.ollama_model,
-                max_tokens=self._settings.max_tokens,
-            )
+            client: BaseLLMClient = self._get_ollama_client()
+            provider = Provider.OLLAMA
+            model = self._settings.ollama_model
         else:
-            client = self._get_claude_client()
-            self._config = LLMConfig(
-                provider=Provider.CLAUDE,
-                model=self._settings.model,
-                max_tokens=self._settings.max_tokens,
-            )
+            client, provider, model = self._get_default_client()
+
+        self._config = LLMConfig(
+            provider=provider,
+            model=model,
+            max_tokens=self._settings.max_tokens,
+        )
 
         # Yield routing info event
         yield StreamEvent(
@@ -191,3 +240,7 @@ class LLMRouter(BaseLLMClient):
         """Close all clients."""
         if self._ollama_client:
             await self._ollama_client.close()
+        if self._openai_client:
+            await self._openai_client.close()
+        if self._gemini_client:
+            await self._gemini_client.close()

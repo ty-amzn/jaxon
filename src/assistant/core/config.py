@@ -34,6 +34,19 @@ class Settings(BaseSettings):
     # Permissions
     auto_approve_reads: bool = True
 
+    # Default provider
+    default_provider: str = "claude"
+
+    # OpenAI
+    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    openai_enabled: bool = False
+    openai_model: str = "gpt-4o"
+
+    # Gemini
+    gemini_api_key: str = Field(default="", validation_alias="GEMINI_API_KEY")
+    gemini_enabled: bool = False
+    gemini_model: str = "gemini-2.0-flash"
+
     # Ollama (Phase 2)
     ollama_enabled: bool = False
     ollama_base_url: str = "http://localhost:11434"

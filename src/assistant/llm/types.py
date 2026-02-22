@@ -15,6 +15,8 @@ class Role(str, Enum):
 class Provider(str, Enum):
     CLAUDE = "claude"
     OLLAMA = "ollama"
+    OPENAI = "openai"
+    GEMINI = "gemini"
 
 
 @dataclass
