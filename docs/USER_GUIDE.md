@@ -18,7 +18,8 @@ A personal AI assistant with Claude API, streaming CLI, tool use, persistent mem
 10. [Web Search](#web-search)
 11. [Vector Search](#vector-search)
 12. [Telegram Bot](#telegram-bot)
-13. [Scheduler](#scheduler)
+13. [WhatsApp Bot](#whatsapp-bot)
+14. [Scheduler](#scheduler)
 14. [File Monitoring](#file-monitoring)
 15. [Workflows](#workflows)
 16. [Webhooks](#webhooks)
@@ -380,6 +381,44 @@ ASSISTANT_TELEGRAM_WEBHOOK_URL=                   # Optional, for webhook mode
 Message your bot on Telegram. Only users in the `allowed_user_ids` list can interact with it.
 
 The Telegram bot shares sessions with the scheduler and watchdog, so notifications from those systems are delivered to your Telegram chat.
+
+---
+
+## WhatsApp Bot
+
+Chat with the assistant from WhatsApp using linked-device QR code pairing. No Meta Business account needed.
+
+### How It Works
+
+The WhatsApp integration uses [neonize](https://github.com/krypton-byte/neonize), a Python library built on whatsmeow (Go). It connects as a linked device — the same mechanism used by WhatsApp Web/Desktop.
+
+### Configuration
+
+```bash
+ASSISTANT_WHATSAPP_ENABLED=true
+ASSISTANT_WHATSAPP_ALLOWED_NUMBERS=["+15551234567"]  # E.164 format
+ASSISTANT_WHATSAPP_SESSION_NAME=assistant             # Optional, default: assistant
+```
+
+### First-Time Setup
+
+1. Start the API server: `uv run assistant serve`
+2. A QR code will be displayed in the terminal
+3. On your phone, open WhatsApp > Settings > Linked Devices > Link a Device
+4. Scan the QR code
+5. Send a message to yourself (or the linked number) from an allowed number
+
+The session persists in `data/whatsapp_auth/`, so you only need to scan the QR code once.
+
+### Access Control
+
+- Set `ASSISTANT_WHATSAPP_ALLOWED_NUMBERS` to a list of phone numbers in E.164 format (e.g. `+15551234567`)
+- If the list is empty, all incoming messages are accepted
+- Messages from unauthorized numbers are silently ignored
+
+### Notifications
+
+When allowed numbers are configured, they are automatically registered as notification sinks. Scheduled reminders, file monitoring alerts, and workflow notifications will be delivered to your WhatsApp.
 
 ---
 

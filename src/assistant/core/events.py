@@ -123,9 +123,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     await telegram_bot.send_message(uid, msg)
                 dispatcher.register(tg_sink)
 
+    # Start WhatsApp bot if enabled
+    whatsapp_bot = None
+    if settings.whatsapp_enabled:
+        from assistant.whatsapp.bot import WhatsAppBot
+
+        whatsapp_bot = WhatsAppBot(
+            chat_interface=chat_interface,
+            allowed_numbers=settings.whatsapp_allowed_numbers,
+            session_name=settings.whatsapp_session_name,
+            auth_dir=settings.whatsapp_auth_dir,
+        )
+        await whatsapp_bot.start()
+        app.state.whatsapp_bot = whatsapp_bot
+
+        # Register WhatsApp as notification sink for allowed numbers
+        if settings.whatsapp_allowed_numbers:
+            for number in settings.whatsapp_allowed_numbers:
+                async def wa_sink(msg: str, num=number) -> None:
+                    await whatsapp_bot.send_message(num, msg)
+                dispatcher.register(wa_sink)
+
     yield
 
     # Shutdown
+    if whatsapp_bot:
+        await whatsapp_bot.stop()
     if telegram_bot:
         await telegram_bot.stop()
     if scheduler_manager:

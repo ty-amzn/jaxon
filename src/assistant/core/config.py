@@ -79,6 +79,11 @@ class Settings(BaseSettings):
     webhook_enabled: bool = False
     webhook_secret: str = ""
 
+    # WhatsApp
+    whatsapp_enabled: bool = False
+    whatsapp_allowed_numbers: list[str] = Field(default_factory=list)
+    whatsapp_session_name: str = "assistant"
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"
@@ -144,6 +149,10 @@ class Settings(BaseSettings):
     @property
     def backup_dir(self) -> Path:
         return self.data_dir / "backups"
+
+    @property
+    def whatsapp_auth_dir(self) -> Path:
+        return self.data_dir / "whatsapp_auth"
 
 
 _settings: Settings | None = None

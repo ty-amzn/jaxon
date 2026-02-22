@@ -13,6 +13,7 @@ A self-hosted personal AI assistant built on Claude, with a streaming CLI, tool 
 - **Ollama integration** — Smart routing between Claude and local models for privacy/cost savings
 - **Web search** — SearXNG-powered web search tool
 - **Telegram bot** — Chat with your assistant from Telegram
+- **WhatsApp bot** — Chat with your assistant from WhatsApp via linked-device QR code pairing (neonize)
 - **Scheduler** — Cron, interval, and one-shot reminders with SQLite persistence
 - **File monitoring** — Watchdog-based directory monitoring with notifications
 - **Workflow engine** — Multi-step YAML-defined automation chains with approval gates
@@ -221,6 +222,8 @@ See the [Configuration Reference](docs/USER_GUIDE.md#configuration-reference) fo
 | `ASSISTANT_OLLAMA_ENABLED` | `false` | Enable local LLM routing |
 | `ASSISTANT_TELEGRAM_ENABLED` | `false` | Enable Telegram bot |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
+| `ASSISTANT_WHATSAPP_ENABLED` | `false` | Enable WhatsApp bot |
+| `ASSISTANT_WHATSAPP_ALLOWED_NUMBERS` | `[]` | Allowed phone numbers (E.164) |
 | `ASSISTANT_SCHEDULER_ENABLED` | `false` | Enable scheduled jobs |
 | `ASSISTANT_WEBHOOK_ENABLED` | `false` | Enable webhook endpoints |
 | `ASSISTANT_DND_ENABLED` | `false` | Enable Do Not Disturb |
@@ -298,6 +301,7 @@ src/assistant/
 ├── tools/              # Shell, file, HTTP, web search, sanitization
 ├── scheduler/          # APScheduler, job store, workflows
 ├── telegram/           # Telegram bot and handlers
+├── whatsapp/           # WhatsApp bot and handlers (neonize)
 ├── watchdog_monitor/   # File system monitoring
 ├── plugins/            # Plugin system
 └── agents/             # Agent delegation

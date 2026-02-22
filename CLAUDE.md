@@ -83,6 +83,7 @@ All 7 features implemented:
 
 ## Phase 3 (Integrations) — COMPLETE
 - Telegram bot integration (`telegram/bot.py`)
+- WhatsApp bot integration (`whatsapp/bot.py`) — neonize linked-device QR pairing
 - APScheduler automations (`scheduler/` — jobs, manager, store, tool)
 - Watchdog file monitoring (`watchdog_monitor/monitor.py`)
 - Notification dispatcher (`core/notifications.py`)
