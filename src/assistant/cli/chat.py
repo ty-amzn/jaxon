@@ -152,7 +152,11 @@ class ChatInterface:
                 self._active_live.start()
 
     async def _execute_tool(
-        self, tool_call: ToolCall, session: Any = None, render: bool = True,
+        self,
+        tool_call: ToolCall,
+        session: Any = None,
+        render: bool = True,
+        permission_override: PermissionManager | None = None,
     ) -> ToolResult:
         """Execute a tool call via the registry."""
         if session is None:
@@ -160,7 +164,9 @@ class ChatInterface:
         if render:
             self._console.print(render_tool_call(tool_call.name, tool_call.input))
 
-        result = await self._tool_registry.execute(tool_call, session_id=session.id)
+        result = await self._tool_registry.execute(
+            tool_call, session_id=session.id, permission_override=permission_override,
+        )
 
         if render:
             self._console.print(render_tool_result(result.content, result.is_error))
@@ -182,53 +188,51 @@ class ChatInterface:
         """Core message processing without Rich rendering. Returns full response text.
 
         This is the headless entry point used by Telegram, scheduler, etc.
+        Acquires the session lock to prevent concurrent mutations of shared state.
         """
-        # Dispatch pre_message hook
-        if self._hook_dispatcher:
-            user_input = await self._hook_dispatcher.pre_message(
-                user_input, session_id=session.id
+        async with session.lock:
+            # Dispatch pre_message hook
+            if self._hook_dispatcher:
+                user_input = await self._hook_dispatcher.pre_message(
+                    user_input, session_id=session.id
+                )
+
+            # Parse @image: references
+            clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
+
+            # Load images if any
+            images = []
+            if image_paths:
+                for img_path in image_paths:
+                    img = self._media_handler.load_image(img_path)
+                    if img:
+                        images.append(img)
+
+            # Build message content (text or multimodal)
+            if images:
+                message_content = self._media_handler.build_multimodal_message(clean_text, images)
+            else:
+                message_content = user_input
+
+            if isinstance(message_content, list):
+                session.add_message(Role.USER, message_content)
+            else:
+                session.add_message(Role.USER, message_content)
+            session.clear_tool_calls()
+
+            system_prompt = build_system_prompt(self._memory)
+            messages = build_messages(
+                session.get_context_messages(self._settings.max_context_messages),
             )
 
-        # Parse @image: references
-        clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
+            full_response = ""
 
-        # Load images if any
-        images = []
-        if image_paths:
-            for img_path in image_paths:
-                img = self._media_handler.load_image(img_path)
-                if img:
-                    images.append(img)
-
-        # Build message content (text or multimodal)
-        if images:
-            message_content = self._media_handler.build_multimodal_message(clean_text, images)
-        else:
-            message_content = user_input
-
-        if isinstance(message_content, list):
-            session.add_message(Role.USER, message_content)
-        else:
-            session.add_message(Role.USER, message_content)
-        session.clear_tool_calls()
-
-        system_prompt = build_system_prompt(self._memory)
-        messages = build_messages(
-            session.get_context_messages(self._settings.max_context_messages),
-        )
-
-        # Use a separate permission manager if provided (e.g. Telegram approval)
-        old_permissions = None
-        if permission_manager is not None:
-            old_permissions = self._tool_registry._permissions
-            self._tool_registry._permissions = permission_manager
-
-        full_response = ""
-
-        try:
             # Create tool executor bound to this session (no rendering)
+            # Pass permission_override so we never mutate the shared registry attribute
             async def headless_tool_executor(tc: ToolCall) -> ToolResult:
-                return await self._execute_tool(tc, session=session, render=False)
+                return await self._execute_tool(
+                    tc, session=session, render=False, permission_override=permission_manager,
+                )
 
             async for event in self._llm.stream_with_tool_loop(
                 system=system_prompt,
@@ -243,26 +247,23 @@ class ChatInterface:
                     full_response = event.text
                 elif event.type == StreamEventType.ERROR:
                     logger.error("LLM error: %s", event.error)
-        finally:
-            if old_permissions is not None:
-                self._tool_registry._permissions = old_permissions
 
-        # Save to session and memory
-        session.add_message(Role.ASSISTANT, full_response)
-        await self._memory.save_exchange(
-            user_input,
-            full_response,
-            session_id=session.id,
-            tool_calls=session.last_tool_calls,
-        )
-
-        # Dispatch post_message hook
-        if self._hook_dispatcher:
-            await self._hook_dispatcher.post_message(
-                user_input, full_response, session_id=session.id
+            # Save to session and memory
+            session.add_message(Role.ASSISTANT, full_response)
+            await self._memory.save_exchange(
+                user_input,
+                full_response,
+                session_id=session.id,
+                tool_calls=session.last_tool_calls,
             )
 
-        return full_response
+            # Dispatch post_message hook
+            if self._hook_dispatcher:
+                await self._hook_dispatcher.post_message(
+                    user_input, full_response, session_id=session.id
+                )
+
+            return full_response
 
     async def get_response(
         self,

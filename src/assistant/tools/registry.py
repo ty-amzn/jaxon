@@ -55,9 +55,15 @@ class ToolRegistry:
     def definitions(self) -> list[dict[str, Any]]:
         return self._definitions
 
-    async def execute(self, tool_call: ToolCall, session_id: str = "") -> ToolResult:
+    async def execute(
+        self,
+        tool_call: ToolCall,
+        session_id: str = "",
+        permission_override: PermissionManager | None = None,
+    ) -> ToolResult:
         """Execute a tool call with permission checking and audit logging."""
-        allowed, perm_request = await self._permissions.check(
+        permissions = permission_override or self._permissions
+        allowed, perm_request = await permissions.check(
             tool_call.name, tool_call.input
         )
 

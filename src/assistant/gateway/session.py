@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,6 +16,7 @@ class Session:
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:12])
     messages: list[Message] = field(default_factory=list)
     tool_calls: list[dict] = field(default_factory=list)
+    lock: asyncio.Lock = field(default_factory=asyncio.Lock, repr=False)
     thread_id: str | None = None
     thread_name: str | None = None
 
