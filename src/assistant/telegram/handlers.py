@@ -14,6 +14,8 @@ from telegram.ext import (
     filters,
 )
 
+from assistant.gateway.permissions import PermissionManager
+
 if TYPE_CHECKING:
     from assistant.telegram.bot import TelegramBot
 
@@ -113,8 +115,21 @@ def _make_text(bot: TelegramBot):
         chat_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
         user_input = update.message.text
 
+        # Get or create Telegram approval callback for this chat
+        if chat_id not in bot._approval_callbacks:
+            from assistant.telegram.permissions import TelegramApprovalCallback
+
+            numeric_chat_id = update.effective_chat.id if update.effective_chat else 0
+            bot._approval_callbacks[chat_id] = TelegramApprovalCallback(
+                bot.application.bot, numeric_chat_id
+            )
+        approval_cb = bot._approval_callbacks[chat_id]
+        permission_manager = PermissionManager(approval_cb)
+
         try:
-            response = await bot.chat_interface.get_response(chat_id, user_input)
+            response = await bot.chat_interface.get_response(
+                chat_id, user_input, permission_manager=permission_manager
+            )
             # Telegram has a 4096 char limit per message
             if len(response) > 4000:
                 for i in range(0, len(response), 4000):

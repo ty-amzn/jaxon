@@ -36,7 +36,7 @@ class TelegramBot:
         self._approval_callbacks: dict[str, TelegramApprovalCallback] = {}
 
         self.application: Application = (
-            Application.builder().token(token).build()
+            Application.builder().token(token).concurrent_updates(True).build()
         )
 
         # Register handlers
