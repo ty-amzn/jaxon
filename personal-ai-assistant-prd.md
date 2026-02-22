@@ -384,7 +384,7 @@ Since you're the sole user, a single container is sufficient — no need for a s
 │  │  │  assistant                                    │   │  │
 │  │  │  Python gateway, LLM router, skills,          │   │  │
 │  │  │  Telegram bot, WhatsApp bridge, scheduler     │   │  │
-│  │  │  Port: 8000 (API + webhooks, localhost only)  │   │  │
+│  │  │  Port: 51430 (API + webhooks, localhost only)  │   │  │
 │  │  └───────────────────────────────────────────────┘   │  │
 │  │                                                      │  │
 │  └─────────────────────────────────────────────────────┘  │
@@ -414,7 +414,7 @@ services:
     container_name: personal-ai-assistant
     restart: unless-stopped
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:51430:51430"
     volumes:
       - ./data/memory:/app/memory
       - ./data/skills:/app/skills

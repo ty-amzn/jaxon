@@ -5,7 +5,7 @@
 cp .env.example .env   # set ANTHROPIC_API_KEY
 uv sync --all-extras
 uv run assistant chat   # interactive mode
-uv run assistant serve  # API server at :8000
+uv run assistant serve  # API server at :51430
 uv run pytest           # run tests
 ```
 

@@ -49,7 +49,7 @@ uv sync --all-extras        # Install dependencies
 
 ```bash
 uv run assistant chat       # Interactive CLI
-uv run assistant serve      # API server at :8000
+uv run assistant serve      # API server at :51430
 uv run pytest               # Run tests
 ```
 
@@ -569,7 +569,7 @@ This is compatible with GitHub webhook signatures.
 uv run assistant serve
 
 # Trigger a workflow
-curl -X POST http://localhost:8000/webhooks/daily-summary \
+curl -X POST http://localhost:51430/webhooks/daily-summary \
   -H "Content-Type: application/json" \
   -d '{"event": "push", "repo": "my-project"}'
 ```
@@ -668,7 +668,7 @@ The server also manages the lifecycle of Telegram bot, scheduler, watchdog, and 
 
 ```bash
 ASSISTANT_HOST=127.0.0.1
-ASSISTANT_PORT=8000
+ASSISTANT_PORT=51430
 ```
 
 ---
@@ -696,7 +696,7 @@ All settings can be set in `.env`. Settings use the `ASSISTANT_` prefix unless n
 | `ASSISTANT_MAX_TOKENS` | `8192` | Max response tokens |
 | `ASSISTANT_DATA_DIR` | `./data` | Data directory path |
 | `ASSISTANT_HOST` | `127.0.0.1` | API server host |
-| `ASSISTANT_PORT` | `8000` | API server port |
+| `ASSISTANT_PORT` | `51430` | API server port |
 | `ASSISTANT_LOG_LEVEL` | `INFO` | Logging level |
 | `ASSISTANT_MAX_CONTEXT_MESSAGES` | `50` | Max messages in context |
 | `ASSISTANT_AUTO_APPROVE_READS` | `true` | Auto-approve read operations |

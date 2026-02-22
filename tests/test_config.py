@@ -10,7 +10,7 @@ def test_settings_defaults():
     assert s.model == "claude-sonnet-4-20250514"
     assert s.max_tokens == 8192
     assert s.host == "127.0.0.1"
-    assert s.port == 8000
+    assert s.port == 51430
 
 
 def test_settings_paths(settings: Settings):

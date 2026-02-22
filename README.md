@@ -49,7 +49,7 @@ cp .env.example .env
 docker compose up -d
 ```
 
-The API server starts at `http://localhost:8000`. Data persists in the `./data` volume mount.
+The API server starts at `http://localhost:51430`. Data persists in the `./data` volume mount.
 
 ## Deployment
 
@@ -62,14 +62,14 @@ services:
   assistant:
     build: .
     ports:
-      - "8000:8000"
+      - "51430:51430"
     env_file:
       - .env
     volumes:
       - ./data:/app/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51430/health').raise_for_status()"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -90,7 +90,7 @@ docker compose down
 ```
 
 The container:
-- Exposes port 8000 for the API, webhooks, and Telegram webhook mode
+- Exposes port 51430 for the API, webhooks, and Telegram webhook mode
 - Mounts `./data` for persistent storage (memory, threads, databases, logs)
 - Restarts automatically unless explicitly stopped
 - Includes a health check that polls `/health` every 30 seconds
@@ -105,7 +105,7 @@ services:
   assistant:
     build: .
     ports:
-      - "8000:8000"
+      - "51430:51430"
     env_file:
       - .env
     volumes:
@@ -114,7 +114,7 @@ services:
     depends_on:
       - ollama
     healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:8000/health').raise_for_status()"]
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51430/health').raise_for_status()"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -199,7 +199,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:8000;
+        proxy_pass http://127.0.0.1:51430;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -218,7 +218,7 @@ See the [Configuration Reference](docs/USER_GUIDE.md#configuration-reference) fo
 | `ASSISTANT_MODEL` | `claude-sonnet-4-20250514` | Claude model |
 | `ASSISTANT_DATA_DIR` | `./data` | Persistent data directory |
 | `ASSISTANT_HOST` | `127.0.0.1` | API server bind address |
-| `ASSISTANT_PORT` | `8000` | API server port |
+| `ASSISTANT_PORT` | `51430` | API server port |
 | `ASSISTANT_OLLAMA_ENABLED` | `false` | Enable local LLM routing |
 | `ASSISTANT_TELEGRAM_ENABLED` | `false` | Enable Telegram bot |
 | `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
@@ -244,7 +244,7 @@ Type messages to chat. Use `/help` to see all slash commands.
 uv run assistant serve
 ```
 
-Required for Telegram, scheduler, webhooks, and file monitoring. Starts at `http://localhost:8000`.
+Required for Telegram, scheduler, webhooks, and file monitoring. Starts at `http://localhost:51430`.
 
 ### Example Workflows
 
@@ -279,7 +279,7 @@ EOF
 
 **Trigger via webhook:**
 ```bash
-curl -X POST http://localhost:8000/webhooks/health-check \
+curl -X POST http://localhost:51430/webhooks/health-check \
   -H "Content-Type: application/json" \
   -d '{}'
 ```

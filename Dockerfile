@@ -22,6 +22,6 @@ RUN uv sync --frozen --no-dev
 # Create data directories
 RUN mkdir -p data/memory/daily data/logs data/db data/skills data/automations
 
-EXPOSE 8000
+EXPOSE 51430
 
 CMD ["uv", "run", "assistant", "serve", "--host", "0.0.0.0"]

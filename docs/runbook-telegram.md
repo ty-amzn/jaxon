@@ -72,7 +72,7 @@ Webhooks require a public HTTPS URL that Telegram can reach.
 ### Option A: ngrok (local dev)
 
 ```bash
-ngrok http 8000
+ngrok http 51430
 # Note the https URL, e.g. https://abc123.ngrok-free.app
 ```
 
@@ -84,7 +84,7 @@ ASSISTANT_TELEGRAM_WEBHOOK_URL=https://abc123.ngrok-free.app/telegram/webhook
 
 ### Option B: Production (reverse proxy)
 
-Point your HTTPS domain to the assistant on port 8000, then set:
+Point your HTTPS domain to the assistant on port 51430, then set:
 
 ```dotenv
 ASSISTANT_TELEGRAM_WEBHOOK_URL=https://assistant.example.com/telegram/webhook
