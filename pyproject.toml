@@ -19,6 +19,9 @@ dependencies = [
     "watchdog>=4.0",
     "pyyaml>=6.0",
     "neonize>=0.3.0",
+    "trafilatura>=2.0.0",
+    "pymupdf>=1.25.0",
+    "feedparser>=6.0.0",
 ]
 
 [project.optional-dependencies]

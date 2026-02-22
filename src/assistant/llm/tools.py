@@ -20,7 +20,10 @@ from assistant.tools.memory_tool import (
 from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
 from assistant.tools.skill_tool import MANAGE_SKILL_DEF, _make_manage_skill
+from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
+from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
+from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
 
 
 def register_orchestrator_tools(
@@ -75,6 +78,26 @@ def create_tool_registry(
         HTTP_TOOL_DEF["description"],
         HTTP_TOOL_DEF["input_schema"],
         http_request,
+    )
+
+    # Register web_fetch, pdf_read, arxiv_search (always available)
+    registry.register(
+        WEB_FETCH_TOOL_DEF["name"],
+        WEB_FETCH_TOOL_DEF["description"],
+        WEB_FETCH_TOOL_DEF["input_schema"],
+        web_fetch,
+    )
+    registry.register(
+        PDF_READ_TOOL_DEF["name"],
+        PDF_READ_TOOL_DEF["description"],
+        PDF_READ_TOOL_DEF["input_schema"],
+        pdf_read,
+    )
+    registry.register(
+        ARXIV_SEARCH_TOOL_DEF["name"],
+        ARXIV_SEARCH_TOOL_DEF["description"],
+        ARXIV_SEARCH_TOOL_DEF["input_schema"],
+        arxiv_search,
     )
 
     # Register web_search if enabled

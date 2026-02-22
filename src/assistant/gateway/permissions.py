@@ -157,6 +157,27 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Agent {action}: {tool_input.get('name', '')}",
             )
+        elif tool_name == "web_fetch":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Fetch: {tool_input.get('url', '')}",
+            )
+        elif tool_name == "pdf_read":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"PDF: {tool_input.get('url', '')}",
+            )
+        elif tool_name == "arxiv_search":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"arXiv: {tool_input.get('query', '')}",
+            )
         elif tool_name == "web_search":
             return PermissionRequest(
                 tool_name=tool_name,
