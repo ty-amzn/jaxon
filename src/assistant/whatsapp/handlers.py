@@ -8,6 +8,8 @@ from typing import TYPE_CHECKING
 from neonize.aioze.client import NewAClient
 from neonize.aioze.events import MessageEv
 
+from assistant.gateway.permissions import PermissionManager
+
 if TYPE_CHECKING:
     from assistant.whatsapp.bot import WhatsAppBot
 
@@ -68,11 +70,22 @@ async def handle_message(
         logger.warning("Unauthorized WhatsApp message from %s", sender_number)
         return
 
+    # Check if this message is an approval reply to a pending permission prompt
+    approval_cb = bot.get_approval_callback(sender_number)
+    if approval_cb.try_resolve(text):
+        logger.info("WhatsApp approval reply from %s: %s", sender_number, text)
+        return
+
     # Use the sender number as the session key (with + prefix for consistency)
     session_key = f"whatsapp_{sender_number}"
 
+    # Create a PermissionManager with the WhatsApp approval callback for this sender
+    wa_permission_manager = PermissionManager(approval_cb)
+
     try:
-        response = await bot.chat_interface.get_response(session_key, text)
+        response = await bot.chat_interface.get_response(
+            session_key, text, permission_manager=wa_permission_manager,
+        )
         if response:
             await bot.send_message(f"+{sender_number}", response)
     except Exception:

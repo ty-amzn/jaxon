@@ -20,6 +20,11 @@
 | `/thread list` | List all saved threads |
 | `/thread export <fmt>` | Export thread (json/markdown) |
 | `/thread delete <id>` | Delete a thread |
+| `/clear session` | Clear current session messages |
+| `/clear history` | Delete all daily log files |
+| `/clear memory` | Wipe durable memory |
+| `/clear search` | Clear search index and embeddings |
+| `/clear all` | Clear everything |
 | `/schedule list` | List scheduled jobs |
 | `/schedule remove <id>` | Remove a scheduled job |
 | `/watch` | Manage filesystem monitoring |
@@ -33,6 +38,21 @@
 | `/backup restore <name>` | Restore from backup |
 | `/plugins` | Manage plugins |
 | `/agents` | List available agents |
+| `/agents reload` | Reload agent definitions |
+
+## Natural Language Features
+
+These work by just chatting — no commands needed:
+
+| Say this | What happens |
+|----------|-------------|
+| "Be more casual and witty" | Updates assistant personality |
+| "Call me Alex" | Saves your name to memory |
+| "What did we talk about last week?" | Searches conversation history |
+| "Forget about the old project" | Deletes matching memories |
+| "Create a skill for code review" | Creates a skill file |
+| "Create an agent for research using gpt-4o" | Creates an agent YAML |
+| "Remind me at 9am to check PRs" | Schedules a reminder |
 
 ## Image Syntax
 
@@ -42,6 +62,27 @@ What's in this? @image:/path/to/image.png
 
 Supports: PNG, JPEG, GIF, WebP (max 10MB)
 
+## LLM Tools
+
+| Tool | Auto-approved? |
+|------|---------------|
+| `shell_exec` (read commands) | Yes |
+| `read_file` | Yes |
+| `write_file` | No |
+| `http_request` (GET) | Yes |
+| `http_request` (POST, etc.) | No |
+| `web_search` | Yes |
+| `memory_search` | Yes |
+| `memory_forget` | No (delete) |
+| `update_identity` (read) | Yes |
+| `update_identity` (write) | No |
+| `manage_skill` (list) | Yes |
+| `manage_skill` (create/edit/delete) | No |
+| `manage_agent` (list/reload) | Yes |
+| `manage_agent` (create/edit/delete) | No |
+| `schedule_reminder` | No |
+| `delegate_to_agent` | Yes |
+
 ## Configuration (`.env`)
 
 ### Core
@@ -50,6 +91,19 @@ ANTHROPIC_API_KEY=your-key
 ASSISTANT_MODEL=claude-sonnet-4-20250514
 ASSISTANT_MAX_TOKENS=8192
 ASSISTANT_DATA_DIR=./data
+ASSISTANT_DEFAULT_PROVIDER=claude      # claude | openai | gemini | ollama
+ASSISTANT_MAX_TOOL_ROUNDS=10
+```
+
+### Multi-Provider
+```bash
+OPENAI_API_KEY=sk-...
+ASSISTANT_OPENAI_ENABLED=false
+ASSISTANT_OPENAI_MODEL=gpt-4o
+
+GEMINI_API_KEY=
+ASSISTANT_GEMINI_ENABLED=false
+ASSISTANT_GEMINI_MODEL=gemini-2.0-flash
 ```
 
 ### Ollama (Local LLM)
@@ -72,13 +126,13 @@ ASSISTANT_EMBEDDING_MODEL=nomic-embed-text
 ```bash
 ASSISTANT_TELEGRAM_ENABLED=false
 TELEGRAM_BOT_TOKEN=your-token
-ASSISTANT_TELEGRAM_ALLOWED_USER_IDS=[123456789]
+ASSISTANT_TELEGRAM_ALLOWED_USER_IDS=123456789
 ```
 
 ### WhatsApp
 ```bash
 ASSISTANT_WHATSAPP_ENABLED=false
-ASSISTANT_WHATSAPP_ALLOWED_NUMBERS=[]     # E.164 format, e.g. ["+15551234567"]
+ASSISTANT_WHATSAPP_ALLOWED_NUMBERS=+15551234567
 ASSISTANT_WHATSAPP_SESSION_NAME=assistant
 ```
 
@@ -87,7 +141,7 @@ ASSISTANT_WHATSAPP_SESSION_NAME=assistant
 ASSISTANT_SCHEDULER_ENABLED=false
 ASSISTANT_SCHEDULER_TIMEZONE=UTC
 ASSISTANT_WATCHDOG_ENABLED=false
-ASSISTANT_WATCHDOG_PATHS=[]
+ASSISTANT_WATCHDOG_PATHS=
 ```
 
 ### Webhooks & DND
@@ -100,6 +154,54 @@ ASSISTANT_DND_END=07:00
 ASSISTANT_DND_ALLOW_URGENT=true
 ```
 
+### Plugins & Agents
+```bash
+ASSISTANT_PLUGINS_ENABLED=false
+ASSISTANT_AGENTS_ENABLED=false
+```
+
+## Agent Definition (YAML)
+
+```yaml
+# data/agents/researcher.yaml
+name: researcher
+description: Research agent
+system_prompt: |
+  You are a research assistant.
+allowed_tools:
+  - web_search
+  - read_file
+model: openai/gpt-4o          # optional — provider/model syntax
+max_tool_rounds: 50
+```
+
+Model providers: `claude/`, `openai/`, `gemini/`, `ollama/`. Omit for default.
+
+## Plugin (Python)
+
+```python
+# data/plugins/my_plugin.py
+from assistant.plugins.types import BasePlugin, PluginManifest, PluginToolDef
+
+class MyPlugin(BasePlugin):
+    def __init__(self):
+        super().__init__(PluginManifest(name="my-plugin", version="1.0.0"))
+
+    def get_tools(self) -> list[PluginToolDef]:
+        async def handler(params: dict) -> str:
+            return params["text"]
+        return [PluginToolDef(
+            name="my_tool", description="...",
+            input_schema={"type": "object", "properties": {"text": {"type": "string"}}, "required": ["text"]},
+            handler=handler, permission_category="read",
+        )]
+
+def create_plugin() -> MyPlugin:
+    return MyPlugin()
+```
+
+Requires `ASSISTANT_PLUGINS_ENABLED=true`. Manage with `/plugins`, `/plugins info <name>`, `/plugins reload <name>`.
+
 ## Directory Structure
 
 ```
@@ -108,9 +210,9 @@ data/
 ├── skills/           # Skill definitions (.md)
 ├── threads/          # Saved threads (.json)
 ├── workflows/        # Workflow definitions (.yaml)
+├── agents/           # Agent definitions (.yaml)
 ├── backups/          # Data backups (.tar.gz)
 ├── plugins/          # Plugin modules
-├── agents/           # Agent definitions (.yaml)
 ├── db/               # search.db, embeddings.db, scheduler.db
 └── logs/             # audit.jsonl, app.log
 ```
@@ -125,6 +227,7 @@ ANTHROPIC_API_KEY=your-key
 ### Local-First (Ollama)
 ```bash
 ASSISTANT_OLLAMA_ENABLED=true
+ASSISTANT_DEFAULT_PROVIDER=ollama
 ASSISTANT_VECTOR_SEARCH_ENABLED=true
 ```
 
@@ -135,6 +238,7 @@ ASSISTANT_OLLAMA_ENABLED=true
 ASSISTANT_WEB_SEARCH_ENABLED=true
 ASSISTANT_VECTOR_SEARCH_ENABLED=true
 ASSISTANT_SCHEDULER_ENABLED=true
+ASSISTANT_AGENTS_ENABLED=true
 ASSISTANT_TELEGRAM_ENABLED=true
 ASSISTANT_WHATSAPP_ENABLED=true
 ASSISTANT_WEBHOOK_ENABLED=true

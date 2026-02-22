@@ -32,6 +32,7 @@ class LLMRouter(BaseLLMClient):
         self._openai_client: OpenAIClient | None = None
         self._gemini_client: GeminiClient | None = None
         self._ollama_available: bool | None = None
+        self._model_clients: dict[str, BaseLLMClient] = {}
 
         # Create config for router (used for metadata)
         self._config = LLMConfig(
@@ -229,6 +230,77 @@ class LLMRouter(BaseLLMClient):
         ):
             yield event
 
+    _PROVIDER_MAP: dict[str, Provider] = {
+        "claude": Provider.CLAUDE,
+        "openai": Provider.OPENAI,
+        "gemini": Provider.GEMINI,
+        "ollama": Provider.OLLAMA,
+    }
+
+    def get_client_for_model(self, model: str) -> BaseLLMClient:
+        """Return a client configured for the given model string.
+
+        Uses ``provider/model`` syntax, e.g.:
+        - ``openai/gpt-4o``
+        - ``claude/claude-sonnet-4-5-20250514``
+        - ``gemini/gemini-2.0-flash``
+        - ``ollama/llama3``
+
+        If no ``/`` is present, falls back to the default provider.
+        """
+        if model in self._model_clients:
+            return self._model_clients[model]
+
+        if "/" in model:
+            provider_key, model_name = model.split("/", 1)
+            provider = self._PROVIDER_MAP.get(provider_key)
+            if provider is None:
+                raise ValueError(
+                    f"Unknown provider '{provider_key}' in '{model}'. "
+                    f"Valid providers: {', '.join(self._PROVIDER_MAP)}"
+                )
+        else:
+            # No prefix — use default provider
+            _, provider, _ = self._get_default_client()
+            model_name = model
+
+        if provider == Provider.OPENAI:
+            config = LLMConfig(
+                provider=Provider.OPENAI,
+                model=model_name,
+                max_tokens=self._settings.max_tokens,
+                api_key=self._settings.openai_api_key,
+            )
+            client: BaseLLMClient = OpenAIClient(config)
+        elif provider == Provider.GEMINI:
+            config = LLMConfig(
+                provider=Provider.GEMINI,
+                model=model_name,
+                max_tokens=self._settings.max_tokens,
+                api_key=self._settings.gemini_api_key,
+            )
+            client = GeminiClient(config)
+        elif provider == Provider.OLLAMA:
+            config = LLMConfig(
+                provider=Provider.OLLAMA,
+                model=model_name,
+                max_tokens=self._settings.max_tokens,
+                base_url=self._settings.ollama_base_url,
+            )
+            client = OllamaClient(config)
+        else:
+            config = LLMConfig(
+                provider=Provider.CLAUDE,
+                model=model_name,
+                max_tokens=self._settings.max_tokens,
+                api_key=self._settings.anthropic_api_key,
+            )
+            client = ClaudeClient(config)
+
+        self._model_clients[model] = client
+        logger.info("Created %s client for model %s", provider.value, model_name)
+        return client
+
     async def get_embedding(self, text: str) -> list[float] | None:
         """Get embedding using Ollama if available."""
         if self._settings.ollama_enabled and await self._check_ollama_available():
@@ -244,3 +316,6 @@ class LLMRouter(BaseLLMClient):
             await self._openai_client.close()
         if self._gemini_client:
             await self._gemini_client.close()
+        for client in self._model_clients.values():
+            await client.close()
+        self._model_clients.clear()

@@ -115,6 +115,82 @@ def ask(question: tuple[str, ...]) -> None:
     asyncio.run(interface.handle_message(full_question))
 
 
+@cli.command("whatsapp-pair")
+@click.option("--reset", is_flag=True, help="Delete existing session and re-pair")
+def whatsapp_pair(reset: bool) -> None:
+    """Pair WhatsApp by scanning a QR code.
+
+    Run this once to link your WhatsApp account. The session is saved
+    to data/whatsapp_auth/ and reused by the server automatically.
+
+    In Docker:  docker compose run --rm -it assistant uv run assistant whatsapp-pair
+    """
+    asyncio.run(_whatsapp_pair(reset))
+
+
+async def _whatsapp_pair(reset: bool) -> None:
+    """Standalone WhatsApp pairing — runs neonize with its own event loop."""
+    settings = get_settings()
+    setup_logging(settings.log_level, settings.app_log_path)
+
+    auth_dir = settings.whatsapp_auth_dir
+    auth_dir.mkdir(parents=True, exist_ok=True)
+    db_path = auth_dir / f"{settings.whatsapp_session_name}.sqlite3"
+
+    if reset and db_path.exists():
+        db_path.unlink()
+        click.echo(f"Deleted existing session: {db_path}")
+
+    if db_path.exists():
+        click.echo(f"Session file already exists: {db_path}")
+        click.echo("Use --reset to delete it and re-pair.")
+        click.echo("Starting anyway to verify connection...\n")
+
+    # Patch neonize's internal event loop to the currently running one.
+    # neonize creates its own loop at import time and all Go→Python callbacks
+    # (QR codes, connected, messages) are scheduled on it.  Without this patch
+    # those callbacks silently go nowhere.
+    # Both modules must be patched: client.py has its own binding via
+    # `from .events import event_global_loop`.
+    import neonize.aioze.client as neonize_client
+    import neonize.aioze.events as neonize_events
+    running_loop = asyncio.get_running_loop()
+    neonize_events.event_global_loop = running_loop
+    neonize_client.event_global_loop = running_loop
+
+    from neonize.aioze.client import NewAClient
+    from neonize.aioze.events import ConnectedEv
+
+    client = NewAClient(str(db_path))
+    client.loop = running_loop
+
+    paired = asyncio.Event()
+
+    @client.event(ConnectedEv)
+    async def on_connected(_client: NewAClient, _event: ConnectedEv) -> None:
+        click.echo("\nWhatsApp connected successfully! Session saved.")
+        click.echo(f"Auth file: {db_path}")
+        click.echo("\nYou can now start the server — it will reuse this session.")
+        paired.set()
+
+    click.echo("Starting WhatsApp pairing...")
+    click.echo("Open WhatsApp > Settings > Linked Devices > Link a Device")
+    click.echo("Then scan the QR code below:\n")
+
+    await client.connect()
+
+    # Wait for connection or timeout
+    try:
+        await asyncio.wait_for(paired.wait(), timeout=120)
+    except asyncio.TimeoutError:
+        click.echo("\nPairing timed out after 120 seconds. Try again.")
+    finally:
+        try:
+            await client.disconnect()
+        except Exception:
+            pass
+
+
 @cli.command()
 @click.option("--host", default=None, help="Host to bind to")
 @click.option("--port", default=None, type=int, help="Port to bind to")

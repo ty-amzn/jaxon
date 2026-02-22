@@ -112,6 +112,18 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Memory search: {tool_input.get('query', '')}",
             )
+        elif tool_name == "update_identity":
+            action = tool_input.get("action", "read")
+            if action == "read":
+                cat = ActionCategory.READ
+            else:
+                cat = ActionCategory.WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Identity {action}",
+            )
         elif tool_name == "memory_forget":
             return PermissionRequest(
                 tool_name=tool_name,
@@ -130,6 +142,20 @@ class PermissionManager:
                 action_category=cat,
                 details=tool_input,
                 description=f"Skill {action}: {tool_input.get('name', '')}",
+            )
+        elif tool_name == "manage_agent":
+            action = tool_input.get("action", "list")
+            if action in ("list", "reload"):
+                cat = ActionCategory.READ
+            elif action == "delete":
+                cat = ActionCategory.DELETE
+            else:
+                cat = ActionCategory.WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Agent {action}: {tool_input.get('name', '')}",
             )
         elif tool_name == "web_search":
             return PermissionRequest(

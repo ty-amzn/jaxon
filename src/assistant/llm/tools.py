@@ -12,8 +12,10 @@ from assistant.tools.http_tool import HTTP_TOOL_DEF, http_request
 from assistant.tools.memory_tool import (
     MEMORY_FORGET_DEF,
     MEMORY_SEARCH_DEF,
+    UPDATE_IDENTITY_DEF,
     _make_memory_forget,
     _make_memory_search,
+    _make_update_identity,
 )
 from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
@@ -103,6 +105,12 @@ def create_tool_registry(
             MEMORY_FORGET_DEF["description"],
             MEMORY_FORGET_DEF["input_schema"],
             _make_memory_forget(memory),
+        )
+        registry.register(
+            UPDATE_IDENTITY_DEF["name"],
+            UPDATE_IDENTITY_DEF["description"],
+            UPDATE_IDENTITY_DEF["input_schema"],
+            _make_update_identity(memory),
         )
 
         # Register skill management tool if skills loader is available

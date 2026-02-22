@@ -7,6 +7,7 @@ from typing import Any
 
 from assistant.agents.types import AgentDef, AgentResult
 from assistant.llm.base import BaseLLMClient
+from assistant.llm.router import LLMRouter
 from assistant.llm.types import StreamEventType, ToolCall, ToolResult
 from assistant.tools.registry import ToolRegistry
 
@@ -18,10 +19,10 @@ class AgentRunner:
 
     def __init__(
         self,
-        llm: BaseLLMClient,
+        llm: LLMRouter,
         tool_registry: ToolRegistry,
     ) -> None:
-        self._llm = llm
+        self._router = llm
         self._tool_registry = tool_registry
 
     def _filter_tools(self, agent: AgentDef) -> list[dict[str, Any]]:
@@ -93,10 +94,16 @@ class AgentRunner:
             })
             return result
 
+        # Select client: per-agent model or default router
+        client: BaseLLMClient = self._router
+        if agent.model:
+            client = self._router.get_client_for_model(agent.model)
+            logger.info("Agent %s using model %s", agent.name, agent.model)
+
         # Run the LLM with tool loop (no streaming to user)
         full_response = ""
         try:
-            async for event in self._llm.stream_with_tool_loop(
+            async for event in client.stream_with_tool_loop(
                 system=system_prompt,
                 messages=messages,
                 tools=tools if tools else None,

@@ -1,19 +1,24 @@
 # AI Assistant
 
-A self-hosted personal AI assistant built on Claude, with a streaming CLI, tool use, persistent memory, local LLM routing, Telegram integration, scheduled automations, workflow engine, and more.
+A self-hosted personal AI assistant with multi-provider LLM support, streaming CLI, tool use, persistent memory, agent delegation, Telegram/WhatsApp integration, scheduled automations, and a workflow engine.
 
 ## Features
 
+- **Multi-provider LLM support** — Claude, OpenAI, Gemini, and Ollama with smart routing
 - **Streaming CLI** — Rich-rendered chat with prompt_toolkit input
-- **Tool use with permission gates** — Shell, file, HTTP, web search tools with approval prompts for destructive actions
+- **First-run onboarding** — Guided setup for name, personality, and communication style
+- **Tool use with permission gates** — Shell, file, HTTP, web search, memory, and skill tools with approval prompts
 - **Persistent memory** — Identity, durable memory, daily logs, full-text search (FTS5), vector search
+- **Agentic memory management** — The assistant can search, recall, and forget memories via tool calls
+- **Agentic skill management** — Create, edit, and delete skills through conversation
+- **Customizable personality** — Update the assistant's identity and communication style via chat
 - **Skills** — Markdown-defined prompt extensions auto-loaded into context
+- **Agent delegation** — YAML-defined sub-agents (researcher, coder, etc.) with scoped tools
 - **Conversation threading** — Save, load, and export named conversations
 - **Image support** — Send images to vision-capable models with `@image:` syntax
-- **Ollama integration** — Smart routing between Claude and local models for privacy/cost savings
 - **Web search** — SearXNG-powered web search tool
 - **Telegram bot** — Chat with your assistant from Telegram
-- **WhatsApp bot** — Chat with your assistant from WhatsApp via linked-device QR code pairing (neonize)
+- **WhatsApp bot** — Chat via WhatsApp linked-device QR code pairing (neonize)
 - **Scheduler** — Cron, interval, and one-shot reminders with SQLite persistence
 - **File monitoring** — Watchdog-based directory monitoring with notifications
 - **Workflow engine** — Multi-step YAML-defined automation chains with approval gates
@@ -21,7 +26,7 @@ A self-hosted personal AI assistant built on Claude, with a streaming CLI, tool 
 - **Do Not Disturb** — Suppress notifications during configurable quiet hours
 - **Backups** — One-command data snapshots and restore
 - **Input sanitization** — Automatic prompt injection and path traversal protection
-- **Plugins & agents** — Extensible plugin system and agent delegation
+- **Plugins** — Extensible plugin system for custom tools and skills
 - **API server** — FastAPI backend powering Telegram, scheduler, and webhooks
 - **Docker ready** — Single-command deployment with health checks
 
@@ -34,11 +39,13 @@ git clone https://github.com/ty-amzn/ai-assistant.git
 cd ai-assistant
 
 cp .env.example .env
-# Edit .env and set ANTHROPIC_API_KEY
+# Edit .env and set ANTHROPIC_API_KEY (or configure another provider)
 
 uv sync --all-extras
 uv run assistant chat
 ```
+
+On first launch, the assistant will ask for your name and preferred communication style.
 
 ### Docker
 
@@ -214,19 +221,19 @@ See the [Configuration Reference](docs/USER_GUIDE.md#configuration-reference) fo
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ANTHROPIC_API_KEY` | — | **Required.** Anthropic API key |
+| `ANTHROPIC_API_KEY` | — | Anthropic API key |
 | `ASSISTANT_MODEL` | `claude-sonnet-4-20250514` | Claude model |
+| `ASSISTANT_DEFAULT_PROVIDER` | `claude` | LLM provider (claude/openai/gemini/ollama) |
+| `ASSISTANT_MAX_TOOL_ROUNDS` | `10` | Max tool calls per response |
 | `ASSISTANT_DATA_DIR` | `./data` | Persistent data directory |
 | `ASSISTANT_HOST` | `127.0.0.1` | API server bind address |
 | `ASSISTANT_PORT` | `51430` | API server port |
 | `ASSISTANT_OLLAMA_ENABLED` | `false` | Enable local LLM routing |
+| `ASSISTANT_AGENTS_ENABLED` | `false` | Enable agent delegation |
 | `ASSISTANT_TELEGRAM_ENABLED` | `false` | Enable Telegram bot |
-| `TELEGRAM_BOT_TOKEN` | — | Telegram bot token |
 | `ASSISTANT_WHATSAPP_ENABLED` | `false` | Enable WhatsApp bot |
-| `ASSISTANT_WHATSAPP_ALLOWED_NUMBERS` | `[]` | Allowed phone numbers (E.164) |
 | `ASSISTANT_SCHEDULER_ENABLED` | `false` | Enable scheduled jobs |
 | `ASSISTANT_WEBHOOK_ENABLED` | `false` | Enable webhook endpoints |
-| `ASSISTANT_DND_ENABLED` | `false` | Enable Do Not Disturb |
 
 ## Usage
 
@@ -238,6 +245,38 @@ uv run assistant chat
 
 Type messages to chat. Use `/help` to see all slash commands.
 
+### Personalizing Your Assistant
+
+On first run, you'll be asked for your name and preferred communication style. You can change these anytime:
+
+```
+You: Be more casual and use humor
+You: Call me by my first name
+You: Switch to a formal, concise tone
+```
+
+The assistant uses the `update_identity` tool to persist personality changes to `IDENTITY.md`.
+
+### Agentic Memory
+
+The assistant can search and manage its own memory:
+
+```
+You: What did we discuss about authentication last week?
+You: Forget about the old project notes
+You: Remember that I prefer Python over JavaScript
+```
+
+### Agentic Skills
+
+Create and manage skills through conversation:
+
+```
+You: Create a skill for summarizing emails
+You: Edit the code-review skill to include accessibility checks
+You: Delete the old summarizer skill
+```
+
 ### API Server
 
 ```bash
@@ -245,6 +284,26 @@ uv run assistant serve
 ```
 
 Required for Telegram, scheduler, webhooks, and file monitoring. Starts at `http://localhost:51430`.
+
+### Agent Delegation
+
+Define specialized agents in `data/agents/` as YAML files:
+
+```yaml
+# data/agents/researcher.yaml
+name: researcher
+description: Research agent — searches the web and reads files
+system_prompt: |
+  You are a research assistant. Search thoroughly and cite sources.
+allowed_tools:
+  - web_search
+  - http_request
+  - read_file
+  - memory_search
+max_tool_rounds: 50
+```
+
+The main assistant can delegate tasks to agents automatically when `ASSISTANT_AGENTS_ENABLED=true`.
 
 ### Example Workflows
 
@@ -296,15 +355,15 @@ src/assistant/
 ├── cli/                # CLI app, chat interface, slash commands
 ├── core/               # Config, logging, events, notifications
 ├── gateway/            # Sessions, permissions, threads, webhooks
-├── llm/                # Claude client, Ollama client, router
+├── llm/                # Claude, OpenAI, Gemini, Ollama clients + router
 ├── memory/             # Identity, durable memory, search, embeddings, skills
-├── tools/              # Shell, file, HTTP, web search, sanitization
+├── tools/              # Shell, file, HTTP, web search, memory, skill tools
 ├── scheduler/          # APScheduler, job store, workflows
 ├── telegram/           # Telegram bot and handlers
 ├── whatsapp/           # WhatsApp bot and handlers (neonize)
 ├── watchdog_monitor/   # File system monitoring
 ├── plugins/            # Plugin system
-└── agents/             # Agent delegation
+└── agents/             # Agent delegation and orchestration
 ```
 
 ## Documentation
@@ -316,7 +375,7 @@ src/assistant/
 
 ```bash
 uv sync --all-extras    # Install with dev dependencies
-uv run pytest           # Run tests (131 tests)
+uv run pytest           # Run tests (138 tests)
 uv run pytest -v        # Verbose output
 ```
 

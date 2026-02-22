@@ -15,7 +15,10 @@ MEMORY_SEARCH_DEF: dict[str, Any] = {
     "description": (
         "Search the user's conversation history and durable memory. "
         "Use this when the user asks you to recall, find, or look up past "
-        "conversations, facts, or notes."
+        "conversations, facts, or notes. "
+        "IMPORTANT: This tool already searches all memory sources internally — "
+        "do NOT use read_file or shell_exec to look at log files or memory files. "
+        "The results returned by this tool are complete and authoritative."
     ),
     "input_schema": {
         "type": "object",
@@ -37,12 +40,41 @@ MEMORY_SEARCH_DEF: dict[str, Any] = {
     },
 }
 
+UPDATE_IDENTITY_DEF: dict[str, Any] = {
+    "name": "update_identity",
+    "description": (
+        "Read or update the assistant's personality and communication style. "
+        "Use this when the user asks you to change how you talk, your tone, "
+        "personality traits, name, or any behavioural preferences. "
+        "Call with action='read' first to see the current identity, then "
+        "action='write' with the full updated content. Always preserve the "
+        "core traits section and only modify what the user asked to change."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "action": {
+                "type": "string",
+                "enum": ["read", "write"],
+                "description": "'read' to view current identity, 'write' to update it.",
+            },
+            "content": {
+                "type": "string",
+                "description": "The full new IDENTITY.md content (required for write).",
+            },
+        },
+        "required": ["action"],
+    },
+}
+
 MEMORY_FORGET_DEF: dict[str, Any] = {
     "name": "memory_forget",
     "description": (
         "Delete or forget information from the user's memory and history. "
         "Use this when the user says 'forget about X', 'delete memories of X', "
-        "or asks you to remove specific information."
+        "or asks you to remove specific information. "
+        "This tool handles all deletion internally — do NOT use shell_exec or "
+        "write_file to manually edit or delete memory/log files."
     ),
     "input_schema": {
         "type": "object",
@@ -72,6 +104,30 @@ MEMORY_FORGET_DEF: dict[str, Any] = {
 # --------------------------------------------------------------------------- #
 # Handlers
 # --------------------------------------------------------------------------- #
+
+
+def _make_update_identity(memory: MemoryManager):
+    """Return an async handler bound to *memory*."""
+
+    async def update_identity(params: dict[str, Any]) -> str:
+        action = params.get("action", "read")
+
+        if action == "read":
+            content = memory.identity.load()
+            if not content:
+                return "No identity file found. You can create one with action='write'."
+            return f"## Current Identity\n\n{content}"
+
+        elif action == "write":
+            content = params.get("content", "")
+            if not content:
+                return "Error: 'content' is required for write."
+            await memory.identity.write(content)
+            return "Identity updated successfully. Changes take effect on the next message."
+
+        return f"Error: unknown action '{action}'."
+
+    return update_identity
 
 
 def _make_memory_search(memory: MemoryManager):

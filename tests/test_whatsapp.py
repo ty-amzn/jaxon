@@ -84,8 +84,9 @@ def test_whatsapp_bot_construction(_mock_neonize, tmp_path: Path):
 
     assert bot.allowed_numbers == {"+15551234567"}
     assert bot.chat_interface is chat_interface
-    mock_client_cls = _mock_neonize["neonize.aioze.client"].NewAClient
-    mock_client_cls.assert_called_once_with(str(tmp_path / "test.sqlite3"))
+    # Client is created lazily in start(), not in __init__
+    assert bot._client is None
+    assert bot._db_path == str(tmp_path / "test.sqlite3")
 
 
 # --- Message handler allowlist ---
@@ -135,6 +136,8 @@ async def test_send_message_short(_mock_neonize, tmp_path: Path):
         chat_interface=MagicMock(),
         auth_dir=tmp_path,
     )
+    # Simulate client being created (normally happens in start())
+    bot._client = MagicMock()
     bot._client.send_message = AsyncMock()
 
     mock_jid = MagicMock()
@@ -155,6 +158,8 @@ async def test_send_message_chunked(_mock_neonize, tmp_path: Path):
         chat_interface=MagicMock(),
         auth_dir=tmp_path,
     )
+    # Simulate client being created (normally happens in start())
+    bot._client = MagicMock()
     bot._client.send_message = AsyncMock()
 
     long_text = "x" * 8500  # Should be split into 3 chunks (4000 + 4000 + 500)

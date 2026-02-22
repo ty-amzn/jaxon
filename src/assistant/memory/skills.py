@@ -24,16 +24,13 @@ class SkillLoader:
     def __init__(self, skills_dir: Path) -> None:
         self._skills_dir = skills_dir
         self._skills: dict[str, Skill] = {}
-        self._loaded = False
 
     def load_all(self) -> dict[str, Skill]:
-        """Load all .md files from skills directory."""
-        if self._loaded:
-            return self._skills
+        """Load all .md files from skills directory (re-scans each call)."""
+        self._skills.clear()
 
         if not self._skills_dir.exists():
             logger.debug(f"Skills directory does not exist: {self._skills_dir}")
-            self._loaded = True
             return self._skills
 
         for skill_file in self._skills_dir.glob("*.md"):
@@ -50,8 +47,7 @@ class SkillLoader:
             except Exception as e:
                 logger.warning(f"Failed to load skill {skill_file}: {e}")
 
-        self._loaded = True
-        logger.info(f"Loaded {len(self._skills)} skills")
+        logger.debug(f"Loaded {len(self._skills)} skills")
         return self._skills
 
     def get_skills_prompt(self) -> str:
@@ -76,6 +72,4 @@ class SkillLoader:
 
     def reload(self) -> None:
         """Force reload of skills from disk."""
-        self._skills.clear()
-        self._loaded = False
         self.load_all()

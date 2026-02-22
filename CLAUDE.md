@@ -10,23 +10,24 @@ uv run pytest           # run tests
 ```
 
 ## Architecture
-Single-user personal AI assistant with Claude API, streaming CLI (Rich + prompt_toolkit), tool use with permission gates, and persistent memory.
+Single-user personal AI assistant with multi-provider LLM support (Claude, OpenAI, Gemini, Ollama), streaming CLI (Rich + prompt_toolkit), tool use with permission gates, persistent memory, agent delegation, and first-run onboarding.
 
 ### Key Directories
 - `src/assistant/` — all source code
-- `data/memory/` — IDENTITY.md, MEMORY.md, daily logs
+- `data/memory/` — IDENTITY.md (personality), MEMORY.md (facts), daily logs
 - `data/skills/` — skill definitions (.md files)
+- `data/agents/` — agent definitions (.yaml files)
 - `data/threads/` — saved conversation threads
 - `data/workflows/` — workflow YAML definitions
 - `data/backups/` — config backup tarballs
 - `data/logs/` — audit.jsonl, app.log
-- `data/db/` — SQLite FTS5 search index, embeddings
+- `data/db/` — SQLite FTS5 search index, embeddings, scheduler
 
 ### Data Flow
-User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills) → LLMRouter → ClaudeClient/OllamaClient → Rich Live rendering → save to daily log + FTS5 + embeddings
+User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills + identity) → LLMRouter → Claude/OpenAI/Gemini/OllamaClient → Rich Live rendering → save to daily log + FTS5 + embeddings
 
 ### Config
-- `ANTHROPIC_API_KEY` — no prefix, read via `validation_alias`
+- `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` — no prefix, read via `validation_alias`
 - All other settings use `ASSISTANT_` prefix (e.g. `ASSISTANT_MODEL`, `ASSISTANT_DATA_DIR`)
 
 ## Phase 1 (Foundation) — COMPLETE
@@ -45,77 +46,37 @@ All 12 steps implemented:
 12. Tests (`tests/` — config, memory, session, permissions, commands, LLM types)
 
 ## Phase 2 (Local Intelligence & Skills) — COMPLETE
-All 7 features implemented:
-
-### 1. Skills System
-- Markdown skill files in `data/skills/`
-- Auto-loaded into system prompt
-- `/skills` command to list/view/reload
-
-### 2. Ollama Integration
-- `llm/base.py` — Abstract BaseLLMClient interface
-- `llm/ollama.py` — OpenAI-compatible API client
-- Config: `OLLAMA_ENABLED`, `OLLAMA_BASE_URL`, `OLLAMA_MODEL`
-
-### 3. LLM Router
-- `llm/router.py` — Routes between Claude and Ollama
-- Tool use → Claude, Complex → Claude, Simple → Ollama
-- Config: `LOCAL_MODEL_THRESHOLD_TOKENS`
-
-### 4. Web Search Tool
-- `tools/web_search.py` — SearXNG integration
-- Config: `WEB_SEARCH_ENABLED`, `SEARXNG_URL`
-
-### 5. Vector Search
-- `memory/embeddings.py` — Embedding service via Ollama
-- Semantic similarity search over history
-- Config: `VECTOR_SEARCH_ENABLED`, `EMBEDDING_MODEL`
-
-### 6. Conversation Threading
-- `gateway/thread_store.py` — JSON persistence
-- `/thread` command: new, save, load, list, export, delete
-- Threads stored in `data/threads/`
-
-### 7. Rich Media Support
-- `cli/media.py` — Image loading and encoding
-- Syntax: `@image:/path/to/image.png`
-- Config: `MAX_MEDIA_SIZE_MB`
+1. Skills system — markdown files in `data/skills/`, auto-loaded into system prompt
+2. Ollama integration — `llm/ollama.py`, OpenAI-compatible API client
+3. LLM router — `llm/router.py`, routes between providers by complexity
+4. Web search tool — `tools/web_search.py`, SearXNG integration
+5. Vector search — `memory/embeddings.py`, Ollama embedding service
+6. Conversation threading — `gateway/thread_store.py`, `/thread` command
+7. Rich media support — `cli/media.py`, `@image:` syntax
 
 ## Phase 3 (Integrations) — COMPLETE
-- Telegram bot integration (`telegram/bot.py`)
-- WhatsApp bot integration (`whatsapp/bot.py`) — neonize linked-device QR pairing
-- APScheduler automations (`scheduler/` — jobs, manager, store, tool)
+- Telegram bot (`telegram/bot.py`)
+- WhatsApp bot (`whatsapp/bot.py`) — neonize linked-device QR pairing
+- APScheduler automations (`scheduler/`)
 - Watchdog file monitoring (`watchdog_monitor/monitor.py`)
 - Notification dispatcher (`core/notifications.py`)
 
 ## Phase 4 (Workflows & Polish) — COMPLETE
-All features implemented:
+1. Workflow engine — YAML-defined multi-step chains, approval gates
+2. Webhook triggers — HMAC-SHA256 validation, maps to workflows
+3. DND notifications — quiet hours with urgent bypass
+4. Input sanitization — prompt injection and path traversal protection
+5. Config backup/restore — `/backup` command
 
-### 1. Workflow Engine
-- `scheduler/workflow.py` — WorkflowDefinition, WorkflowRunner, WorkflowManager
-- YAML-defined multi-step chains in `data/workflows/`
-- Step-by-step execution with approval gates
-- `/workflow` command: list, run, reload
-
-### 2. Webhook Triggers
-- `gateway/webhooks.py` — FastAPI router for `POST /webhooks/{name}`
-- HMAC-SHA256 signature validation
-- Maps webhooks to workflows by name
-- `/webhook` command: list, test
-- Config: `WEBHOOK_ENABLED`, `WEBHOOK_SECRET`
-
-### 3. DND Notifications
-- Extended `NotificationDispatcher` with DND window support
-- Messages queued during DND, urgent messages bypass
-- Config: `DND_ENABLED`, `DND_START`, `DND_END`, `DND_ALLOW_URGENT`
-
-### 4. Input Sanitization
-- `tools/sanitize.py` — strips prompt injection patterns, sanitizes file paths
-- Applied at `ToolRegistry.execute()` chokepoint before every handler
-
-### 5. Config Backup/Restore
-- `/backup` command: create, list, restore
-- Tarballs stored in `data/backups/`
+## Phase 5 (Agentic Features) — COMPLETE
+1. Multi-provider LLM — OpenAI, Gemini via `llm/openai_compat.py`, `llm/openai_client.py`, `llm/gemini.py`
+2. Configurable `max_tool_rounds` — `ASSISTANT_MAX_TOOL_ROUNDS`, per-agent override in YAML
+3. Graceful summary on tool limit — final LLM call without tools to summarize progress
+4. `/clear` command — clear session, history, memory, search, or all
+5. Agentic memory — `tools/memory_tool.py`: `memory_search` (read), `memory_forget` (delete)
+6. Agentic skill management — `tools/skill_tool.py`: `manage_skill` (create/edit/delete/list)
+7. Personality/identity — `update_identity` tool, first-run onboarding flow
+8. Approval prompt fix — pause Rich Live widget during permission prompts
 
 ## User Documentation
 - `docs/USER_GUIDE.md` — comprehensive user guide (all features)

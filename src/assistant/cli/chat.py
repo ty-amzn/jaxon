@@ -89,6 +89,9 @@ class ChatInterface:
         # Cancellation
         self._cancel_event = asyncio.Event()
 
+        # Track active Live widget so approval prompts can pause it
+        self._active_live: Live | None = None
+
     def _init_plugins(self, settings: Settings) -> None:
         """Initialize the plugin system."""
         from assistant.plugins.hooks import HookDispatcher
@@ -104,6 +107,7 @@ class ChatInterface:
         from assistant.agents.loader import AgentLoader
         from assistant.agents.orchestrator import Orchestrator
         from assistant.agents.runner import AgentRunner
+        from assistant.tools.agent_tool import MANAGE_AGENT_DEF, _make_manage_agent
 
         loader = AgentLoader(settings.agents_dir)
         loader.load_all()
@@ -115,11 +119,22 @@ class ChatInterface:
             self._tool_registry, self._orchestrator, self._permissions
         )
 
+        # Register agent management tool
+        self._tool_registry.register(
+            MANAGE_AGENT_DEF["name"],
+            MANAGE_AGENT_DEF["description"],
+            MANAGE_AGENT_DEF["input_schema"],
+            _make_manage_agent(loader),
+        )
+
     def set_command_registry(self, registry: Any) -> None:
         self._command_registry = registry
 
     async def _cli_approval(self, request: PermissionRequest) -> bool:
         """Prompt user for approval via CLI."""
+        # Pause Live rendering so the prompt isn't overwritten
+        if self._active_live:
+            self._active_live.stop()
         self._console.print(
             render_permission_request(
                 request.description, request.action_category.value
@@ -132,6 +147,9 @@ class ChatInterface:
             return response in ("y", "yes")
         except (EOFError, KeyboardInterrupt):
             return False
+        finally:
+            if self._active_live:
+                self._active_live.start()
 
     async def _execute_tool(
         self, tool_call: ToolCall, session: Any = None, render: bool = True,
@@ -246,13 +264,19 @@ class ChatInterface:
 
         return full_response
 
-    async def get_response(self, session_id: str, user_input: str) -> str:
-        """Public headless API for external integrations (Telegram, scheduler).
+    async def get_response(
+        self,
+        session_id: str,
+        user_input: str,
+        permission_manager: PermissionManager | None = None,
+    ) -> str:
+        """Public headless API for external integrations (Telegram, scheduler, WhatsApp).
 
         Uses or creates a keyed session and processes the message without rendering.
+        Optionally accepts a custom PermissionManager for channel-specific approvals.
         """
         session = self._session_manager.get_or_create_keyed_session(session_id)
-        return await self._process_message(session, user_input)
+        return await self._process_message(session, user_input, permission_manager=permission_manager)
 
     async def handle_message(self, user_input: str) -> str:
         """Process a user message with Rich Live rendering."""
@@ -298,6 +322,7 @@ class ChatInterface:
             refresh_per_second=10,
             transient=True,
         ) as live:
+            self._active_live = live
             async for event in self._llm.stream_with_tool_loop(
                 system=system_prompt,
                 messages=messages,
@@ -321,6 +346,8 @@ class ChatInterface:
                     full_response = event.text
                 elif event.type == StreamEventType.ERROR:
                     self._console.print(f"[red]Error: {event.error}[/red]")
+
+        self._active_live = None
 
         # Print final rendered response
         if full_response:
@@ -370,6 +397,61 @@ class ChatInterface:
         if self._plugin_manager:
             await self._plugin_manager.stop_all()
 
+    async def _run_onboarding(self) -> None:
+        """First-run setup: ask for name and communication style."""
+        self._console.print(
+            "[bold yellow]Welcome! Let's set up your assistant.[/bold yellow]\n"
+        )
+
+        # Ask for name
+        try:
+            name = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: input("What should I call you? ").strip()
+            )
+        except (EOFError, KeyboardInterrupt):
+            name = ""
+
+        # Ask for style
+        self._console.print()
+        self._console.print(
+            "How would you like me to communicate?\n"
+            "[dim]Examples: \"casual and witty\", \"formal and concise\", "
+            "\"friendly with emoji\"[/dim]\n"
+            "[dim]Press Enter to skip and use defaults.[/dim]"
+        )
+        try:
+            style = await asyncio.get_event_loop().run_in_executor(
+                None, lambda: input("Style: ").strip()
+            )
+        except (EOFError, KeyboardInterrupt):
+            style = ""
+
+        # Build identity
+        style_line = style if style else "helpful, direct, and concise"
+        identity = (
+            "# Identity\n\n"
+            f"You are a personal AI assistant. You are {style_line}.\n\n"
+            "## Core Traits\n"
+            "- You remember context from previous conversations via daily logs and durable memory.\n"
+            "- You can execute tools (shell commands, file operations, HTTP requests) when needed.\n"
+            "- You always ask for permission before performing destructive actions.\n"
+            "- You maintain an audit trail of all tool executions.\n\n"
+            "## Communication Style\n"
+            f"- {style_line.capitalize()}.\n"
+            "- Use markdown formatting when helpful.\n"
+            "- When unsure, ask clarifying questions rather than guessing.\n"
+        )
+        await self._memory.identity.write(identity)
+
+        # Save name to durable memory
+        if name:
+            await self._memory.durable.append("User Preferences", f"User's name: {name}")
+            self._console.print(f"\n[green]Nice to meet you, {name}![/green]")
+        else:
+            self._console.print()
+
+        self._console.print("[dim]Setup complete. You can change these anytime by chatting.[/dim]\n")
+
     async def run(self) -> None:
         """Main interactive chat loop."""
         # Start plugins
@@ -382,6 +464,10 @@ class ChatInterface:
         self._console.print(
             "[bold blue]AI Assistant[/bold blue] - Type /help for commands, Ctrl+C to exit\n"
         )
+
+        # First-run onboarding if identity is not set up
+        if not self._memory.identity.load().strip():
+            await self._run_onboarding()
 
         history_path = self._settings.data_dir / "logs" / ".chat_history"
         history_path.parent.mkdir(parents=True, exist_ok=True)
