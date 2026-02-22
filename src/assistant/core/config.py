@@ -30,6 +30,7 @@ class Settings(BaseSettings):
 
     # Session
     max_context_messages: int = 50
+    max_tool_rounds: int = 10
 
     # Permissions
     auto_approve_reads: bool = True
@@ -69,7 +70,7 @@ class Settings(BaseSettings):
     # Telegram (Phase 3)
     telegram_enabled: bool = False
     telegram_bot_token: str = Field(default="", validation_alias="TELEGRAM_BOT_TOKEN")
-    telegram_allowed_user_ids: list[int] = Field(default_factory=list)
+    telegram_allowed_user_ids_raw: str = Field(default="", validation_alias="ASSISTANT_TELEGRAM_ALLOWED_USER_IDS")
     telegram_webhook_url: str = ""
 
     # Scheduler (Phase 3)
@@ -84,7 +85,7 @@ class Settings(BaseSettings):
 
     # Watchdog (Phase 3)
     watchdog_enabled: bool = False
-    watchdog_paths: list[str] = Field(default_factory=list)
+    watchdog_paths_raw: str = Field(default="", validation_alias="ASSISTANT_WATCHDOG_PATHS")
     watchdog_debounce_seconds: float = 2.0
     watchdog_analyze: bool = False
 
@@ -94,7 +95,7 @@ class Settings(BaseSettings):
 
     # WhatsApp
     whatsapp_enabled: bool = False
-    whatsapp_allowed_numbers: list[str] = Field(default_factory=list)
+    whatsapp_allowed_numbers_raw: str = Field(default="", validation_alias="ASSISTANT_WHATSAPP_ALLOWED_NUMBERS")
     whatsapp_session_name: str = "assistant"
 
     # DND (Phase 4)
@@ -102,6 +103,27 @@ class Settings(BaseSettings):
     dnd_start: str = "23:00"
     dnd_end: str = "07:00"
     dnd_allow_urgent: bool = True
+
+    @property
+    def telegram_allowed_user_ids(self) -> list[int]:
+        raw = self.telegram_allowed_user_ids_raw.strip()
+        if not raw:
+            return []
+        return [int(x) for x in raw.split(",") if x.strip()]
+
+    @property
+    def watchdog_paths(self) -> list[str]:
+        raw = self.watchdog_paths_raw.strip()
+        if not raw:
+            return []
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def whatsapp_allowed_numbers(self) -> list[str]:
+        raw = self.whatsapp_allowed_numbers_raw.strip()
+        if not raw:
+            return []
+        return [x.strip() for x in raw.split(",") if x.strip()]
 
     @property
     def memory_dir(self) -> Path:

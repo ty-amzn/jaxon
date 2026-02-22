@@ -9,8 +9,15 @@ from assistant.core.logging import AuditLogger
 from assistant.gateway.permissions import PermissionManager
 from assistant.tools.file_tool import READ_FILE_DEF, WRITE_FILE_DEF, read_file, write_file
 from assistant.tools.http_tool import HTTP_TOOL_DEF, http_request
+from assistant.tools.memory_tool import (
+    MEMORY_FORGET_DEF,
+    MEMORY_SEARCH_DEF,
+    _make_memory_forget,
+    _make_memory_search,
+)
 from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
+from assistant.tools.skill_tool import MANAGE_SKILL_DEF, _make_manage_skill
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 
 
@@ -38,6 +45,7 @@ def create_tool_registry(
     permission_manager: PermissionManager,
     audit_logger: AuditLogger,
     settings: Settings | None = None,
+    memory: Any | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     registry = ToolRegistry(permission_manager, audit_logger)
@@ -81,6 +89,30 @@ def create_tool_registry(
             WEB_SEARCH_TOOL_DEF["input_schema"],
             web_search_wrapper,
         )
+
+    # Register memory tools (search + forget)
+    if memory is not None:
+        registry.register(
+            MEMORY_SEARCH_DEF["name"],
+            MEMORY_SEARCH_DEF["description"],
+            MEMORY_SEARCH_DEF["input_schema"],
+            _make_memory_search(memory),
+        )
+        registry.register(
+            MEMORY_FORGET_DEF["name"],
+            MEMORY_FORGET_DEF["description"],
+            MEMORY_FORGET_DEF["input_schema"],
+            _make_memory_forget(memory),
+        )
+
+        # Register skill management tool if skills loader is available
+        if memory.skills is not None:
+            registry.register(
+                MANAGE_SKILL_DEF["name"],
+                MANAGE_SKILL_DEF["description"],
+                MANAGE_SKILL_DEF["input_schema"],
+                _make_manage_skill(memory.skills),
+            )
 
     # Register schedule_reminder if scheduler is enabled
     if settings and settings.scheduler_enabled:

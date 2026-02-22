@@ -35,4 +35,5 @@ def settings(tmp_data_dir: Path) -> Settings:
         anthropic_api_key="sk-ant-test-key",
         data_dir=tmp_data_dir,
         log_level="DEBUG",
+        _env_file=None,
     )

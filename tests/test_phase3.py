@@ -238,6 +238,7 @@ def test_phase3_config_defaults(tmp_path: Path):
     settings = Settings(
         anthropic_api_key="test",
         data_dir=tmp_path,
+        _env_file=None,
     )
 
     assert settings.telegram_enabled is False

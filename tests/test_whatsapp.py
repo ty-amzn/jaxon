@@ -16,7 +16,7 @@ from assistant.core.config import Settings
 
 def test_whatsapp_config_defaults(tmp_path: Path):
     """WhatsApp config fields have correct defaults."""
-    settings = Settings(anthropic_api_key="test", data_dir=tmp_path)
+    settings = Settings(anthropic_api_key="test", data_dir=tmp_path, _env_file=None)
 
     assert settings.whatsapp_enabled is False
     assert settings.whatsapp_allowed_numbers == []

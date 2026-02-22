@@ -21,7 +21,7 @@ from assistant.tools.sanitize import sanitize_tool_input, strip_injection_patter
 
 def test_phase4_config_defaults(tmp_path: Path):
     """Phase 4 config fields have correct defaults."""
-    settings = Settings(anthropic_api_key="test", data_dir=tmp_path)
+    settings = Settings(anthropic_api_key="test", data_dir=tmp_path, _env_file=None)
 
     assert settings.webhook_enabled is False
     assert settings.webhook_secret == ""

@@ -64,7 +64,7 @@ class ChatInterface:
         self._permissions = PermissionManager(self._cli_approval)
 
         # Tools
-        self._tool_registry = create_tool_registry(self._permissions, self._audit, settings)
+        self._tool_registry = create_tool_registry(self._permissions, self._audit, settings, self._memory)
 
         # LLM client (router between Ollama and Claude)
         self._llm = LLMRouter(settings)
@@ -217,6 +217,7 @@ class ChatInterface:
                 messages=messages,
                 tools=self._tool_registry.definitions,
                 tool_executor=headless_tool_executor,
+                max_tool_rounds=self._settings.max_tool_rounds,
             ):
                 if event.type == StreamEventType.TEXT_DELTA:
                     full_response += event.text
@@ -302,6 +303,7 @@ class ChatInterface:
                 messages=messages,
                 tools=self._tool_registry.definitions,
                 tool_executor=lambda tc: self._execute_tool(tc, session=session),
+                max_tool_rounds=self._settings.max_tool_rounds,
             ):
                 if self._cancel_event.is_set():
                     break

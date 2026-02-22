@@ -38,6 +38,7 @@ class CommandRegistry:
         from assistant.cli.commands.watch import handle_watch
         from assistant.cli.commands.plugins import handle_plugins
         from assistant.cli.commands.agents import handle_agents
+        from assistant.cli.commands.clear import handle_clear
         from assistant.cli.commands.config_backup import handle_backup
         from assistant.cli.commands.workflow import handle_workflow
         from assistant.cli.commands.webhook import handle_webhook
@@ -57,6 +58,7 @@ class CommandRegistry:
         self.register("backup", handle_backup, "Create, list, or restore data backups")
         self.register("workflow", handle_workflow, "Manage and run workflows")
         self.register("webhook", handle_webhook, "List and test webhooks")
+        self.register("clear", handle_clear, "Clear session, history, memory, or search data")
 
     async def dispatch(self, raw_input: str, chat: ChatInterface) -> None:
         parts = raw_input.strip().split(maxsplit=1)

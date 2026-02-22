@@ -52,3 +52,17 @@ class SearchIndex:
             return rows
         except Exception:
             return []
+
+    def delete_matching(self, query: str) -> int:
+        """Delete FTS5 rows matching *query*. Returns count of deleted rows."""
+        rows = self.search(query, limit=1000)
+        ids = [r["id"] for r in rows if "id" in r]
+        if not ids:
+            return 0
+        placeholders = ",".join("?" for _ in ids)
+        self._db.execute(f"DELETE FROM messages WHERE id IN ({placeholders})", ids)
+        return len(ids)
+
+    def clear_all(self) -> None:
+        """Remove all rows from the messages table."""
+        self._db.execute("DELETE FROM messages")

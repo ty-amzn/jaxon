@@ -105,6 +105,32 @@ class PermissionManager:
                 details=tool_input,
                 description=f"{method} {tool_input.get('url', '')}",
             )
+        elif tool_name == "memory_search":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.READ,
+                details=tool_input,
+                description=f"Memory search: {tool_input.get('query', '')}",
+            )
+        elif tool_name == "memory_forget":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.DELETE,
+                details=tool_input,
+                description=f"Memory forget: {tool_input.get('query', '')} (scope={tool_input.get('scope', 'topic')})",
+            )
+        elif tool_name == "manage_skill":
+            action = tool_input.get("action", "list")
+            if action == "list":
+                cat = ActionCategory.READ
+            else:
+                cat = ActionCategory.WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Skill {action}: {tool_input.get('name', '')}",
+            )
         elif tool_name == "web_search":
             return PermissionRequest(
                 tool_name=tool_name,

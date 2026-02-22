@@ -1,5 +1,6 @@
 services:
   assistant:
+    container_name: assistant
     build: .
     ports:
       - "51430:51430"
@@ -13,3 +14,9 @@ services:
       interval: 30s
       timeout: 5s
       retries: 3
+    networks:
+      - npm-shared
+networks:
+  npm-shared:
+    external: true
+    name: npm-shared

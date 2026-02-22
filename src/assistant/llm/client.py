@@ -166,7 +166,35 @@ class ClaudeClient(BaseLLMClient):
 
             current_messages.append({"role": "user", "content": tool_results})
 
+        # Max tool rounds exhausted — ask the model for a summary without tools
+        current_messages.append({
+            "role": "user",
+            "content": (
+                "You've used all available tool rounds. Please summarize what you've "
+                "accomplished so far and what remains to be done."
+            ),
+        })
+
+        summary_parts: list[str] = []
+        kwargs = {
+            "model": self._config.model,
+            "max_tokens": self._config.max_tokens,
+            "system": system,
+            "messages": current_messages,
+        }
+
+        async with self._client.messages.stream(**kwargs) as stream:
+            async for event in stream:
+                if event.type == "content_block_delta":
+                    delta = event.delta
+                    if delta.type == "text_delta":
+                        summary_parts.append(delta.text)
+                        yield StreamEvent(
+                            type=StreamEventType.TEXT_DELTA,
+                            text=delta.text,
+                        )
+
         yield StreamEvent(
-            type=StreamEventType.ERROR,
-            error="Max tool rounds exceeded",
+            type=StreamEventType.MESSAGE_COMPLETE,
+            text="".join(summary_parts),
         )

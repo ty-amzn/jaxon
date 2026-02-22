@@ -59,3 +59,14 @@ class DailyLog:
 
         async with aiofiles.open(path, "a") as f:
             await f.write("\n".join(parts) + "\n")
+
+    def clear_today(self) -> None:
+        """Delete today's log file."""
+        path = self._path_for()
+        if path.exists():
+            path.unlink()
+
+    def clear_all(self) -> None:
+        """Delete all daily log files."""
+        for path in self._dir.glob("*.md"):
+            path.unlink()

@@ -301,9 +301,52 @@ class OpenAICompatibleClient(BaseLLMClient):
                     }
                 )
 
+        # Max tool rounds exhausted — ask the model for a summary without tools
+        current_messages.append({
+            "role": "user",
+            "content": (
+                "You've used all available tool rounds. Please summarize what you've "
+                "accomplished so far and what remains to be done."
+            ),
+        })
+
+        summary_parts: list[str] = []
+        request_body = {
+            "model": self._config.model,
+            "max_tokens": self._config.max_tokens,
+            "messages": current_messages,
+            "stream": True,
+        }
+
+        try:
+            async with self._client.stream(
+                "POST",
+                self._get_chat_url(),
+                json=request_body,
+                headers=self._get_headers(),
+            ) as response:
+                if response.status_code == 200:
+                    async for line in response.aiter_lines():
+                        if not line or line == "data: [DONE]":
+                            continue
+                        if line.startswith("data: "):
+                            try:
+                                data = json.loads(line[6:])
+                            except json.JSONDecodeError:
+                                continue
+                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            if "content" in delta and delta["content"]:
+                                summary_parts.append(delta["content"])
+                                yield StreamEvent(
+                                    type=StreamEventType.TEXT_DELTA,
+                                    text=delta["content"],
+                                )
+        except Exception as e:
+            logger.warning("Summary call failed: %s", e)
+
         yield StreamEvent(
-            type=StreamEventType.ERROR,
-            error="Max tool rounds exceeded",
+            type=StreamEventType.MESSAGE_COMPLETE,
+            text="".join(summary_parts),
         )
 
     async def close(self) -> None:

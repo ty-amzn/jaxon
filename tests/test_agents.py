@@ -300,7 +300,7 @@ class TestOrchestrator:
 
     def test_config_settings(self):
         from assistant.core.config import Settings
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
         assert s.plugins_enabled is False
         assert s.agents_enabled is False
         assert s.plugins_dir == s.data_dir / "plugins"

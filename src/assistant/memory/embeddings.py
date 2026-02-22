@@ -136,6 +136,19 @@ class EmbeddingService:
         results.sort(key=lambda x: x["similarity"], reverse=True)
         return results[:limit]
 
+    def delete_by_message_ids(self, ids: list[int]) -> None:
+        """Delete embeddings for given message IDs."""
+        if not ids:
+            return
+        placeholders = ",".join("?" for _ in ids)
+        self._db.execute(
+            f"DELETE FROM embeddings WHERE message_id IN ({placeholders})", ids
+        )
+
+    def clear_all(self) -> None:
+        """Remove all rows from the embeddings table."""
+        self._db.execute("DELETE FROM embeddings")
+
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._client.aclose()

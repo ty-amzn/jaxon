@@ -267,7 +267,7 @@ class TestPhase2Config:
 
     def test_ollama_config(self):
         """Test Ollama configuration defaults."""
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
 
         assert s.ollama_enabled is False
         assert s.ollama_base_url == "http://localhost:11434"
@@ -275,26 +275,26 @@ class TestPhase2Config:
 
     def test_routing_config(self):
         """Test routing configuration defaults."""
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
 
         assert s.local_model_threshold_tokens == 1000
 
     def test_web_search_config(self):
         """Test web search configuration defaults."""
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
 
         assert s.web_search_enabled is False
         assert s.searxng_url == "http://localhost:8888"
 
     def test_vector_search_config(self):
         """Test vector search configuration defaults."""
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
 
         assert s.vector_search_enabled is False
         assert s.embedding_model == "nomic-embed-text"
 
     def test_media_config(self):
         """Test media configuration defaults."""
-        s = Settings(anthropic_api_key="test")
+        s = Settings(anthropic_api_key="test", _env_file=None)
 
         assert s.max_media_size_mb == 10
