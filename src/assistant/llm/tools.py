@@ -28,6 +28,7 @@ from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
 from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
+from assistant.tools.email_tool import SEND_EMAIL_DEF, send_email
 
 
 def register_orchestrator_tools(
@@ -114,6 +115,13 @@ def create_tool_registry(
         BROWSE_WEB_DEF["description"],
         BROWSE_WEB_DEF["input_schema"],
         browse_web,
+    )
+
+    registry.register(
+        SEND_EMAIL_DEF["name"],
+        SEND_EMAIL_DEF["description"],
+        SEND_EMAIL_DEF["input_schema"],
+        send_email,
     )
 
     # Register web_search if enabled

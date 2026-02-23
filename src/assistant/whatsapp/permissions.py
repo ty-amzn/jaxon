@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-APPROVAL_TIMEOUT = 60  # seconds — generous for mobile typing
+APPROVAL_TIMEOUT = 600  # seconds (10 minutes)
 APPROVE_WORDS = {"y", "yes", "ok", "approve", "sure", "yep", "yeah", "go ahead"}
 
 

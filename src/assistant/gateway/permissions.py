@@ -235,6 +235,13 @@ class PermissionManager:
                 details=tool_input,
                 description=desc,
             )
+        elif tool_name == "send_email":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Email: {tool_input.get('title', '')}",
+            )
         elif tool_name == "run_workflow":
             return PermissionRequest(
                 tool_name=tool_name,

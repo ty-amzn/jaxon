@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-APPROVAL_TIMEOUT = 30  # seconds
+APPROVAL_TIMEOUT = 600  # seconds (10 minutes)
 DETAIL_TRUNCATE_LIMIT = 500
 
 
