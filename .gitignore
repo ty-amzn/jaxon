@@ -9,6 +9,7 @@ build/
 data/logs/
 data/db/
 data/memory/daily/
+data/whatsapp_auth/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

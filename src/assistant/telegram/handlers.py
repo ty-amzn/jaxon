@@ -155,11 +155,23 @@ def _make_callback(bot: TelegramBot):
             return
 
         action, request_id = parts
-        approved = action == "approve"
 
         chat_id = str(query.message.chat_id) if query.message else None
-        if chat_id and chat_id in bot._approval_callbacks:
-            bot._approval_callbacks[chat_id].resolve(request_id, approved)
+        approval_cb = bot._approval_callbacks.get(chat_id) if chat_id else None
+
+        if action == "show_full":
+            if approval_cb:
+                full_text = approval_cb.get_full_details(request_id)
+                if full_text and query.message:
+                    # Send as a new message to preserve the approve/deny buttons
+                    for i in range(0, len(full_text), 4000):
+                        await query.message.reply_text(full_text[i:i + 4000])
+            return
+
+        approved = action == "approve"
+
+        if approval_cb:
+            approval_cb.resolve(request_id, approved)
 
         status = "Approved" if approved else "Denied"
         if query.message:

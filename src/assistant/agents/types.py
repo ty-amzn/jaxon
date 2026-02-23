@@ -16,6 +16,7 @@ class AgentDef:
     denied_tools: list[str] = field(default_factory=list)
     model: str = ""  # Empty = use default
     max_tool_rounds: int = 5
+    can_delegate: bool = False
 
 
 @dataclass

@@ -99,10 +99,20 @@ class SchedulerManager:
         elif trigger_type == "cron":
             return CronTrigger(**trigger_args)
         elif trigger_type == "interval":
-            return IntervalTrigger(**trigger_args)
+            args = dict(trigger_args)
+            if "start_date" in args and isinstance(args["start_date"], str):
+                args["start_date"] = datetime.fromisoformat(args["start_date"])
+            return IntervalTrigger(**args)
         else:
             logger.error("Unknown trigger type: %s", trigger_type)
             return None
+
+    def _anchor_interval(self, trigger_type: str, trigger_args: dict) -> dict:
+        """For interval triggers, add start_date if missing so the schedule
+        survives restarts without drifting."""
+        if trigger_type == "interval" and "start_date" not in trigger_args:
+            trigger_args = {**trigger_args, "start_date": datetime.now().isoformat()}
+        return trigger_args
 
     def add_reminder(
         self,
@@ -113,6 +123,7 @@ class SchedulerManager:
     ) -> str:
         """Add a notification reminder. Returns job ID."""
         job_id = f"reminder_{uuid.uuid4().hex[:8]}"
+        trigger_args = self._anchor_interval(trigger_type, trigger_args)
 
         self._store.save(
             job_id=job_id,
@@ -145,6 +156,7 @@ class SchedulerManager:
     ) -> str:
         """Add a job that runs a prompt through the assistant. Returns job ID."""
         job_id = f"assistant_{uuid.uuid4().hex[:8]}"
+        trigger_args = self._anchor_interval(trigger_type, trigger_args)
 
         job_args = {"prompt": prompt, "session_id": session_id}
         self._store.save(

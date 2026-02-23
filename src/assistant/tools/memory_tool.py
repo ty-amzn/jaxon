@@ -14,8 +14,10 @@ MEMORY_SEARCH_DEF: dict[str, Any] = {
     "name": "memory_search",
     "description": (
         "Search the user's conversation history and durable memory. "
-        "Use this when the user asks you to recall, find, or look up past "
-        "conversations, facts, or notes. "
+        "Use this PROACTIVELY — not only when the user explicitly asks to recall something, "
+        "but whenever context from past conversations could be relevant. For example: "
+        "if the user asks about weather, search for their location; if they mention a project, "
+        "search for past discussions about it; if they reference a preference, look it up. "
         "IMPORTANT: This tool already searches all memory sources internally — "
         "do NOT use read_file or shell_exec to look at log files or memory files. "
         "The results returned by this tool are complete and authoritative."
@@ -64,6 +66,34 @@ UPDATE_IDENTITY_DEF: dict[str, Any] = {
             },
         },
         "required": ["action"],
+    },
+}
+
+MEMORY_STORE_DEF: dict[str, Any] = {
+    "name": "memory_store",
+    "description": (
+        "Save a fact or note to the user's durable memory (MEMORY.md). "
+        "Use this when the user asks you to remember, memorize, or note something "
+        "for future conversations. Facts stored here persist across sessions and are "
+        "automatically included in every conversation. "
+        "Do NOT use write_file or read_file to edit MEMORY.md — use this tool instead."
+    ),
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "section": {
+                "type": "string",
+                "description": (
+                    "The section heading to file the fact under, e.g. 'Personal', "
+                    "'Preferences', 'Projects', 'Locations'. Creates the section if it doesn't exist."
+                ),
+            },
+            "fact": {
+                "type": "string",
+                "description": "The fact or note to store, as a concise single line.",
+            },
+        },
+        "required": ["section", "fact"],
     },
 }
 
@@ -178,6 +208,22 @@ def _make_memory_search(memory: MemoryManager):
         return "\n\n".join(results)
 
     return memory_search
+
+
+def _make_memory_store(memory: MemoryManager):
+    """Return an async handler bound to *memory*."""
+
+    async def memory_store(params: dict[str, Any]) -> str:
+        section = params.get("section", "").strip()
+        fact = params.get("fact", "").strip()
+        if not section:
+            return "Error: section is required."
+        if not fact:
+            return "Error: fact is required."
+        await memory.durable.append(section, fact)
+        return f"Stored under '{section}': {fact}"
+
+    return memory_store
 
 
 def _make_memory_forget(memory: MemoryManager):

@@ -36,8 +36,9 @@ class AgentRunner:
         else:
             tools = list(all_tools)
 
-        # Remove delegation tools to prevent recursive delegation
-        tools = [t for t in tools if t["name"] not in ("delegate_to_agent", "delegate_parallel", "list_agents")]
+        # Remove delegation tools unless agent is allowed to delegate
+        if not agent.can_delegate:
+            tools = [t for t in tools if t["name"] not in ("delegate_to_agent", "delegate_parallel", "list_agents")]
         return tools
 
     async def run(

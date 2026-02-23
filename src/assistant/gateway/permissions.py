@@ -112,6 +112,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Memory search: {tool_input.get('query', '')}",
             )
+        elif tool_name == "memory_store":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.WRITE,
+                details=tool_input,
+                description=f"Memory store [{tool_input.get('section', '')}]: {tool_input.get('fact', '')}",
+            )
         elif tool_name == "update_identity":
             action = tool_input.get("action", "read")
             if action == "read":
@@ -178,6 +185,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"arXiv: {tool_input.get('query', '')}",
             )
+        elif tool_name == "get_weather":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Weather: {tool_input.get('location', '')}",
+            )
         elif tool_name == "web_search":
             return PermissionRequest(
                 tool_name=tool_name,
@@ -186,11 +200,21 @@ class PermissionManager:
                 description=f"Search: {tool_input.get('query', '')}",
             )
         elif tool_name == "schedule_reminder":
+            action = tool_input.get("action", "create")
+            if action == "list":
+                cat = ActionCategory.READ
+                desc = "List reminders"
+            elif action == "cancel":
+                cat = ActionCategory.DELETE
+                desc = f"Cancel reminder: {tool_input.get('job_id', '')}"
+            else:
+                cat = ActionCategory.WRITE
+                desc = f"Schedule: {tool_input.get('description', '')}"
             return PermissionRequest(
                 tool_name=tool_name,
-                action_category=ActionCategory.WRITE,
+                action_category=cat,
                 details=tool_input,
-                description=f"Schedule: {tool_input.get('description', '')}",
+                description=desc,
             )
         elif tool_name == "run_workflow":
             return PermissionRequest(

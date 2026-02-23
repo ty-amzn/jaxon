@@ -53,7 +53,11 @@ class MemoryManager:
 
     def get_system_prompt(self) -> str:
         """Assemble system prompt from identity, durable memory, skills, and today's log."""
+        from datetime import datetime, timezone
+
         parts: list[str] = []
+        now = datetime.now(timezone.utc)
+        parts.append(f"Current date/time: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
 
         identity = self.identity.load()
         if identity:

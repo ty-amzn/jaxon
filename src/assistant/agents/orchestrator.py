@@ -27,9 +27,17 @@ class Orchestrator:
         self._loader = loader
         self._runner = runner
         self._memory = memory
+        self._delegation_depth = 0
 
     async def delegate(self, agent_name: str, task: str, context: str = "") -> AgentResult:
         """Delegate a task to a named agent."""
+        if self._delegation_depth >= 2:
+            return AgentResult(
+                agent_name=agent_name,
+                response="",
+                error="Maximum delegation depth (2) exceeded. Cannot delegate further.",
+            )
+
         agent = self._loader.get_agent(agent_name)
         if agent is None:
             return AgentResult(
@@ -38,8 +46,12 @@ class Orchestrator:
                 error=f"Agent '{agent_name}' not found.",
             )
 
-        base_prompt = self._memory.get_system_prompt()
-        return await self._runner.run(agent, task, context=context, base_system_prompt=base_prompt)
+        self._delegation_depth += 1
+        try:
+            base_prompt = self._memory.get_system_prompt()
+            return await self._runner.run(agent, task, context=context, base_system_prompt=base_prompt)
+        finally:
+            self._delegation_depth -= 1
 
     async def delegate_parallel(
         self, delegations: list[dict[str, str]]

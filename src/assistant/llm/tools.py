@@ -12,14 +12,17 @@ from assistant.tools.http_tool import HTTP_TOOL_DEF, http_request
 from assistant.tools.memory_tool import (
     MEMORY_FORGET_DEF,
     MEMORY_SEARCH_DEF,
+    MEMORY_STORE_DEF,
     UPDATE_IDENTITY_DEF,
     _make_memory_forget,
     _make_memory_search,
+    _make_memory_store,
     _make_update_identity,
 )
 from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
 from assistant.tools.skill_tool import MANAGE_SKILL_DEF, _make_manage_skill
+from assistant.tools.weather_tool import WEATHER_TOOL_DEF, get_weather
 from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
@@ -99,6 +102,12 @@ def create_tool_registry(
         ARXIV_SEARCH_TOOL_DEF["input_schema"],
         arxiv_search,
     )
+    registry.register(
+        WEATHER_TOOL_DEF["name"],
+        WEATHER_TOOL_DEF["description"],
+        WEATHER_TOOL_DEF["input_schema"],
+        get_weather,
+    )
 
     # Register web_search if enabled
     if settings and settings.web_search_enabled:
@@ -115,13 +124,19 @@ def create_tool_registry(
             web_search_wrapper,
         )
 
-    # Register memory tools (search + forget)
+    # Register memory tools (search + store + forget)
     if memory is not None:
         registry.register(
             MEMORY_SEARCH_DEF["name"],
             MEMORY_SEARCH_DEF["description"],
             MEMORY_SEARCH_DEF["input_schema"],
             _make_memory_search(memory),
+        )
+        registry.register(
+            MEMORY_STORE_DEF["name"],
+            MEMORY_STORE_DEF["description"],
+            MEMORY_STORE_DEF["input_schema"],
+            _make_memory_store(memory),
         )
         registry.register(
             MEMORY_FORGET_DEF["name"],

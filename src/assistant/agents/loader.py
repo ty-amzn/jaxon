@@ -54,6 +54,7 @@ class AgentLoader:
             denied_tools=data.get("denied_tools", []),
             model=data.get("model", ""),
             max_tool_rounds=data.get("max_tool_rounds", 5),
+            can_delegate=data.get("can_delegate", False),
         )
         self._agents[name] = agent
         logger.debug("Loaded agent: %s", name)

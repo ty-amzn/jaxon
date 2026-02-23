@@ -23,6 +23,7 @@ class TestAgentTypes:
         assert agent.denied_tools == []
         assert agent.max_tool_rounds == 5
         assert agent.model == ""
+        assert agent.can_delegate is False
 
     def test_agent_result_success(self):
         result = AgentResult(agent_name="test", response="done")
@@ -111,6 +112,27 @@ class TestAgentLoader:
         loader.reload()
         assert len(loader.list_agents()) == 2
 
+    def test_load_can_delegate(self, agents_dir: Path):
+        data = {
+            "name": "coordinator",
+            "description": "Coordinator",
+            "can_delegate": True,
+            "allowed_tools": ["delegate_to_agent"],
+        }
+        (agents_dir / "coordinator.yaml").write_text(yaml.dump(data))
+
+        loader = AgentLoader(agents_dir)
+        agents = loader.load_all()
+        assert agents["coordinator"].can_delegate is True
+
+    def test_load_can_delegate_defaults_false(self, agents_dir: Path):
+        data = {"name": "basic", "description": "Basic agent"}
+        (agents_dir / "basic.yaml").write_text(yaml.dump(data))
+
+        loader = AgentLoader(agents_dir)
+        agents = loader.load_all()
+        assert agents["basic"].can_delegate is False
+
     def test_invalid_yaml_skipped(self, agents_dir: Path):
         (agents_dir / "bad.yaml").write_text("not: [valid: yaml: {")
 
@@ -189,6 +211,22 @@ class TestAgentRunner:
         tools = runner._filter_tools(agent)
         names = [t["name"] for t in tools]
         assert "delegate_to_agent" not in names
+
+    def test_filter_tools_keeps_delegation_when_can_delegate(self, mock_registry):
+        delegation_tools = [
+            {"name": "delegate_to_agent", "description": "Delegate", "input_schema": {}},
+            {"name": "delegate_parallel", "description": "Parallel delegate", "input_schema": {}},
+            {"name": "list_agents", "description": "List agents", "input_schema": {}},
+        ]
+        mock_registry.definitions.extend(delegation_tools)
+        runner = AgentRunner(AsyncMock(), mock_registry)
+        agent = AgentDef(name="coordinator", description="Test", can_delegate=True)
+
+        tools = runner._filter_tools(agent)
+        names = [t["name"] for t in tools]
+        assert "delegate_to_agent" in names
+        assert "delegate_parallel" in names
+        assert "list_agents" in names
 
     @pytest.mark.asyncio
     async def test_run_error(self, mock_registry):
@@ -297,6 +335,19 @@ class TestOrchestrator:
             "task": "Do something",
         })
         assert "Result from agent" in result
+
+    @pytest.mark.asyncio
+    async def test_depth_guard_blocks_at_max(self, orchestrator):
+        orchestrator._delegation_depth = 2
+        result = await orchestrator.delegate("test_agent", "Do something")
+        assert not result.success
+        assert "depth" in result.error.lower()
+
+    @pytest.mark.asyncio
+    async def test_depth_counter_resets_after_delegate(self, orchestrator):
+        assert orchestrator._delegation_depth == 0
+        await orchestrator.delegate("test_agent", "Do something")
+        assert orchestrator._delegation_depth == 0
 
     def test_config_settings(self):
         from assistant.core.config import Settings
