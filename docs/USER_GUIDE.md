@@ -50,6 +50,7 @@ cp .env.example .env        # Create config file
 # Edit .env and set ANTHROPIC_API_KEY (or configure another provider)
 
 uv sync --all-extras        # Install dependencies
+playwright install chromium # Install browser for browse_web tool (one-time)
 ```
 
 ### Running
@@ -642,6 +643,21 @@ The assistant can execute actions through a permission-gated tool system.
 | `delegate_to_agent` | Delegate task to an agent (supports `background=true`) | Auto-approved (if agents enabled) |
 | `delegate_parallel` | Run multiple agents in parallel | Auto-approved (if agents enabled) |
 | `task_status` | Check status of a background task | Auto-approved |
+| `browse_web` | Browse JS-heavy pages with Playwright | extract/screenshot/evaluate auto-approved; click/fill require approval |
+
+### Browser Automation
+
+The `browse_web` tool uses a real Chromium browser (via Playwright) to handle JavaScript-heavy sites, SPAs, and dynamic content that `web_fetch` cannot render. Actions:
+
+- **extract** — Load the page, wait for JS, return text content
+- **screenshot** — Return a base64-encoded PNG screenshot
+- **click** — Click a CSS selector, return resulting page text
+- **fill** — Fill a form field (selector + value), return resulting page text
+- **evaluate** — Run a JavaScript expression, return the result
+
+Each page runs in a fresh browser context (no persistent cookies). Use the optional `wait_for` parameter (CSS selector) to wait for specific elements before extracting content.
+
+Setup: `playwright install chromium` after installing dependencies.
 
 ### Permission System
 

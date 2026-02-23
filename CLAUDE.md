@@ -4,6 +4,7 @@
 ```bash
 cp .env.example .env   # set ANTHROPIC_API_KEY
 uv sync --all-extras
+playwright install chromium   # browser tool (one-time)
 uv run assistant chat   # interactive mode
 uv run assistant serve  # API server at :51430
 uv run pytest           # run tests
@@ -86,6 +87,12 @@ All 12 steps implemented:
 5. Delivery callbacks — background results delivered async to CLI, Telegram, WhatsApp
 6. Auto-approve permissions — background agents use `_auto_approve`, scoped by YAML `allowed_tools`
 7. In-memory task store — bounded deque of 50 tasks, no persistence
+
+## Phase 7 (Browser Tool)
+1. Playwright browser tool — `tools/browser_tool.py`: `browse_web` with extract/screenshot/click/fill/evaluate actions
+2. Singleton browser — lazy-initialized Chromium, pages created per-call for isolation
+3. Permission-gated — extract/screenshot/evaluate auto-approved (NETWORK_READ), click/fill require approval (NETWORK_WRITE)
+4. Browser shutdown wired into app lifespan (`core/events.py`)
 
 ## User Documentation
 - `docs/USER_GUIDE.md` — comprehensive user guide (all features)

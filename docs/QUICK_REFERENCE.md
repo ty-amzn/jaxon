@@ -86,6 +86,8 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `schedule_reminder` | No |
 | `delegate_to_agent` (supports `background=true`) | Yes |
 | `task_status` | Yes |
+| `browse_web` (extract/screenshot/evaluate) | Yes |
+| `browse_web` (click/fill) | No |
 
 ## Configuration (`.env`)
 

@@ -23,6 +23,7 @@ from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
 from assistant.tools.skill_tool import MANAGE_SKILL_DEF, _make_manage_skill
 from assistant.tools.weather_tool import WEATHER_TOOL_DEF, get_weather
+from assistant.tools.browser_tool import BROWSE_WEB_DEF, browse_web
 from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
@@ -107,6 +108,12 @@ def create_tool_registry(
         WEATHER_TOOL_DEF["description"],
         WEATHER_TOOL_DEF["input_schema"],
         get_weather,
+    )
+    registry.register(
+        BROWSE_WEB_DEF["name"],
+        BROWSE_WEB_DEF["description"],
+        BROWSE_WEB_DEF["input_schema"],
+        browse_web,
     )
 
     # Register web_search if enabled

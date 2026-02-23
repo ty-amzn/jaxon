@@ -156,4 +156,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     if file_monitor:
         file_monitor.stop()
 
+    # Shut down Playwright browser if it was used
+    from assistant.tools.browser_tool import shutdown_browser
+
+    await shutdown_browser()
+
     logger.info("Assistant API shutting down")

@@ -24,6 +24,9 @@ COPY data/memory/MEMORY.md data/memory/MEMORY.md
 # Install project
 RUN uv sync --frozen --no-dev
 
+# Install Playwright Chromium and its system dependencies
+RUN uv run playwright install --with-deps chromium
+
 # Create data directories
 RUN mkdir -p data/memory/daily data/logs data/db data/skills data/automations
 

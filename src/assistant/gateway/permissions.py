@@ -164,6 +164,18 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Agent {action}: {tool_input.get('name', '')}",
             )
+        elif tool_name == "browse_web":
+            action = tool_input.get("action", "extract")
+            if action in ("click", "fill"):
+                cat = ActionCategory.NETWORK_WRITE
+            else:
+                cat = ActionCategory.NETWORK_READ
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Browse ({action}): {tool_input.get('url', '')}",
+            )
         elif tool_name == "web_fetch":
             return PermissionRequest(
                 tool_name=tool_name,
