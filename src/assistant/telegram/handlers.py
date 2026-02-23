@@ -147,7 +147,7 @@ def _make_text(bot: TelegramBot):
                 for i in range(0, len(response), 4000):
                     await update.message.reply_text(response[i:i + 4000])
             else:
-                await update.message.reply_text(response or "(no response)")
+                await update.message.reply_text(response or "Sorry, I got an empty response. Please try again.")
         except Exception:
             logger.exception("Error processing Telegram message")
             await update.message.reply_text("Sorry, an error occurred.")

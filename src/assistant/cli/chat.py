@@ -233,6 +233,8 @@ class ChatInterface:
             )
 
             full_response = ""
+            last_error: str | None = None
+            max_retries = 2
 
             # Create tool executor bound to this session (no rendering)
             # Pass permission_override so we never mutate the shared registry attribute
@@ -241,19 +243,47 @@ class ChatInterface:
                     tc, session=session, render=False, permission_override=permission_manager,
                 )
 
-            async for event in self._llm.stream_with_tool_loop(
-                system=system_prompt,
-                messages=messages,
-                tools=self._tool_registry.definitions,
-                tool_executor=headless_tool_executor,
-                max_tool_rounds=self._settings.max_tool_rounds,
-            ):
-                if event.type == StreamEventType.TEXT_DELTA:
-                    full_response += event.text
-                elif event.type == StreamEventType.MESSAGE_COMPLETE:
-                    full_response = event.text
-                elif event.type == StreamEventType.ERROR:
-                    logger.error("LLM error: %s", event.error)
+            for attempt in range(1, max_retries + 1):
+                full_response = ""
+                last_error = None
+
+                try:
+                    async for event in self._llm.stream_with_tool_loop(
+                        system=system_prompt,
+                        messages=messages,
+                        tools=self._tool_registry.definitions,
+                        tool_executor=headless_tool_executor,
+                        max_tool_rounds=self._settings.max_tool_rounds,
+                    ):
+                        if event.type == StreamEventType.TEXT_DELTA:
+                            full_response += event.text
+                        elif event.type == StreamEventType.MESSAGE_COMPLETE:
+                            full_response = event.text
+                        elif event.type == StreamEventType.ERROR:
+                            logger.error("LLM error (attempt %d/%d): %s", attempt, max_retries, event.error)
+                            last_error = str(event.error)
+                except Exception as exc:
+                    logger.error("LLM exception (attempt %d/%d): %s", attempt, max_retries, exc)
+                    last_error = str(exc)
+
+                # Success — got a response
+                if full_response:
+                    break
+
+                # No response and error — retry after backoff (unless last attempt)
+                if last_error and attempt < max_retries:
+                    delay = 2 ** attempt  # 2s, 4s
+                    logger.info("Retrying LLM call in %ds...", delay)
+                    await asyncio.sleep(delay)
+                    continue
+
+                # Final attempt failed — return a friendly error message
+                if last_error:
+                    full_response = (
+                        f"Sorry, I wasn't able to process your message after "
+                        f"{max_retries} attempts. Error: {last_error}"
+                    )
+                    break
 
             # Save to session and memory
             session.add_message(Role.ASSISTANT, full_response)
