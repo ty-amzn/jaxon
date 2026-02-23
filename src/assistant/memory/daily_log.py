@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import aiofiles
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -26,6 +26,38 @@ class DailyLog:
         if len(content) > max_chars:
             return f"...(earlier entries truncated)...\n{content[-max_chars:]}"
         return content
+
+    def read_recent(self, max_chars: int = 4000) -> str:
+        """Read a rolling window of recent context from today and yesterday.
+
+        Prioritises today's entries; fills remaining budget with yesterday's.
+        """
+        now = datetime.now(timezone.utc)
+        today_path = self._path_for(now)
+        yesterday_path = self._path_for(now - timedelta(days=1))
+
+        today_content = today_path.read_text() if today_path.exists() else ""
+        yesterday_content = yesterday_path.read_text() if yesterday_path.exists() else ""
+
+        if not today_content and not yesterday_content:
+            return ""
+
+        # Today gets full budget; yesterday fills the remainder
+        if len(today_content) >= max_chars:
+            return f"...(earlier entries truncated)...\n{today_content[-max_chars:]}"
+
+        remaining = max_chars - len(today_content)
+        parts: list[str] = []
+
+        if yesterday_content:
+            if len(yesterday_content) > remaining:
+                yesterday_content = f"...(earlier entries truncated)...\n{yesterday_content[-remaining:]}"
+            parts.append(yesterday_content)
+
+        if today_content:
+            parts.append(today_content)
+
+        return "\n".join(parts)
 
     async def append_exchange(
         self,

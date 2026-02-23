@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             job_store=job_store,
             dispatcher=dispatcher,
             chat_interface=chat_interface,
+            memory=chat_interface._memory,
             timezone=settings.scheduler_timezone,
         )
         await scheduler_manager.start()

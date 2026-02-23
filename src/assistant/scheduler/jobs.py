@@ -9,6 +9,7 @@ from typing import Any, TYPE_CHECKING
 if TYPE_CHECKING:
     from assistant.cli.chat import ChatInterface
     from assistant.core.notifications import NotificationDispatcher
+    from assistant.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -16,9 +17,17 @@ logger = logging.getLogger(__name__)
 async def run_notification_job(
     dispatcher: NotificationDispatcher,
     message: str,
+    memory: MemoryManager | None = None,
 ) -> None:
     """Send a notification message via dispatcher."""
-    await dispatcher.send(f"Reminder: {message}")
+    notification = f"Reminder: {message}"
+    await dispatcher.send(notification)
+    if memory:
+        await memory.save_exchange(
+            f"[Scheduled reminder] {message}",
+            notification,
+            session_id="scheduler",
+        )
 
 
 async def run_workflow_job(
@@ -49,8 +58,13 @@ async def run_assistant_job(
     session_id: str,
     prompt: str,
     dispatcher: NotificationDispatcher,
+    memory: MemoryManager | None = None,
 ) -> None:
-    """Run a prompt through the assistant and send the response as a notification."""
+    """Run a prompt through the assistant and send the response as a notification.
+
+    Note: get_response() already persists the exchange to daily log and search
+    index via _process_message, so no extra save_exchange call is needed here.
+    """
     try:
         response = await chat_interface.get_response(session_id, prompt)
         await dispatcher.send(f"Scheduled task result:\n{response}")

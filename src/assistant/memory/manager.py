@@ -80,9 +80,9 @@ class MemoryManager:
                 plugin_parts.append(f"## Plugin Skill: {name}\n\n{content}\n")
             parts.append("\n".join(plugin_parts))
 
-        today = self.daily_log.read_today()
-        if today:
-            parts.append(f"# Today's Context\n{today}")
+        recent = self.daily_log.read_recent()
+        if recent:
+            parts.append(f"# Recent Context\n{recent}")
 
         return "\n\n---\n\n".join(parts)
 

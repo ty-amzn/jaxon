@@ -17,6 +17,7 @@ from assistant.scheduler.store import JobStore
 if TYPE_CHECKING:
     from assistant.cli.chat import ChatInterface
     from assistant.core.notifications import NotificationDispatcher
+    from assistant.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
@@ -29,11 +30,13 @@ class SchedulerManager:
         job_store: JobStore,
         dispatcher: NotificationDispatcher,
         chat_interface: ChatInterface | None = None,
+        memory: MemoryManager | None = None,
         timezone: str = "UTC",
     ) -> None:
         self._store = job_store
         self._dispatcher = dispatcher
         self._chat_interface = chat_interface
+        self._memory = memory
         self._scheduler = AsyncIOScheduler(timezone=timezone)
 
     async def start(self) -> None:
@@ -74,6 +77,7 @@ class SchedulerManager:
                 kwargs={
                     "dispatcher": self._dispatcher,
                     "message": job_data["job_args"].get("message", ""),
+                    "memory": self._memory,
                 },
             )
         elif job_data["job_type"] == "assistant" and self._chat_interface:
@@ -87,6 +91,7 @@ class SchedulerManager:
                     "session_id": job_data["job_args"].get("session_id", "scheduler"),
                     "prompt": job_data["job_args"].get("prompt", ""),
                     "dispatcher": self._dispatcher,
+                    "memory": self._memory,
                 },
             )
 

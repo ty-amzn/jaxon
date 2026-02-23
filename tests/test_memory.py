@@ -47,6 +47,31 @@ async def test_daily_log(tmp_data_dir: Path):
     assert "test" in today
 
 
+@pytest.mark.asyncio
+async def test_daily_log_read_recent_includes_yesterday(tmp_data_dir: Path):
+    """read_recent should include entries from both today and yesterday."""
+    from datetime import datetime, timedelta, timezone
+
+    log = DailyLog(tmp_data_dir / "memory" / "daily")
+
+    # Write a fake yesterday log file directly
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    yesterday_path = log._path_for(yesterday)
+    yesterday_path.write_text("# Yesterday\n## 23:00:00 UTC\n**User:** old question\n**Assistant:** old answer\n---\n")
+
+    # Write today's entry normally
+    await log.append_exchange("new question", "new answer")
+
+    recent = log.read_recent()
+    assert "old question" in recent
+    assert "new question" in recent
+
+    # read_today should NOT include yesterday
+    today_only = log.read_today()
+    assert "old question" not in today_only
+    assert "new question" in today_only
+
+
 def test_search_index(tmp_data_dir: Path):
     idx = SearchIndex(tmp_data_dir / "db" / "search.db")
     idx.index_message("user", "How do I configure SSH?", "sess1")
