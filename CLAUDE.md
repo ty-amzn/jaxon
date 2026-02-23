@@ -78,6 +78,15 @@ All 12 steps implemented:
 7. Personality/identity — `update_identity` tool, first-run onboarding flow
 8. Approval prompt fix — pause Rich Live widget during permission prompts
 
+## Phase 6 (Background Agents)
+1. Background agent delegation — `agents/background.py`: `BackgroundTaskManager`, `current_delivery` ContextVar
+2. `delegate_to_agent` now accepts `background=true` for fire-and-forget execution
+3. `task_status` tool — check background task progress/results
+4. `/tasks` command — list and inspect background tasks in CLI
+5. Delivery callbacks — background results delivered async to CLI, Telegram, WhatsApp
+6. Auto-approve permissions — background agents use `_auto_approve`, scoped by YAML `allowed_tools`
+7. In-memory task store — bounded deque of 50 tasks, no persistence
+
 ## User Documentation
 - `docs/USER_GUIDE.md` — comprehensive user guide (all features)
 - `docs/QUICK_REFERENCE.md` — command cheat sheet

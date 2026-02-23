@@ -192,6 +192,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Weather: {tool_input.get('location', '')}",
             )
+        elif tool_name == "task_status":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.READ,
+                details=tool_input,
+                description=f"Check task: {tool_input.get('task_id', '')}",
+            )
         elif tool_name == "web_search":
             return PermissionRequest(
                 tool_name=tool_name,

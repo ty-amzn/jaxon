@@ -82,9 +82,15 @@ async def handle_message(
     # Create a PermissionManager with the WhatsApp approval callback for this sender
     wa_permission_manager = PermissionManager(approval_cb)
 
+    # Create delivery callback for background tasks
+    async def _wa_deliver(msg: str) -> None:
+        await bot.send_message(f"+{sender_number}", msg)
+
     try:
         response = await bot.chat_interface.get_response(
-            session_key, text, permission_manager=wa_permission_manager,
+            session_key, text,
+            permission_manager=wa_permission_manager,
+            delivery_callback=_wa_deliver,
         )
         if response:
             await bot.send_message(f"+{sender_number}", response)

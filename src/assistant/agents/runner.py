@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from assistant.agents.types import AgentDef, AgentResult
+from assistant.gateway.permissions import PermissionManager
 from assistant.llm.base import BaseLLMClient
 from assistant.llm.router import LLMRouter
 from assistant.llm.types import StreamEventType, ToolCall, ToolResult
@@ -47,6 +48,7 @@ class AgentRunner:
         task: str,
         context: str = "",
         base_system_prompt: str = "",
+        permission_override: PermissionManager | None = None,
     ) -> AgentResult:
         """Run an agent on a specific task.
 
@@ -55,6 +57,7 @@ class AgentRunner:
             task: The task/query to give the agent
             context: Additional context to include
             base_system_prompt: Base system prompt (memory/identity)
+            permission_override: Optional PermissionManager to use instead of the registry's default
         """
         # Build system prompt
         system_parts = []
@@ -87,7 +90,9 @@ class AgentRunner:
                     content=f"Tool '{tool_call.name}' is not available to this agent.",
                     is_error=True,
                 )
-            result = await self._tool_registry.execute(tool_call)
+            result = await self._tool_registry.execute(
+                tool_call, permission_override=permission_override,
+            )
             tool_calls_made.append({
                 "name": tool_call.name,
                 "input": tool_call.input,

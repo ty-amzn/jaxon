@@ -2,12 +2,19 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 import yaml
 
+from assistant.agents.background import (
+    BackgroundTaskManager,
+    TaskStatus,
+    _auto_approve,
+    current_delivery,
+)
 from assistant.agents.types import AgentDef, AgentResult
 from assistant.agents.loader import AgentLoader
 from assistant.agents.runner import AgentRunner
@@ -356,3 +363,177 @@ class TestOrchestrator:
         assert s.agents_enabled is False
         assert s.plugins_dir == s.data_dir / "plugins"
         assert s.agents_dir == s.data_dir / "agents"
+
+
+class TestBackgroundTaskManager:
+    def test_create_task(self):
+        mgr = BackgroundTaskManager()
+        bt = mgr.create("research", "Find papers on X")
+        assert len(bt.id) == 8
+        assert bt.agent_name == "research"
+        assert bt.status == TaskStatus.PENDING
+
+    def test_get_task(self):
+        mgr = BackgroundTaskManager()
+        bt = mgr.create("research", "Find papers")
+        assert mgr.get(bt.id) is bt
+        assert mgr.get("nonexistent") is None
+
+    def test_list_all(self):
+        mgr = BackgroundTaskManager()
+        bt1 = mgr.create("a1", "task1")
+        bt2 = mgr.create("a2", "task2")
+        tasks = mgr.list_all()
+        assert len(tasks) == 2
+        assert tasks[0] is bt1
+        assert tasks[1] is bt2
+
+    def test_bounded_eviction(self):
+        mgr = BackgroundTaskManager(maxlen=3)
+        ids = [mgr.create("agent", f"task {i}").id for i in range(5)]
+        # Should only keep last 3
+        assert len(mgr.list_all()) == 3
+        assert mgr.get(ids[0]) is None
+        assert mgr.get(ids[1]) is None
+        assert mgr.get(ids[2]) is not None
+        assert mgr.get(ids[3]) is not None
+        assert mgr.get(ids[4]) is not None
+
+
+class TestAutoApprove:
+    @pytest.mark.asyncio
+    async def test_auto_approve_always_true(self):
+        from assistant.gateway.permissions import PermissionRequest, ActionCategory
+        req = PermissionRequest(
+            tool_name="shell_exec",
+            action_category=ActionCategory.WRITE,
+            details={"command": "rm -rf /"},
+            description="dangerous command",
+        )
+        assert await _auto_approve(req) is True
+
+
+class TestBackgroundDelegation:
+    @pytest.fixture
+    def bg_orchestrator(self, tmp_path: Path):
+        agents_dir = tmp_path / "agents"
+        agents_dir.mkdir()
+        data = {
+            "name": "researcher",
+            "description": "Research agent",
+            "allowed_tools": ["web_fetch"],
+        }
+        (agents_dir / "researcher.yaml").write_text(yaml.dump(data))
+
+        loader = AgentLoader(agents_dir)
+        loader.load_all()
+
+        mock_llm = AsyncMock()
+
+        async def mock_stream(**kwargs):
+            yield StreamEvent(type=StreamEventType.MESSAGE_COMPLETE, text="Research result: found 3 papers")
+
+        mock_llm.stream_with_tool_loop = mock_stream
+
+        mock_registry = MagicMock()
+        mock_registry.definitions = [
+            {"name": "web_fetch", "description": "Fetch", "input_schema": {}},
+        ]
+        mock_registry.execute = AsyncMock()
+
+        runner = AgentRunner(mock_llm, mock_registry)
+
+        from assistant.memory.manager import MemoryManager
+        (tmp_path / "memory").mkdir(exist_ok=True)
+        (tmp_path / "memory" / "daily").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "memory" / "IDENTITY.md").write_text("Test identity")
+        (tmp_path / "memory" / "MEMORY.md").write_text("Test memory")
+        (tmp_path / "db").mkdir(exist_ok=True)
+
+        memory = MemoryManager(
+            identity_path=tmp_path / "memory" / "IDENTITY.md",
+            memory_path=tmp_path / "memory" / "MEMORY.md",
+            daily_log_dir=tmp_path / "memory" / "daily",
+            search_db_path=tmp_path / "db" / "search.db",
+        )
+
+        bg_manager = BackgroundTaskManager()
+        return Orchestrator(loader, runner, memory, bg_manager=bg_manager)
+
+    @pytest.mark.asyncio
+    async def test_background_returns_task_id(self, bg_orchestrator):
+        handlers = bg_orchestrator.get_tool_handlers()
+        result = await handlers["delegate_to_agent"]({
+            "agent_name": "researcher",
+            "task": "Find papers on transformers",
+            "background": True,
+        })
+        assert "Background task started:" in result
+        # Extract task ID
+        task_id = result.split(":")[1].strip().split(".")[0]
+        assert len(task_id) == 8
+
+    @pytest.mark.asyncio
+    async def test_background_delivers_result(self, bg_orchestrator):
+        delivered = []
+
+        async def mock_deliver(text: str) -> None:
+            delivered.append(text)
+
+        # Set delivery callback via contextvar
+        token = current_delivery.set(mock_deliver)
+        try:
+            handlers = bg_orchestrator.get_tool_handlers()
+            result = await handlers["delegate_to_agent"]({
+                "agent_name": "researcher",
+                "task": "Find papers",
+                "background": True,
+            })
+            # Wait for background task to complete
+            await asyncio.sleep(0.5)
+        finally:
+            current_delivery.reset(token)
+
+        assert len(delivered) == 1
+        assert "completed" in delivered[0]
+        assert "Research result" in delivered[0]
+
+    @pytest.mark.asyncio
+    async def test_task_status_returns_result(self, bg_orchestrator):
+        token = current_delivery.set(None)
+        try:
+            handlers = bg_orchestrator.get_tool_handlers()
+            result = await handlers["delegate_to_agent"]({
+                "agent_name": "researcher",
+                "task": "Find papers",
+                "background": True,
+            })
+            task_id = result.split(":")[1].strip().split(".")[0]
+
+            # Wait for completion
+            await asyncio.sleep(0.5)
+
+            status = await handlers["task_status"]({"task_id": task_id})
+            assert "done" in status.lower()
+            assert "Research result" in status
+        finally:
+            current_delivery.reset(token)
+
+    def test_tool_definitions_include_task_status(self, bg_orchestrator):
+        defs = bg_orchestrator.get_tool_definitions()
+        names = [d["name"] for d in defs]
+        assert "task_status" in names
+
+    def test_tool_definitions_include_background_param(self, bg_orchestrator):
+        defs = bg_orchestrator.get_tool_definitions()
+        delegate_def = next(d for d in defs if d["name"] == "delegate_to_agent")
+        assert "background" in delegate_def["input_schema"]["properties"]
+
+    @pytest.mark.asyncio
+    async def test_foreground_still_works(self, bg_orchestrator):
+        handlers = bg_orchestrator.get_tool_handlers()
+        result = await handlers["delegate_to_agent"]({
+            "agent_name": "researcher",
+            "task": "Find papers",
+        })
+        assert "Research result" in result

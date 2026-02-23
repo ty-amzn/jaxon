@@ -126,9 +126,21 @@ def _make_text(bot: TelegramBot):
         approval_cb = bot._approval_callbacks[chat_id]
         permission_manager = PermissionManager(approval_cb)
 
+        # Create delivery callback for background tasks
+        async def _tg_deliver(text: str) -> None:
+            tg_bot = bot.application.bot
+            numeric_id = update.effective_chat.id if update.effective_chat else 0
+            if len(text) > 4000:
+                for i in range(0, len(text), 4000):
+                    await tg_bot.send_message(numeric_id, text[i:i + 4000])
+            else:
+                await tg_bot.send_message(numeric_id, text)
+
         try:
             response = await bot.chat_interface.get_response(
-                chat_id, user_input, permission_manager=permission_manager
+                chat_id, user_input,
+                permission_manager=permission_manager,
+                delivery_callback=_tg_deliver,
             )
             # Telegram has a 4096 char limit per message
             if len(response) > 4000:

@@ -158,6 +158,8 @@ Type `/help` in the chat to see all available commands.
 | `/backup restore <name>` | Restore from backup |
 | `/plugins` | Manage plugins |
 | `/agents` | List available agents |
+| `/tasks` | List background agent tasks |
+| `/tasks result <id>` | Show result of a background task |
 
 All `/clear` subcommands prompt for confirmation before executing.
 
@@ -384,6 +386,29 @@ If `model` is empty or omitted, the agent uses the default provider. If you omit
 ### How It Works
 
 The main assistant can delegate tasks to agents using the `delegate_to_agent` or `delegate_parallel` tools. Agents run in isolated contexts with scoped tools and cannot delegate to other agents.
+
+### Background Delegation
+
+For long-running tasks like deep research, agents can run in the background so you can keep chatting:
+
+```
+You: Research the latest advances in quantum computing — do it in the background
+```
+
+The assistant sets `background=true` on the `delegate_to_agent` tool, which returns immediately with a task ID. When the agent finishes, the result is delivered asynchronously to the originating channel (CLI, Telegram, or WhatsApp).
+
+Background agents use auto-approved permissions, so they can only use tools whitelisted in their agent YAML. Don't give background agents write tools unless you trust them.
+
+#### Checking Background Tasks
+
+```
+/tasks                   # List all background tasks with status
+/tasks result <id>       # Show the full result of a specific task
+```
+
+The LLM can also check task status using the `task_status` tool.
+
+Tasks are stored in memory (up to 50). They do not persist across restarts.
 
 ### Built-in Agents
 
@@ -614,8 +639,9 @@ The assistant can execute actions through a permission-gated tool system.
 | `manage_agent` | Create/edit/delete/list/reload agents | List/reload auto-approved; changes require approval |
 | `schedule_reminder` | Create scheduled reminders | Requires approval |
 | `run_workflow` | Execute a workflow | Requires approval |
-| `delegate_to_agent` | Delegate task to an agent | Auto-approved (if agents enabled) |
+| `delegate_to_agent` | Delegate task to an agent (supports `background=true`) | Auto-approved (if agents enabled) |
 | `delegate_parallel` | Run multiple agents in parallel | Auto-approved (if agents enabled) |
+| `task_status` | Check status of a background task | Auto-approved |
 
 ### Permission System
 

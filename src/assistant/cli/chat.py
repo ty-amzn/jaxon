@@ -104,6 +104,7 @@ class ChatInterface:
 
     def _init_agents(self, settings: Settings) -> None:
         """Initialize the agent orchestration system."""
+        from assistant.agents.background import BackgroundTaskManager
         from assistant.agents.loader import AgentLoader
         from assistant.agents.orchestrator import Orchestrator
         from assistant.agents.runner import AgentRunner
@@ -112,7 +113,8 @@ class ChatInterface:
         loader = AgentLoader(settings.agents_dir)
         loader.load_all()
         runner = AgentRunner(self._llm, self._tool_registry)
-        self._orchestrator = Orchestrator(loader, runner, self._memory)
+        self._bg_manager = BackgroundTaskManager()
+        self._orchestrator = Orchestrator(loader, runner, self._memory, bg_manager=self._bg_manager)
 
         # Register delegation tools
         register_orchestrator_tools(
@@ -184,12 +186,17 @@ class ChatInterface:
         session: Any,
         user_input: str,
         permission_manager: PermissionManager | None = None,
+        delivery_callback: Any = None,
     ) -> str:
         """Core message processing without Rich rendering. Returns full response text.
 
         This is the headless entry point used by Telegram, scheduler, etc.
         Acquires the session lock to prevent concurrent mutations of shared state.
         """
+        # Set delivery callback for background tasks
+        from assistant.agents.background import current_delivery
+        token = current_delivery.set(delivery_callback)
+
         async with session.lock:
             # Dispatch pre_message hook
             if self._hook_dispatcher:
@@ -263,6 +270,7 @@ class ChatInterface:
                     user_input, full_response, session_id=session.id
                 )
 
+            current_delivery.reset(token)
             return full_response
 
     async def get_response(
@@ -270,17 +278,32 @@ class ChatInterface:
         session_id: str,
         user_input: str,
         permission_manager: PermissionManager | None = None,
+        delivery_callback: Any = None,
     ) -> str:
         """Public headless API for external integrations (Telegram, scheduler, WhatsApp).
 
         Uses or creates a keyed session and processes the message without rendering.
         Optionally accepts a custom PermissionManager for channel-specific approvals.
+        Optionally accepts a delivery_callback for background task result delivery.
         """
         session = self._session_manager.get_or_create_keyed_session(session_id)
-        return await self._process_message(session, user_input, permission_manager=permission_manager)
+        return await self._process_message(
+            session, user_input,
+            permission_manager=permission_manager,
+            delivery_callback=delivery_callback,
+        )
+
+    async def _cli_delivery(self, text: str) -> None:
+        """Deliver a background task result to the CLI console."""
+        self._console.print()
+        self._console.print(Markdown(text))
 
     async def handle_message(self, user_input: str) -> str:
         """Process a user message with Rich Live rendering."""
+        # Set delivery callback for background tasks
+        from assistant.agents.background import current_delivery
+        token = current_delivery.set(self._cli_delivery)
+
         # Parse @image: references
         clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
 
@@ -349,6 +372,7 @@ class ChatInterface:
                     self._console.print(f"[red]Error: {event.error}[/red]")
 
         self._active_live = None
+        current_delivery.reset(token)
 
         # Print final rendered response
         if full_response:

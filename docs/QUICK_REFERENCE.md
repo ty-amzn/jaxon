@@ -39,6 +39,8 @@
 | `/plugins` | Manage plugins |
 | `/agents` | List available agents |
 | `/agents reload` | Reload agent definitions |
+| `/tasks` | List background agent tasks |
+| `/tasks result <id>` | Show result of a background task |
 
 ## Natural Language Features
 
@@ -52,6 +54,7 @@ These work by just chatting — no commands needed:
 | "Forget about the old project" | Deletes matching memories |
 | "Create a skill for code review" | Creates a skill file |
 | "Create an agent for research using gpt-4o" | Creates an agent YAML |
+| "Research quantum computing in the background" | Delegates to agent in background |
 | "Remind me at 9am to check PRs" | Schedules a reminder |
 
 ## Image Syntax
@@ -81,7 +84,8 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `manage_agent` (list/reload) | Yes |
 | `manage_agent` (create/edit/delete) | No |
 | `schedule_reminder` | No |
-| `delegate_to_agent` | Yes |
+| `delegate_to_agent` (supports `background=true`) | Yes |
+| `task_status` | Yes |
 
 ## Configuration (`.env`)
 
