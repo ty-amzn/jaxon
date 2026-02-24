@@ -68,12 +68,17 @@ class GoogleCalendarClient:
             self._creds = self._load_credentials()
 
         if self._creds.expired and self._creds.refresh_token:
-            from google.auth.transport.requests import Request
-
-            self._creds.refresh(Request())
-            self._save_credentials(self._creds)
+            self._do_refresh()
 
         return self._creds.token
+
+    def _do_refresh(self) -> None:
+        """Force-refresh the access token using the refresh token."""
+        from google.auth.transport.requests import Request
+
+        self._creds.refresh(Request())
+        self._save_credentials(self._creds)
+        logger.info("Google Calendar access token refreshed")
 
     async def _request(
         self,
@@ -91,6 +96,14 @@ class GoogleCalendarClient:
             resp = await client.request(
                 method, url, headers=headers, params=params, json=json_body
             )
+            # If 401, force a token refresh and retry once
+            if resp.status_code == 401 and self._creds and self._creds.refresh_token:
+                logger.warning("Got 401, refreshing access token and retrying")
+                self._do_refresh()
+                headers = {"Authorization": f"Bearer {self._creds.token}"}
+                resp = await client.request(
+                    method, url, headers=headers, params=params, json=json_body
+                )
             resp.raise_for_status()
             if resp.status_code == 204:
                 return {}
