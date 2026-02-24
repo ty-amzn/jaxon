@@ -31,6 +31,7 @@ from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
 from assistant.tools.email_tool import SEND_EMAIL_DEF, send_email
 from assistant.tools.calendar_tool import CALENDAR_TOOL_DEF, calendar_tool
 from assistant.tools.contacts_tool import CONTACTS_TOOL_DEF, contacts_tool
+from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
 
 
 def register_orchestrator_tools(
@@ -58,6 +59,7 @@ def create_tool_registry(
     audit_logger: AuditLogger,
     settings: Settings | None = None,
     memory: Any | None = None,
+    dispatcher: Any | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     registry = ToolRegistry(permission_manager, audit_logger)
@@ -137,6 +139,15 @@ def create_tool_registry(
         CONTACTS_TOOL_DEF["input_schema"],
         contacts_tool,
     )
+
+    # Register send_notification if dispatcher is available
+    if dispatcher is not None:
+        registry.register(
+            SEND_NOTIFICATION_DEF["name"],
+            SEND_NOTIFICATION_DEF["description"],
+            SEND_NOTIFICATION_DEF["input_schema"],
+            _make_send_notification(dispatcher),
+        )
 
     # Register web_search if enabled
     if settings and settings.web_search_enabled:

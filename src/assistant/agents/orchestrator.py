@@ -245,7 +245,7 @@ class Orchestrator:
                 bt.status = TaskStatus.DONE
                 bt.result = result.response
                 bt.finished_at = time.time()
-                if bt._deliver:
+                if bt._deliver and not bt.silent:
                     await bt._deliver(
                         f"Background task {bt.id} ({agent_name}) completed:\n\n{result.response}"
                     )
@@ -303,6 +303,11 @@ class Orchestrator:
                         "background": {
                             "type": "boolean",
                             "description": "If true, run the agent in the background and return immediately with a task ID. Use for long-running tasks like deep research so the user can keep chatting. Results are delivered asynchronously.",
+                            "default": False,
+                        },
+                        "silent": {
+                            "type": "boolean",
+                            "description": "If true (requires background=true), skip auto-delivery of results. The agent must use send_notification to explicitly notify the user. Use for tasks where the agent should only notify when something noteworthy is found.",
                             "default": False,
                         },
                         "images": {
@@ -409,11 +414,13 @@ class Orchestrator:
 
             if background and self._bg_manager is not None:
                 # Background path: fire-and-forget
+                silent = params.get("silent", False)
                 deliver = current_delivery.get()
                 bt = self._bg_manager.create(
                     agent_name=params["agent_name"],
                     task_description=params["task"],
                     deliver=deliver,
+                    silent=silent,
                 )
                 asyncio.create_task(
                     self._run_background(

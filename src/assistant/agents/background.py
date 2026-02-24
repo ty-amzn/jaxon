@@ -47,6 +47,7 @@ class BackgroundTask:
     finished_at: float | None = None
     result: str = ""
     error: str = ""
+    silent: bool = False
     _deliver: DeliveryCallback | None = field(default=None, repr=False)
 
 
@@ -72,6 +73,7 @@ class BackgroundTaskManager:
         agent_name: str,
         task_description: str,
         deliver: DeliveryCallback | None = None,
+        silent: bool = False,
     ) -> BackgroundTask:
         """Create a new background task with an 8-char hex ID."""
         task_id = os.urandom(4).hex()
@@ -79,6 +81,7 @@ class BackgroundTaskManager:
             id=task_id,
             agent_name=agent_name,
             task_description=task_description,
+            silent=silent,
             _deliver=deliver,
         )
         # Evict oldest if at capacity

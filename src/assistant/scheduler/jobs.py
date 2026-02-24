@@ -53,21 +53,35 @@ async def run_workflow_job(
         await dispatcher.send(f"Workflow '{workflow_name}' failed")
 
 
+_SILENT_PROMPT_PREFIX = (
+    "You are running in SILENT mode. Do NOT assume the user wants to hear from you. "
+    "Only call the `send_notification` tool if there is something genuinely noteworthy "
+    "or actionable to report. If there is nothing interesting, simply respond without "
+    "calling send_notification and your response will be silently discarded.\n\n"
+)
+
+
 async def run_assistant_job(
     chat_interface: ChatInterface,
     session_id: str,
     prompt: str,
     dispatcher: NotificationDispatcher,
     memory: MemoryManager | None = None,
+    silent: bool = False,
 ) -> None:
     """Run a prompt through the assistant and send the response as a notification.
 
     Note: get_response() already persists the exchange to daily log and search
     index via _process_message, so no extra save_exchange call is needed here.
+
+    When silent=True, the prompt is augmented to instruct the agent to use
+    send_notification explicitly; auto-delivery of the response is skipped.
     """
     try:
-        response = await chat_interface.get_response(session_id, prompt)
-        await dispatcher.send(f"Scheduled task result:\n{response}")
+        effective_prompt = _SILENT_PROMPT_PREFIX + prompt if silent else prompt
+        response = await chat_interface.get_response(session_id, effective_prompt)
+        if not silent:
+            await dispatcher.send(f"Scheduled task result:\n{response}")
     except Exception:
         logger.exception("Error running assistant job")
         await dispatcher.send(f"Scheduled task failed for prompt: {prompt}")

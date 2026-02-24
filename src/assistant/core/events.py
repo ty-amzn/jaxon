@@ -42,6 +42,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     chat_interface = ChatInterface(settings)
     app.state.chat_interface = chat_interface
 
+    # Wire send_notification tool into the chat interface's registry
+    from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
+
+    chat_interface._tool_registry.register(
+        SEND_NOTIFICATION_DEF["name"],
+        SEND_NOTIFICATION_DEF["description"],
+        SEND_NOTIFICATION_DEF["input_schema"],
+        _make_send_notification(dispatcher),
+    )
+
     # Start scheduler if enabled
     scheduler_manager = None
     if settings.scheduler_enabled:

@@ -92,6 +92,7 @@ class SchedulerManager:
                     "prompt": job_data["job_args"].get("prompt", ""),
                     "dispatcher": self._dispatcher,
                     "memory": self._memory,
+                    "silent": job_data["job_args"].get("silent", False),
                 },
             )
 
@@ -158,12 +159,13 @@ class SchedulerManager:
         trigger_args: dict,
         prompt: str,
         session_id: str = "scheduler",
+        silent: bool = False,
     ) -> str:
         """Add a job that runs a prompt through the assistant. Returns job ID."""
         job_id = f"assistant_{uuid.uuid4().hex[:8]}"
         trigger_args = self._anchor_interval(trigger_type, trigger_args)
 
-        job_args = {"prompt": prompt, "session_id": session_id}
+        job_args = {"prompt": prompt, "session_id": session_id, "silent": silent}
         self._store.save(
             job_id=job_id,
             description=description,

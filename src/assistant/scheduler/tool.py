@@ -66,6 +66,16 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
                     "Use 'notification' only when the user explicitly wants a simple static message with no AI involvement."
                 ),
             },
+            "silent": {
+                "type": "boolean",
+                "description": (
+                    "If true, the assistant job will NOT auto-deliver its response. "
+                    "Instead, the agent must explicitly call send_notification to notify the user. "
+                    "Use this for recurring tasks where the user only wants to be notified when "
+                    "something noteworthy happens (e.g. 'check news every hour, only notify if interesting')."
+                ),
+                "default": False,
+            },
             "job_id": {
                 "type": "string",
                 "description": "Job ID to cancel (required for cancel, use 'list' to find IDs)",
@@ -108,13 +118,16 @@ def create_schedule_reminder_handler(scheduler: SchedulerManager):
         job_type = params.get("job_type", "assistant")
 
         if job_type == "assistant":
+            silent = params.get("silent", False)
             job_id = scheduler.add_assistant_job(
                 description=params["description"],
                 trigger_type=params["trigger_type"],
                 trigger_args=params["trigger_args"],
                 prompt=params["message"],
+                silent=silent,
             )
-            return f"Assistant task scheduled with ID: {job_id}"
+            mode = " (silent mode)" if silent else ""
+            return f"Assistant task scheduled with ID: {job_id}{mode}"
         else:
             job_id = scheduler.add_reminder(
                 description=params["description"],
