@@ -161,6 +161,29 @@ class LLMRouter(BaseLLMClient):
             self._settings.model,
         )
 
+    # Known vision-capable model families (substring match)
+    _VISION_MODELS = (
+        "claude", "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
+        "gemini", "llava", "bakllava", "moondream",
+        "qwen-vl", "qwen2-vl", "cogvlm", "minicpm-v",
+    )
+
+    @staticmethod
+    def model_supports_vision(model: str) -> bool:
+        """Check if a model name is likely vision-capable."""
+        model_lower = model.lower()
+        return any(v in model_lower for v in LLMRouter._VISION_MODELS)
+
+    def default_model_supports_vision(self) -> bool:
+        """Check if the current default model supports vision.
+
+        Uses ``ASSISTANT_VISION`` setting if set, otherwise auto-detects.
+        """
+        if self._settings.vision is not None:
+            return self._settings.vision
+        _, _, model = self._get_default_client()
+        return self.model_supports_vision(model)
+
     @property
     def provider(self) -> str:
         """Return the last used provider."""

@@ -138,3 +138,97 @@ class TestOpenAIImageConversion:
         result = client._convert_messages_to_openai("sys", messages)
         user_msg = result[1]
         assert user_msg["content"] == [{"type": "text", "text": "just text"}]
+
+
+class TestAgentDelegationMultimodal:
+    """Test multimodal content passthrough in agent delegation."""
+
+    def test_runner_uses_content_param(self):
+        """AgentRunner.run() should use content when provided."""
+        from unittest.mock import AsyncMock, MagicMock, patch
+
+        from assistant.agents.runner import AgentRunner
+        from assistant.agents.types import AgentDef
+        from assistant.llm.types import StreamEvent, StreamEventType
+
+        runner = AgentRunner(llm=MagicMock(), tool_registry=MagicMock())
+
+        agent = AgentDef(name="test", description="test agent")
+        multimodal_content = [
+            {"type": "text", "text": "Describe this image"},
+            {"type": "image", "source": {"type": "base64", "data": "abc123", "media_type": "image/png"}},
+        ]
+
+        captured_messages = []
+
+        async def fake_stream(*args, **kwargs):
+            captured_messages.extend(kwargs.get("messages", args[2] if len(args) > 2 else []))
+            yield StreamEvent(type=StreamEventType.MESSAGE_COMPLETE, text="done")
+
+        runner._router.stream_with_tool_loop = fake_stream
+        runner._tool_registry.definitions = []
+
+        import asyncio
+        result = asyncio.get_event_loop().run_until_complete(
+            runner.run(agent, task="Describe this image", content=multimodal_content)
+        )
+
+        assert result.response == "done"
+        assert len(captured_messages) == 1
+        assert captured_messages[0]["content"] == multimodal_content
+
+    def test_runner_falls_back_to_task_without_content(self):
+        """AgentRunner.run() should build from task/context when content is None."""
+        from unittest.mock import MagicMock
+
+        from assistant.agents.runner import AgentRunner
+        from assistant.agents.types import AgentDef
+        from assistant.llm.types import StreamEvent, StreamEventType
+
+        runner = AgentRunner(llm=MagicMock(), tool_registry=MagicMock())
+        agent = AgentDef(name="test", description="test agent")
+
+        captured_messages = []
+
+        async def fake_stream(*args, **kwargs):
+            captured_messages.extend(kwargs.get("messages", args[2] if len(args) > 2 else []))
+            yield StreamEvent(type=StreamEventType.MESSAGE_COMPLETE, text="done")
+
+        runner._router.stream_with_tool_loop = fake_stream
+        runner._tool_registry.definitions = []
+
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(
+            runner.run(agent, task="hello", context="ctx")
+        )
+
+        assert captured_messages[0]["content"] == "Context:\nctx\n\nTask:\nhello"
+
+    def test_orchestrator_build_content_with_images(self):
+        """Orchestrator._build_content builds multimodal blocks from images."""
+        from assistant.agents.orchestrator import Orchestrator
+
+        images = [
+            {"data": "base64data1", "media_type": "image/jpeg"},
+            {"data": "base64data2", "media_type": "image/png"},
+        ]
+        result = Orchestrator._build_content("Analyze these", images)
+
+        assert isinstance(result, list)
+        assert len(result) == 3
+        assert result[0] == {"type": "text", "text": "Analyze these"}
+        assert result[1] == {
+            "type": "image",
+            "source": {"type": "base64", "data": "base64data1", "media_type": "image/jpeg"},
+        }
+        assert result[2] == {
+            "type": "image",
+            "source": {"type": "base64", "data": "base64data2", "media_type": "image/png"},
+        }
+
+    def test_orchestrator_build_content_without_images(self):
+        """Orchestrator._build_content returns None when no images."""
+        from assistant.agents.orchestrator import Orchestrator
+
+        assert Orchestrator._build_content("hello", None) is None
+        assert Orchestrator._build_content("hello", []) is None

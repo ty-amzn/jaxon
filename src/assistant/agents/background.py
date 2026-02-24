@@ -22,6 +22,13 @@ current_delivery: ContextVar[DeliveryCallback | None] = ContextVar(
     "current_delivery", default=None
 )
 
+# ContextVar carries the current turn's images so delegation tools can
+# automatically forward them to sub-agents without the LLM needing to
+# reproduce base64 data in tool calls.
+current_images: ContextVar[list[dict] | None] = ContextVar(
+    "current_images", default=None
+)
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"

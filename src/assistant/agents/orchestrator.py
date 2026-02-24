@@ -102,13 +102,6 @@ class Orchestrator:
             )
         return await asyncio.gather(*tasks)
 
-    # Known vision-capable model families (substring match on model name)
-    _VISION_MODELS = (
-        "claude", "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
-        "gemini", "llava", "bakllava", "moondream",
-        "qwen-vl", "qwen2-vl", "cogvlm", "minicpm-v",
-    )
-
     @staticmethod
     def _model_supports_vision(agent: "AgentDef") -> bool:
         """Check whether an agent's model supports vision.
@@ -116,15 +109,14 @@ class Orchestrator:
         Uses explicit ``vision`` flag if set, otherwise heuristic based on
         model name.
         """
-        from assistant.agents.types import AgentDef  # noqa: F811
+        from assistant.llm.router import LLMRouter
 
         if agent.vision is not None:
             return agent.vision
         # No model specified → will use default (likely Claude) which supports vision
         if not agent.model:
             return True
-        model_lower = agent.model.lower()
-        return any(v in model_lower for v in Orchestrator._VISION_MODELS)
+        return LLMRouter.model_supports_vision(agent.model)
 
     @staticmethod
     def _save_images_to_temp(
@@ -272,6 +264,13 @@ class Orchestrator:
 
     def get_tool_definitions(self) -> list[dict[str, Any]]:
         """Return tool definitions for delegation tools."""
+        # Build agent catalog for tool descriptions
+        agents = self._loader.list_agents()
+        agent_names = [a.name for a in agents]
+        agent_catalog = "; ".join(
+            f"{a.name}: {a.description}" for a in agents
+        ) if agents else "No agents loaded"
+
         defs = [
             {
                 "name": "list_agents",
@@ -283,13 +282,14 @@ class Orchestrator:
             },
             {
                 "name": "delegate_to_agent",
-                "description": "Delegate a task to a specialized agent. The agent runs autonomously with its own tool set and returns a result. Set background=true for long-running tasks (e.g. deep research) so the user can continue chatting while the agent works.",
+                "description": f"Delegate a task to a specialized agent. The agent runs autonomously with its own tool set and returns a result. Set background=true for long-running tasks (e.g. deep research) so the user can continue chatting while the agent works.\n\nAvailable agents: {agent_catalog}",
                 "input_schema": {
                     "type": "object",
                     "properties": {
                         "agent_name": {
                             "type": "string",
                             "description": "Name of the agent to delegate to",
+                            **({"enum": agent_names} if agent_names else {}),
                         },
                         "task": {
                             "type": "string",

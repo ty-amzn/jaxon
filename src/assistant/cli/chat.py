@@ -21,7 +21,7 @@ from assistant.cli.rendering import (
 )
 from assistant.core.config import Settings
 from assistant.core.logging import AuditLogger
-from assistant.gateway.permissions import PermissionManager, PermissionRequest
+from assistant.gateway.permissions import PermissionManager, PermissionRequest, parse_approval_required
 from assistant.gateway.session import SessionManager
 from assistant.gateway.thread_store import ThreadStore
 from assistant.llm.router import LLMRouter
@@ -61,7 +61,8 @@ class ChatInterface:
         self._audit = AuditLogger(settings.audit_log_path)
 
         # Permissions with CLI approval callback
-        self._permissions = PermissionManager(self._cli_approval)
+        approval_tools = parse_approval_required(settings.approval_required_tools)
+        self._permissions = PermissionManager(self._cli_approval, approval_required_tools=approval_tools)
 
         # Tools
         self._tool_registry = create_tool_registry(self._permissions, self._audit, settings, self._memory)
@@ -199,7 +200,7 @@ class ChatInterface:
                      @image: parsing and uses this directly as message content.
         """
         # Set delivery callback for background tasks
-        from assistant.agents.background import current_delivery
+        from assistant.agents.background import current_delivery, current_images
         token = current_delivery.set(delivery_callback)
 
         async with session.lock:
@@ -211,7 +212,14 @@ class ChatInterface:
 
             if content is not None:
                 # Pre-built multimodal content (e.g. from Telegram)
-                message_content = content
+                # If the main model doesn't support vision, save images to files
+                has_images = isinstance(content, list) and any(
+                    isinstance(b, dict) and b.get("type") == "image" for b in content
+                )
+                if has_images and not self._llm.default_model_supports_vision():
+                    message_content = self._save_images_and_augment_text(user_input, content)
+                else:
+                    message_content = content
             else:
                 # Parse @image: references
                 clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
@@ -226,14 +234,25 @@ class ChatInterface:
 
                 # Build message content (text or multimodal)
                 if images:
-                    message_content = self._media_handler.build_multimodal_message(clean_text, images)
+                    if self._llm.default_model_supports_vision():
+                        message_content = self._media_handler.build_multimodal_message(clean_text, images)
+                    else:
+                        message_content = self._save_images_and_augment_text(clean_text, images)
                 else:
                     message_content = user_input
 
             if isinstance(message_content, list):
                 session.add_message(Role.USER, message_content)
+                # Extract image blocks so delegation tools can auto-forward them
+                img_blocks = [
+                    {"data": b["source"]["data"], "media_type": b["source"]["media_type"]}
+                    for b in message_content
+                    if isinstance(b, dict) and b.get("type") == "image"
+                ]
+                images_token = current_images.set(img_blocks or None)
             else:
                 session.add_message(Role.USER, message_content)
+                images_token = current_images.set(None)
             session.clear_tool_calls()
 
             system_prompt = build_system_prompt(self._memory)
@@ -310,6 +329,7 @@ class ChatInterface:
                 )
 
             current_delivery.reset(token)
+            current_images.reset(images_token)
             return full_response
 
     async def get_response(
@@ -335,6 +355,33 @@ class ChatInterface:
             content=content,
         )
 
+    @staticmethod
+    def _save_images_and_augment_text(text: str, images: list[dict]) -> str:
+        """Save images to temp files and append paths to the text.
+
+        Used when the main model doesn't support vision so the LLM at least
+        knows images were provided and can use tools to process them.
+        """
+        from assistant.agents.orchestrator import Orchestrator
+
+        img_blocks = [
+            {"data": img["source"]["data"], "media_type": img["source"]["media_type"]}
+            for img in images
+            if isinstance(img, dict) and img.get("type") == "image"
+        ]
+        if not img_blocks:
+            return text
+        paths = Orchestrator._save_images_to_temp(img_blocks)
+        path_list = "\n".join(f"  - {p}" for p in paths)
+        return (
+            f"{text}\n\n"
+            f"[Note: {len(paths)} image(s) were provided but your model does not "
+            f"support vision. The images have been saved to temporary files:\n"
+            f"{path_list}\n"
+            f"You can use tools (e.g. delegate_to_agent with a vision-capable model) "
+            f"to analyze them if needed.]"
+        )
+
     async def _cli_delivery(self, text: str) -> None:
         """Deliver a background task result to the CLI console."""
         self._console.print()
@@ -343,7 +390,7 @@ class ChatInterface:
     async def handle_message(self, user_input: str) -> str:
         """Process a user message with Rich Live rendering."""
         # Set delivery callback for background tasks
-        from assistant.agents.background import current_delivery
+        from assistant.agents.background import current_delivery, current_images
         token = current_delivery.set(self._cli_delivery)
 
         # Parse @image: references
@@ -362,15 +409,25 @@ class ChatInterface:
 
         # Build message content (text or multimodal)
         if images:
-            message_content = self._media_handler.build_multimodal_message(clean_text, images)
+            if self._llm.default_model_supports_vision():
+                message_content = self._media_handler.build_multimodal_message(clean_text, images)
+            else:
+                message_content = self._save_images_and_augment_text(clean_text, images)
         else:
             message_content = user_input  # Use original text if no images
 
         session = self._session_manager.active_session
         if isinstance(message_content, list):
             session.add_message(Role.USER, message_content)
+            img_blocks = [
+                {"data": b["source"]["data"], "media_type": b["source"]["media_type"]}
+                for b in message_content
+                if isinstance(b, dict) and b.get("type") == "image"
+            ]
+            images_token = current_images.set(img_blocks or None)
         else:
             session.add_message(Role.USER, message_content)
+            images_token = current_images.set(None)
         session.clear_tool_calls()
 
         system_prompt = build_system_prompt(self._memory)
@@ -415,6 +472,7 @@ class ChatInterface:
 
         self._active_live = None
         current_delivery.reset(token)
+        current_images.reset(images_token)
 
         # Print final rendered response
         if full_response:

@@ -49,6 +49,7 @@ class AgentRunner:
         context: str = "",
         base_system_prompt: str = "",
         permission_override: PermissionManager | None = None,
+        content: str | list[dict] | None = None,
     ) -> AgentResult:
         """Run an agent on a specific task.
 
@@ -58,6 +59,8 @@ class AgentRunner:
             context: Additional context to include
             base_system_prompt: Base system prompt (memory/identity)
             permission_override: Optional PermissionManager to use instead of the registry's default
+            content: Pre-built multimodal content (text + image blocks). When provided,
+                     used as the message content directly instead of building from task/context.
         """
         # Build system prompt
         system_parts = []
@@ -68,11 +71,13 @@ class AgentRunner:
         system_prompt = "\n\n---\n\n".join(system_parts)
 
         # Build messages
-        user_content = task
-        if context:
-            user_content = f"Context:\n{context}\n\nTask:\n{task}"
-
-        messages = [{"role": "user", "content": user_content}]
+        if content is not None:
+            messages = [{"role": "user", "content": content}]
+        else:
+            user_content = task
+            if context:
+                user_content = f"Context:\n{context}\n\nTask:\n{task}"
+            messages = [{"role": "user", "content": user_content}]
 
         # Filter tools
         tools = self._filter_tools(agent)
