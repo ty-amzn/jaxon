@@ -31,13 +31,16 @@ async def web_fetch(params: dict[str, Any]) -> str:
 
     try:
         async with make_httpx_client(timeout=30.0, follow_redirects=True) as client:
-            response = await client.get(
-                url,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; AIAssistant/1.0)"},
-            )
+            response = await client.get(url)
             response.raise_for_status()
             html = response.text
-    except httpx.HTTPError as e:
+    except Exception as e:
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        if status in (403, 406):
+            return (
+                f"Fetch failed ({status}): site blocked the request (bot protection). "
+                "Retry using the browse_web tool instead, which uses a real browser."
+            )
         return f"Fetch failed: {e}"
 
     # Extract main content with trafilatura
