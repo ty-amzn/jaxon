@@ -20,6 +20,11 @@ class MediaContent:
     media_type: str
     data: bytes
 
+    @classmethod
+    def from_bytes(cls, data: bytes, media_type: str, filename: str = "upload") -> MediaContent:
+        """Construct from raw bytes without a real file path (e.g. Telegram downloads)."""
+        return cls(path=Path(filename), media_type=media_type, data=data)
+
     def to_claude_format(self) -> dict[str, Any]:
         """Convert to Claude API format."""
         return {

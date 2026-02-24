@@ -128,6 +128,26 @@ class OpenAICompatibleClient(BaseLLMClient):
                     if tool_calls:
                         msg_dict["tool_calls"] = tool_calls
                     openai_messages.append(msg_dict)
+                elif role == "user":
+                    # Convert Claude-format image blocks to OpenAI format
+                    converted_content = []
+                    for item in content:
+                        if isinstance(item, dict) and item.get("type") == "image":
+                            source = item.get("source", {})
+                            if source.get("type") == "base64":
+                                media_type = source.get("media_type", "image/png")
+                                data = source.get("data", "")
+                                converted_content.append({
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{media_type};base64,{data}"
+                                    },
+                                })
+                            else:
+                                converted_content.append(item)
+                        else:
+                            converted_content.append(item)
+                    openai_messages.append({"role": role, "content": converted_content})
                 else:
                     openai_messages.append({"role": role, "content": content})
             else:

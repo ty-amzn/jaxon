@@ -32,6 +32,7 @@ def register_handlers(bot: TelegramBot) -> None:
     app.add_handler(CommandHandler("watch", _make_watch(bot)))
     app.add_handler(CallbackQueryHandler(_make_callback(bot)))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, _make_text(bot)))
+    app.add_handler(MessageHandler(filters.PHOTO | filters.Document.IMAGE, _make_media(bot)))
 
 
 def _check_allowed(bot: TelegramBot, user_id: int | None) -> bool:
@@ -150,6 +151,84 @@ def _make_text(bot: TelegramBot):
                 await update.message.reply_text(response or "Sorry, I got an empty response. Please try again.")
         except Exception:
             logger.exception("Error processing Telegram message")
+            await update.message.reply_text("Sorry, an error occurred.")
+    return handler
+
+
+def _make_media(bot: TelegramBot):
+    async def handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        if not update.effective_user or not update.message:
+            return
+        if not _check_allowed(bot, update.effective_user.id):
+            await update.message.reply_text("Not authorized.")
+            return
+
+        chat_id = str(update.effective_chat.id) if update.effective_chat else "unknown"
+
+        # Determine the file to download
+        if update.message.photo:
+            # Photos come as a list of sizes; pick the largest
+            photo = update.message.photo[-1]
+            file_id = photo.file_id
+            mime_type = "image/jpeg"  # Telegram photos are always JPEG
+            filename = "photo.jpg"
+        elif update.message.document:
+            file_id = update.message.document.file_id
+            mime_type = update.message.document.mime_type or "image/png"
+            filename = update.message.document.file_name or "document.png"
+        else:
+            return
+
+        try:
+            tg_file = await context.bot.get_file(file_id)
+            file_bytes = await tg_file.download_as_bytearray()
+        except Exception:
+            logger.exception("Failed to download Telegram file %s", file_id)
+            await update.message.reply_text("Sorry, I couldn't download that file.")
+            return
+
+        # Build multimodal content
+        from assistant.cli.media import MediaContent, MediaHandler
+
+        media = MediaContent.from_bytes(bytes(file_bytes), mime_type, filename)
+        caption = update.message.caption or "What's in this image?"
+        media_handler = MediaHandler()
+        content = media_handler.build_multimodal_message(caption, [media])
+
+        # Set up approval callback (same as text handler)
+        if chat_id not in bot._approval_callbacks:
+            from assistant.telegram.permissions import TelegramApprovalCallback
+
+            numeric_chat_id = update.effective_chat.id if update.effective_chat else 0
+            bot._approval_callbacks[chat_id] = TelegramApprovalCallback(
+                bot.application.bot, numeric_chat_id
+            )
+        approval_cb = bot._approval_callbacks[chat_id]
+        permission_manager = PermissionManager(approval_cb)
+
+        async def _tg_deliver(text: str) -> None:
+            tg_bot = bot.application.bot
+            numeric_id = update.effective_chat.id if update.effective_chat else 0
+            if len(text) > 4000:
+                for i in range(0, len(text), 4000):
+                    await tg_bot.send_message(numeric_id, text[i:i + 4000])
+            else:
+                await tg_bot.send_message(numeric_id, text)
+
+        try:
+            response = await bot.chat_interface.get_response(
+                chat_id, caption,
+                permission_manager=permission_manager,
+                delivery_callback=_tg_deliver,
+                content=content,
+            )
+            if len(response) > 4000:
+                for i in range(0, len(response), 4000):
+                    await update.message.reply_text(response[i:i + 4000])
+            else:
+                await update.message.reply_text(response or "Sorry, I got an empty response. Please try again.")
+        except Exception:
+            logger.exception("Error processing Telegram media message")
             await update.message.reply_text("Sorry, an error occurred.")
     return handler
 

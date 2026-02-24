@@ -187,11 +187,16 @@ class ChatInterface:
         user_input: str,
         permission_manager: PermissionManager | None = None,
         delivery_callback: Any = None,
+        content: str | list[dict] | None = None,
     ) -> str:
         """Core message processing without Rich rendering. Returns full response text.
 
         This is the headless entry point used by Telegram, scheduler, etc.
         Acquires the session lock to prevent concurrent mutations of shared state.
+
+        Args:
+            content: Pre-built multimodal content blocks. When provided, skips
+                     @image: parsing and uses this directly as message content.
         """
         # Set delivery callback for background tasks
         from assistant.agents.background import current_delivery
@@ -204,22 +209,26 @@ class ChatInterface:
                     user_input, session_id=session.id
                 )
 
-            # Parse @image: references
-            clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
-
-            # Load images if any
-            images = []
-            if image_paths:
-                for img_path in image_paths:
-                    img = self._media_handler.load_image(img_path)
-                    if img:
-                        images.append(img)
-
-            # Build message content (text or multimodal)
-            if images:
-                message_content = self._media_handler.build_multimodal_message(clean_text, images)
+            if content is not None:
+                # Pre-built multimodal content (e.g. from Telegram)
+                message_content = content
             else:
-                message_content = user_input
+                # Parse @image: references
+                clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
+
+                # Load images if any
+                images = []
+                if image_paths:
+                    for img_path in image_paths:
+                        img = self._media_handler.load_image(img_path)
+                        if img:
+                            images.append(img)
+
+                # Build message content (text or multimodal)
+                if images:
+                    message_content = self._media_handler.build_multimodal_message(clean_text, images)
+                else:
+                    message_content = user_input
 
             if isinstance(message_content, list):
                 session.add_message(Role.USER, message_content)
@@ -309,18 +318,21 @@ class ChatInterface:
         user_input: str,
         permission_manager: PermissionManager | None = None,
         delivery_callback: Any = None,
+        content: str | list[dict] | None = None,
     ) -> str:
         """Public headless API for external integrations (Telegram, scheduler, WhatsApp).
 
         Uses or creates a keyed session and processes the message without rendering.
         Optionally accepts a custom PermissionManager for channel-specific approvals.
         Optionally accepts a delivery_callback for background task result delivery.
+        Optionally accepts pre-built multimodal content blocks (e.g. from Telegram photos).
         """
         session = self._session_manager.get_or_create_keyed_session(session_id)
         return await self._process_message(
             session, user_input,
             permission_manager=permission_manager,
             delivery_callback=delivery_callback,
+            content=content,
         )
 
     async def _cli_delivery(self, text: str) -> None:
