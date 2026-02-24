@@ -29,6 +29,7 @@ from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
 from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
 from assistant.tools.email_tool import SEND_EMAIL_DEF, send_email
+from assistant.tools.calendar_tool import CALENDAR_TOOL_DEF, calendar_tool
 
 
 def register_orchestrator_tools(
@@ -122,6 +123,12 @@ def create_tool_registry(
         SEND_EMAIL_DEF["description"],
         SEND_EMAIL_DEF["input_schema"],
         send_email,
+    )
+    registry.register(
+        CALENDAR_TOOL_DEF["name"],
+        CALENDAR_TOOL_DEF["description"],
+        CALENDAR_TOOL_DEF["input_schema"],
+        calendar_tool,
     )
 
     # Register web_search if enabled

@@ -111,7 +111,7 @@ Current state: `data/automations/` is empty.
 - [ ] Create `inbox-digest.md` — Summarize unread emails, flag urgent
 - [ ] Create `daily-journal.md` — End-of-day reflection prompts
 - [ ] Create `weekly-review.md` — Summarize week's activity from daily logs
-- [ ] Document automation file format in USER_GUIDE.md
+- [ ] Document automation file format in user-guide.md
 
 **Files to create:**
 - `data/automations/morning-briefing.md`
@@ -410,4 +410,4 @@ Current state: DND windows implemented, but no level preferences.
 - Some features may require additional external dependencies (Playwright, IMAP libraries, etc.)
 - Calendar and email integrations should support multiple providers
 - All new tools should follow the existing permission model in `gateway/permissions.py`
-- All new commands should be documented in `docs/USER_GUIDE.md` and `docs/QUICK_REFERENCE.md`
+- All new commands should be documented in `docs/user-guide.md` and `docs/quick-reference.md`

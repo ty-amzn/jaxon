@@ -95,5 +95,5 @@ All 12 steps implemented:
 4. Browser shutdown wired into app lifespan (`core/events.py`)
 
 ## User Documentation
-- `docs/USER_GUIDE.md` — comprehensive user guide (all features)
-- `docs/QUICK_REFERENCE.md` — command cheat sheet
+- `docs/user-guide.md` — comprehensive user guide (all features)
+- `docs/quick-reference.md` — command cheat sheet

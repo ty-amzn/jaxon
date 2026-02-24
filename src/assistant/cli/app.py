@@ -191,6 +191,15 @@ async def _whatsapp_pair(reset: bool) -> None:
             pass
 
 
+@cli.command("google-auth")
+def google_auth_cmd() -> None:
+    """Authenticate with Google Calendar (one-time OAuth2 setup)."""
+    from assistant.cli.commands.google_auth import google_auth
+
+    ctx = click.get_current_context()
+    ctx.invoke(google_auth)
+
+
 @cli.command()
 @click.option("--host", default=None, help="Host to bind to")
 @click.option("--port", default=None, type=int, help="Port to bind to")

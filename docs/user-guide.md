@@ -980,7 +980,7 @@ If `ASSISTANT_WEBHOOK_SECRET` is set, requests must include an `X-Hub-Signature-
 /webhook test <name>     # Test a webhook
 ```
 
-For a detailed setup walkthrough including HMAC validation, GitHub integration, and workflow context, see **[docs/WEBHOOKS.md](WEBHOOKS.md)**.
+For a detailed setup walkthrough including HMAC validation, GitHub integration, and workflow context, see **[docs/webhooks.md](webhooks.md)**.
 
 ---
 

@@ -98,6 +98,11 @@ class Settings(BaseSettings):
     whatsapp_allowed_numbers_raw: str = Field(default="", validation_alias="ASSISTANT_WHATSAPP_ALLOWED_NUMBERS")
     whatsapp_session_name: str = "assistant"
 
+    # Google Calendar
+    google_calendar_enabled: bool = False
+    google_client_id: str = Field(default="", validation_alias="GOOGLE_CLIENT_ID")
+    google_client_secret: str = Field(default="", validation_alias="GOOGLE_CLIENT_SECRET")
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"
@@ -188,6 +193,10 @@ class Settings(BaseSettings):
     @property
     def whatsapp_auth_dir(self) -> Path:
         return self.data_dir / "whatsapp_auth"
+
+    @property
+    def google_auth_dir(self) -> Path:
+        return self.data_dir / "google_auth"
 
 
 _settings: Settings | None = None

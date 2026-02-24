@@ -64,6 +64,14 @@ class PermissionManager:
         self._approve = approval_callback
         self._tool_categories: dict[str, ActionCategory] = {}
 
+    @staticmethod
+    def _is_google_calendar_enabled() -> bool:
+        try:
+            from assistant.core.config import get_settings
+            return get_settings().google_calendar_enabled
+        except Exception:
+            return False
+
     def register_tool_category(self, tool_name: str, category: str | ActionCategory) -> None:
         """Register the action category for a plugin/dynamic tool."""
         if isinstance(category, str):
@@ -234,6 +242,35 @@ class PermissionManager:
                 action_category=cat,
                 details=tool_input,
                 description=desc,
+            )
+        elif tool_name == "calendar":
+            action = tool_input.get("action", "list")
+            google_enabled = self._is_google_calendar_enabled()
+            if google_enabled:
+                # Google Calendar: all actions hit the network
+                if action in ("list", "today"):
+                    cat = ActionCategory.NETWORK_READ
+                elif action == "delete":
+                    cat = ActionCategory.NETWORK_WRITE
+                elif action in ("add_feed", "remove_feed", "sync_feeds"):
+                    cat = ActionCategory.NETWORK_READ  # just returns info message
+                else:
+                    cat = ActionCategory.NETWORK_WRITE
+            else:
+                # SQLite mode: local operations
+                if action in ("list", "today"):
+                    cat = ActionCategory.READ
+                elif action in ("add_feed", "sync_feeds"):
+                    cat = ActionCategory.NETWORK_READ
+                elif action == "delete":
+                    cat = ActionCategory.DELETE
+                else:
+                    cat = ActionCategory.WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Calendar {action}: {tool_input.get('title', tool_input.get('event_id', tool_input.get('url', '')))}",
             )
         elif tool_name == "send_email":
             return PermissionRequest(
