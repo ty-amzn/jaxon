@@ -55,6 +55,7 @@ class AgentLoader:
             model=data.get("model", ""),
             max_tool_rounds=data.get("max_tool_rounds", 5),
             can_delegate=data.get("can_delegate", False),
+            vision=data.get("vision"),
         )
         self._agents[name] = agent
         logger.debug("Loaded agent: %s", name)

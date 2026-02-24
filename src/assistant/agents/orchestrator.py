@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
+import tempfile
 import time
+from pathlib import Path
 from typing import Any
 
 from assistant.agents.background import (
@@ -13,6 +16,7 @@ from assistant.agents.background import (
     TaskStatus,
     _auto_approve,
     current_delivery,
+    current_images,
 )
 from assistant.agents.loader import AgentLoader
 from assistant.agents.runner import AgentRunner
@@ -39,7 +43,10 @@ class Orchestrator:
         self._delegation_depth = 0
         self._bg_manager = bg_manager
 
-    async def delegate(self, agent_name: str, task: str, context: str = "") -> AgentResult:
+    async def delegate(
+        self, agent_name: str, task: str, context: str = "",
+        content: str | list[dict] | None = None,
+    ) -> AgentResult:
         """Delegate a task to a named agent."""
         if self._delegation_depth >= 2:
             return AgentResult(
@@ -59,26 +66,150 @@ class Orchestrator:
         self._delegation_depth += 1
         try:
             base_prompt = self._memory.get_system_prompt()
-            return await self._runner.run(agent, task, context=context, base_system_prompt=base_prompt)
+            return await self._runner.run(
+                agent, task, context=context,
+                base_system_prompt=base_prompt, content=content,
+            )
         finally:
             self._delegation_depth -= 1
 
     async def delegate_parallel(
-        self, delegations: list[dict[str, str]]
+        self, delegations: list[dict[str, Any]]
     ) -> list[AgentResult]:
         """Run multiple agent delegations in parallel.
 
-        Each delegation is a dict with keys: agent_name, task, context (optional).
+        Each delegation is a dict with keys: agent_name, task, context (optional),
+        images (optional list of {data, media_type}).
         """
-        tasks = [
-            self.delegate(
-                d["agent_name"],
-                d["task"],
-                d.get("context", ""),
+        tasks = []
+        for d in delegations:
+            images = d.get("images")
+            agent = self._loader.get_agent(d["agent_name"])
+            if agent is not None and images:
+                task_text, content = self._build_content_for_agent(
+                    agent, d["task"], images,
+                )
+            else:
+                task_text = d["task"]
+                content = self._build_content(task_text, images)
+            tasks.append(
+                self.delegate(
+                    d["agent_name"],
+                    task_text,
+                    d.get("context", ""),
+                    content=content,
+                )
             )
-            for d in delegations
-        ]
         return await asyncio.gather(*tasks)
+
+    # Known vision-capable model families (substring match on model name)
+    _VISION_MODELS = (
+        "claude", "gpt-4o", "gpt-4-turbo", "gpt-4-vision",
+        "gemini", "llava", "bakllava", "moondream",
+        "qwen-vl", "qwen2-vl", "cogvlm", "minicpm-v",
+    )
+
+    @staticmethod
+    def _model_supports_vision(agent: "AgentDef") -> bool:
+        """Check whether an agent's model supports vision.
+
+        Uses explicit ``vision`` flag if set, otherwise heuristic based on
+        model name.
+        """
+        from assistant.agents.types import AgentDef  # noqa: F811
+
+        if agent.vision is not None:
+            return agent.vision
+        # No model specified → will use default (likely Claude) which supports vision
+        if not agent.model:
+            return True
+        model_lower = agent.model.lower()
+        return any(v in model_lower for v in Orchestrator._VISION_MODELS)
+
+    @staticmethod
+    def _save_images_to_temp(
+        images: list[dict[str, str]],
+    ) -> list[Path]:
+        """Save base64 images to temp files, return their paths."""
+        paths: list[Path] = []
+        ext_map = {
+            "image/jpeg": ".jpg",
+            "image/png": ".png",
+            "image/gif": ".gif",
+            "image/webp": ".webp",
+        }
+        for img in images:
+            media_type = img.get("media_type", "image/png")
+            ext = ext_map.get(media_type, ".png")
+            data = base64.b64decode(img["data"])
+            tmp = tempfile.NamedTemporaryFile(
+                suffix=ext, prefix="agent_img_", delete=False,
+            )
+            tmp.write(data)
+            tmp.close()
+            paths.append(Path(tmp.name))
+        return paths
+
+    def _build_content_for_agent(
+        self,
+        agent: "AgentDef",
+        task: str,
+        images: list[dict[str, str]] | None,
+    ) -> tuple[str, list[dict] | None]:
+        """Build content for an agent, handling vision vs text-only models.
+
+        Returns (possibly-augmented task text, multimodal content or None).
+        For vision models, returns image content blocks.
+        For text-only models, saves images to temp files and appends paths to task.
+        """
+        if not images:
+            return task, None
+
+        if self._model_supports_vision(agent):
+            # Vision model — pass images inline
+            content: list[dict] = [{"type": "text", "text": task}]
+            for img in images:
+                content.append({
+                    "type": "image",
+                    "source": {
+                        "type": "base64",
+                        "data": img["data"],
+                        "media_type": img["media_type"],
+                    },
+                })
+            return task, content
+
+        # Text-only model — save images to temp files
+        paths = self._save_images_to_temp(images)
+        path_list = "\n".join(f"  - {p}" for p in paths)
+        augmented_task = (
+            f"{task}\n\n"
+            f"[Note: {len(paths)} image(s) were provided but your model does not "
+            f"support vision. The images have been saved to temporary files:\n"
+            f"{path_list}\n"
+            f"You can use tools (e.g. browse_web, delegate_to_agent with a vision "
+            f"model) to analyze them if needed.]"
+        )
+        return augmented_task, None
+
+    @staticmethod
+    def _build_content(
+        task: str, images: list[dict[str, str]] | None,
+    ) -> list[dict] | None:
+        """Build multimodal content blocks from task text and optional images."""
+        if not images:
+            return None
+        content: list[dict] = [{"type": "text", "text": task}]
+        for img in images:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "data": img["data"],
+                    "media_type": img["media_type"],
+                },
+            })
+        return content
 
     async def _run_background(
         self,
@@ -86,6 +217,7 @@ class Orchestrator:
         agent_name: str,
         task: str,
         context: str,
+        content: str | list[dict] | None = None,
     ) -> None:
         """Run an agent in the background, delivering results when done."""
         bt.status = TaskStatus.RUNNING
@@ -106,6 +238,7 @@ class Orchestrator:
                 agent, task, context=context,
                 base_system_prompt=base_prompt,
                 permission_override=auto_perms,
+                content=content,
             )
 
             if result.error:
@@ -172,6 +305,18 @@ class Orchestrator:
                             "description": "If true, run the agent in the background and return immediately with a task ID. Use for long-running tasks like deep research so the user can keep chatting. Results are delivered asynchronously.",
                             "default": False,
                         },
+                        "images": {
+                            "type": "array",
+                            "description": "Base64-encoded images to include. Each item has 'data' (base64 string) and 'media_type' (e.g. image/jpeg).",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "data": {"type": "string"},
+                                    "media_type": {"type": "string"},
+                                },
+                                "required": ["data", "media_type"],
+                            },
+                        },
                     },
                     "required": ["agent_name", "task"],
                 },
@@ -191,6 +336,18 @@ class Orchestrator:
                                     "agent_name": {"type": "string"},
                                     "task": {"type": "string"},
                                     "context": {"type": "string", "default": ""},
+                                    "images": {
+                                        "type": "array",
+                                        "description": "Base64-encoded images to include.",
+                                        "items": {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {"type": "string"},
+                                                "media_type": {"type": "string"},
+                                            },
+                                            "required": ["data", "media_type"],
+                                        },
+                                    },
                                 },
                                 "required": ["agent_name", "task"],
                             },
@@ -237,6 +394,18 @@ class Orchestrator:
 
         async def handle_delegate(params: dict[str, Any]) -> str:
             background = params.get("background", False)
+            # Use explicit images if provided, otherwise auto-forward from current turn
+            images = params.get("images") or current_images.get()
+
+            # Resolve agent to check vision capability
+            agent = self._loader.get_agent(params["agent_name"])
+            if agent is not None and images:
+                task, content = self._build_content_for_agent(
+                    agent, params["task"], images,
+                )
+            else:
+                task = params["task"]
+                content = self._build_content(task, images)
 
             if background and self._bg_manager is not None:
                 # Background path: fire-and-forget
@@ -250,17 +419,19 @@ class Orchestrator:
                     self._run_background(
                         bt,
                         params["agent_name"],
-                        params["task"],
+                        task,
                         params.get("context", ""),
+                        content=content,
                     )
                 )
                 return f"Background task started: {bt.id}. Results will be delivered when complete. Use task_status to check progress."
 
-            # Foreground path (unchanged)
+            # Foreground path
             result = await self.delegate(
                 params["agent_name"],
-                params["task"],
+                task,
                 params.get("context", ""),
+                content=content,
             )
             if result.error:
                 return f"Agent error: {result.error}"
