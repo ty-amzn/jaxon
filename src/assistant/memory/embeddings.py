@@ -6,8 +6,9 @@ import logging
 from pathlib import Path
 from typing import Any
 
-import httpx
 import sqlite_utils
+
+from assistant.core.http import make_httpx_client
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,7 @@ class EmbeddingService:
         self._db = sqlite_utils.Database(str(db_path))
         self._ollama_url = ollama_base_url.rstrip("/")
         self._model = embedding_model
-        self._client = httpx.AsyncClient(timeout=30.0)
+        self._client = make_httpx_client(timeout=30.0)
         self._ensure_tables()
 
     def _ensure_tables(self) -> None:

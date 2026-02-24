@@ -13,6 +13,8 @@ from typing import Any
 
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 from assistant.llm.base import BaseLLMClient, ToolExecutor
 from assistant.llm.types import (
     LLMConfig,
@@ -30,7 +32,7 @@ class OpenAICompatibleClient(BaseLLMClient):
 
     def __init__(self, config: LLMConfig) -> None:
         super().__init__(config)
-        self._client = httpx.AsyncClient(timeout=120.0)
+        self._client = make_httpx_client(timeout=120.0)
 
     def _get_base_url(self) -> str:
         """Return the base URL for the API. Override in subclasses."""

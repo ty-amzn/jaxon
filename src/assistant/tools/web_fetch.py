@@ -5,8 +5,9 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import httpx
 import trafilatura
+
+from assistant.core.http import make_httpx_client
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +30,7 @@ async def web_fetch(params: dict[str, Any]) -> str:
         raise ValueError("No URL provided")
 
     try:
-        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+        async with make_httpx_client(timeout=30.0, follow_redirects=True) as client:
             response = await client.get(
                 url,
                 headers={"User-Agent": "Mozilla/5.0 (compatible; AIAssistant/1.0)"},

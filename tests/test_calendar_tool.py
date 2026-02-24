@@ -242,7 +242,7 @@ END:VCALENDAR"""
             async def get(self, url):
                 return FakeResponse()
 
-        monkeypatch.setattr("assistant.tools.calendar_tool.httpx.AsyncClient", lambda **kw: FakeClient())
+        monkeypatch.setattr("assistant.tools.calendar_tool.make_httpx_client", lambda **kw: FakeClient())
 
         store.add_feed("https://example.com/test.ics", "Test")
         count = await store.sync_feed("https://example.com/test.ics")

@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 logger = logging.getLogger(__name__)
 
 # Default SearXNG URL - can be overridden via config
@@ -39,7 +41,7 @@ async def web_search(params: dict[str, Any], searxng_url: str = DEFAULT_SEARXNG_
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with make_httpx_client(timeout=30.0) as client:
             response = await client.get(search_url, params=params_dict)
             response.raise_for_status()
             data = response.json()

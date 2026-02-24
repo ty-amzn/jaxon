@@ -8,6 +8,8 @@ from typing import Any
 import feedparser
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 logger = logging.getLogger(__name__)
 
 ARXIV_API_URL = "http://export.arxiv.org/api/query"
@@ -37,7 +39,7 @@ async def arxiv_search(params: dict[str, Any]) -> str:
     }
 
     try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        async with make_httpx_client(timeout=30.0) as client:
             response = await client.get(ARXIV_API_URL, params=api_params)
             response.raise_for_status()
             xml_text = response.text

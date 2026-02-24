@@ -8,6 +8,8 @@ from typing import Any
 import httpx
 import pymupdf
 
+from assistant.core.http import make_httpx_client
+
 logger = logging.getLogger(__name__)
 
 MAX_CONTENT_CHARS = 15_000
@@ -46,7 +48,7 @@ async def pdf_read(params: dict[str, Any]) -> str:
         raise ValueError("No URL provided")
 
     try:
-        async with httpx.AsyncClient(timeout=60.0, follow_redirects=True) as client:
+        async with make_httpx_client(timeout=60.0, follow_redirects=True) as client:
             response = await client.get(url)
             response.raise_for_status()
             pdf_bytes = response.content

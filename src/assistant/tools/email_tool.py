@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 
 IFTTT_WEBHOOK_URL = (
     "https://maker.ifttt.com/trigger/assistant_notification/json/with/key/bQLotUGi7K2lBB4Z7hA2Yy"
@@ -54,7 +56,7 @@ async def send_email(params: dict[str, Any]) -> str:
 
     payload = {"title": title, "message": message}
 
-    async with httpx.AsyncClient(timeout=15) as client:
+    async with make_httpx_client(timeout=15) as client:
         response = await client.post(
             IFTTT_WEBHOOK_URL,
             json=payload,

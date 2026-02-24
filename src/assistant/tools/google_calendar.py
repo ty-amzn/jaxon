@@ -11,6 +11,8 @@ from typing import Any
 import httpx
 from google.oauth2.credentials import Credentials
 
+from assistant.core.http import make_httpx_client
+
 logger = logging.getLogger(__name__)
 
 CALENDAR_API = "https://www.googleapis.com/calendar/v3"
@@ -85,7 +87,7 @@ class GoogleCalendarClient:
         url = f"{CALENDAR_API}{path}"
         headers = {"Authorization": f"Bearer {token}"}
 
-        async with httpx.AsyncClient(timeout=30) as client:
+        async with make_httpx_client(timeout=30) as client:
             resp = await client.request(
                 method, url, headers=headers, params=params, json=json_body
             )

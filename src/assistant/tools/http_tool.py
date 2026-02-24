@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 
 async def http_request(params: dict[str, Any]) -> str:
     """Make an HTTP request."""
@@ -18,7 +20,7 @@ async def http_request(params: dict[str, Any]) -> str:
     if not url:
         raise ValueError("No URL provided")
 
-    async with httpx.AsyncClient(timeout=timeout) as client:
+    async with make_httpx_client(timeout=timeout) as client:
         response = await client.request(
             method=method,
             url=url,

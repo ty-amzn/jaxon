@@ -7,6 +7,8 @@ from typing import Any
 
 import httpx
 
+from assistant.core.http import make_httpx_client
+
 logger = logging.getLogger(__name__)
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
@@ -67,7 +69,7 @@ async def get_weather(params: dict[str, Any]) -> str:
     include_hourly = params.get("hourly", False)
 
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
+        async with make_httpx_client(timeout=15.0) as client:
             # Step 1: Geocode
             geo_resp = await client.get(
                 GEOCODE_URL,

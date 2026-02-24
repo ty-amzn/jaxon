@@ -8,8 +8,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import httpx
 import sqlite_utils
+
+from assistant.core.http import make_httpx_client
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +149,7 @@ class CalendarStore:
             logger.error("icalendar package not installed")
             return 0
 
-        async with httpx.AsyncClient(timeout=30, follow_redirects=True) as client:
+        async with make_httpx_client(timeout=30, follow_redirects=True) as client:
             resp = await client.get(feed_url)
             resp.raise_for_status()
 
