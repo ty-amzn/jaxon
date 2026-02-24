@@ -272,6 +272,20 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Calendar {action}: {tool_input.get('title', tool_input.get('event_id', tool_input.get('url', '')))}",
             )
+        elif tool_name == "contacts":
+            action = tool_input.get("action", "list")
+            if action in ("list", "get", "search"):
+                cat = ActionCategory.READ
+            elif action == "delete":
+                cat = ActionCategory.DELETE
+            else:
+                cat = ActionCategory.WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Contacts {action}: {tool_input.get('name', tool_input.get('contact_id', tool_input.get('query', '')))}",
+            )
         elif tool_name == "send_email":
             return PermissionRequest(
                 tool_name=tool_name,
