@@ -14,7 +14,7 @@ from telegram.ext import (
     filters,
 )
 
-from assistant.gateway.permissions import PermissionManager
+from assistant.gateway.permissions import PermissionManager, parse_approval_required
 
 if TYPE_CHECKING:
     from assistant.telegram.bot import TelegramBot
@@ -125,7 +125,8 @@ def _make_text(bot: TelegramBot):
                 bot.application.bot, numeric_chat_id
             )
         approval_cb = bot._approval_callbacks[chat_id]
-        permission_manager = PermissionManager(approval_cb)
+        approval_tools = parse_approval_required(bot.chat_interface._settings.approval_required_tools)
+        permission_manager = PermissionManager(approval_cb, approval_required_tools=approval_tools)
 
         # Create delivery callback for background tasks
         async def _tg_deliver(text: str) -> None:
@@ -204,7 +205,8 @@ def _make_media(bot: TelegramBot):
                 bot.application.bot, numeric_chat_id
             )
         approval_cb = bot._approval_callbacks[chat_id]
-        permission_manager = PermissionManager(approval_cb)
+        approval_tools = parse_approval_required(bot.chat_interface._settings.approval_required_tools)
+        permission_manager = PermissionManager(approval_cb, approval_required_tools=approval_tools)
 
         async def _tg_deliver(text: str) -> None:
             tg_bot = bot.application.bot

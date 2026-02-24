@@ -41,6 +41,15 @@ _READ_COMMANDS = re.compile(
 ApprovalCallback = Callable[[PermissionRequest], Awaitable[bool]]
 
 
+def parse_approval_required(raw: str) -> set[str] | None:
+    """Parse comma-separated approval_required_tools config into a set.
+
+    Returns None if empty (meaning use default category-based approval).
+    """
+    items = {s.strip() for s in raw.split(",") if s.strip()}
+    return items or None
+
+
 def classify_shell_command(command: str) -> ActionCategory:
     """Classify a shell command into an action category."""
     cmd = command.strip()
@@ -60,9 +69,16 @@ def classify_http_method(method: str) -> ActionCategory:
 class PermissionManager:
     """Checks permissions and calls approval callback when needed."""
 
-    def __init__(self, approval_callback: ApprovalCallback) -> None:
+    def __init__(
+        self,
+        approval_callback: ApprovalCallback,
+        approval_required_tools: set[str] | None = None,
+    ) -> None:
         self._approve = approval_callback
         self._tool_categories: dict[str, ActionCategory] = {}
+        # If set, only these tool:action pairs (or bare tool names) require approval;
+        # everything else is auto-approved.  Examples: {"calendar:create", "schedule_reminder"}
+        self._approval_required: set[str] | None = approval_required_tools
 
     @staticmethod
     def _is_google_calendar_enabled() -> bool:
@@ -323,5 +339,16 @@ class PermissionManager:
         request = self.classify_tool_call(tool_name, tool_input)
         if not request.requires_approval:
             return True, request
+
+        # If an explicit approval list is configured, only those need approval
+        if self._approval_required is not None:
+            action = tool_input.get("action", "")
+            needs = (
+                tool_name in self._approval_required
+                or f"{tool_name}:{action}" in self._approval_required
+            )
+            if not needs:
+                return True, request
+
         allowed = await self._approve(request)
         return allowed, request

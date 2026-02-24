@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 from neonize.aioze.client import NewAClient
 from neonize.aioze.events import MessageEv
 
-from assistant.gateway.permissions import PermissionManager
+from assistant.gateway.permissions import PermissionManager, parse_approval_required
 
 if TYPE_CHECKING:
     from assistant.whatsapp.bot import WhatsAppBot
@@ -80,7 +80,8 @@ async def handle_message(
     session_key = f"whatsapp_{sender_number}"
 
     # Create a PermissionManager with the WhatsApp approval callback for this sender
-    wa_permission_manager = PermissionManager(approval_cb)
+    approval_tools = parse_approval_required(bot.chat_interface._settings.approval_required_tools)
+    wa_permission_manager = PermissionManager(approval_cb, approval_required_tools=approval_tools)
 
     # Create delivery callback for background tasks
     async def _wa_deliver(msg: str) -> None:

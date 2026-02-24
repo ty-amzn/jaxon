@@ -95,10 +95,21 @@ class ToolRegistry:
 
         sanitized_input = sanitize_tool_input(tool_call.input)
 
+        # Log tool call to app log for visibility in serve output
+        input_summary = ", ".join(
+            f"{k}={v!r}" for k, v in tool_call.input.items()
+            if k != "data"  # skip base64 image data
+        )
+        logger.info("Tool call: %s(%s)", tool_call.name, input_summary)
+
         start = time.monotonic()
         try:
             result_text = await handler(sanitized_input)
             duration_ms = int((time.monotonic() - start) * 1000)
+            logger.info(
+                "Tool result: %s -> %dms, %d chars",
+                tool_call.name, duration_ms, len(result_text),
+            )
             self._audit.log(
                 "tool_call",
                 session_id=session_id,
@@ -113,6 +124,9 @@ class ToolRegistry:
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)
             error_msg = str(e)
+            logger.warning(
+                "Tool error: %s -> %dms, %s", tool_call.name, duration_ms, error_msg,
+            )
             self._audit.log(
                 "tool_error",
                 session_id=session_id,

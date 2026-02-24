@@ -34,6 +34,9 @@ class Settings(BaseSettings):
 
     # Permissions
     auto_approve_reads: bool = True
+    # Tools that always require user approval (comma-separated tool:action pairs or tool names)
+    # e.g. "calendar:create,calendar:update,calendar:delete,schedule_reminder:create,schedule_reminder:cancel"
+    approval_required_tools: str = ""
 
     # Default provider
     default_provider: str = "claude"
@@ -63,6 +66,9 @@ class Settings(BaseSettings):
     # Vector Search (Phase 2)
     vector_search_enabled: bool = False
     embedding_model: str = "nomic-embed-text"
+
+    # Vision — override auto-detection for the main model (True/False/None=auto)
+    vision: bool | None = None
 
     # Media (Phase 2)
     max_media_size_mb: int = 10
