@@ -236,19 +236,28 @@ class GoogleCalendarClient:
 
 
 def _ensure_rfc3339(dt_str: str) -> str:
-    """Ensure a datetime string is RFC 3339 (with timezone offset)."""
+    """Ensure a datetime string is RFC 3339 (with timezone offset).
+
+    Google Calendar API requires timezone-aware datetimes for timeMin/timeMax.
+    Without an offset, the API may silently skip all-day events.
+    """
     if dt_str.endswith("Z"):
         return dt_str
     # If it already has timezone info (+/- offset), keep it
-    if "+" in dt_str[10:] or dt_str.endswith("Z"):
+    if "+" in dt_str[10:]:
         return dt_str
     # Check for negative offset (but not the date separator dash)
     parts = dt_str.split("T")
     if len(parts) == 2 and "-" in parts[1]:
         return dt_str
-    # Assume local time — append no offset marker for Google (it uses calendar TZ)
-    # Google accepts datetimes without offset if the calendar has a timezone set
-    return dt_str
+    # No timezone — append local UTC offset
+    from datetime import datetime as _dt, timezone as _tz
+
+    local_offset = _dt.now(_tz.utc).astimezone().strftime("%z")
+    # Convert +0800 to +08:00
+    if len(local_offset) == 5:
+        local_offset = local_offset[:3] + ":" + local_offset[3:]
+    return dt_str + local_offset
 
 
 def _event_start(event: dict[str, Any]) -> str:

@@ -25,7 +25,9 @@ COPY data/memory/MEMORY.md data/memory/MEMORY.md
 RUN uv sync --frozen --no-dev
 
 # Install Playwright Chromium and its system dependencies
-RUN uv run playwright install --with-deps chromium
+# uv sync strips execute bits from the bundled node binary — restore them
+RUN chmod +x .venv/lib/python3.12/site-packages/playwright/driver/node && \
+    uv run playwright install --with-deps chromium
 
 # Create data directories
 RUN mkdir -p data/memory/daily data/logs data/db data/skills data/automations

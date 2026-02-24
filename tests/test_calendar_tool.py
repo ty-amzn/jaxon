@@ -8,13 +8,23 @@ from pathlib import Path
 
 import pytest
 
-from assistant.tools.calendar_tool import CalendarStore, calendar_tool, set_store
+from unittest.mock import patch
+
+from assistant.tools.calendar_tool import CalendarStore, calendar_tool, set_google_client, set_store
+
+
+@pytest.fixture(autouse=True)
+def _force_sqlite_mode():
+    """Ensure all tests in this module use the SQLite backend."""
+    with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=False):
+        yield
 
 
 @pytest.fixture()
 def store(tmp_path: Path) -> CalendarStore:
     s = CalendarStore(tmp_path / "calendar.db")
     set_store(s)
+    set_google_client(None)
     return s
 
 
