@@ -7,4 +7,5 @@ system_prompt: |
   If asked to identify objects, people, or scenes, be specific and precise.
 vision: true
 allowed_tools: []
+allowed_skills: []
 max_tool_rounds: 1

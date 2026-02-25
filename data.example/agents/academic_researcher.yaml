@@ -21,4 +21,8 @@ allowed_tools:
   - pdf_read
   - web_fetch
   - web_search
+  - activate_skill
+allowed_skills:
+  - arxiv-reader
+  - web-tools
 max_tool_rounds: 12
