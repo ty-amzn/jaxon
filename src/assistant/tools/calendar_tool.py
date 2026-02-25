@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 import uuid
 from datetime import datetime, timedelta
@@ -143,7 +144,7 @@ class CalendarStore:
         self._db.execute("DELETE FROM events WHERE source = ?", [feed_url])
         for ev in events:
             ev["source"] = feed_url
-            self._db["events"].insert(ev)
+            self._db["events"].upsert(ev, pk="id")
         self._db["feeds"].update(feed_url, {"last_synced": datetime.now().isoformat()})
         return len(events)
 
@@ -181,9 +182,14 @@ class CalendarStore:
                 end_str = end_dt.isoformat() if hasattr(end_dt, "isoformat") else str(end_dt)
 
             uid = str(component.get("uid", uuid.uuid4().hex[:12]))
+            # Recurring events share the same UID; disambiguate with start time
+            recurrence_id = component.get("recurrence-id")
+            date_key = str(recurrence_id.dt.isoformat()) if recurrence_id else start_str
+            # Hash feed_url + uid + date to guarantee uniqueness across feeds and recurrences
+            event_id = hashlib.sha256(f"{feed_url}:{uid}:{date_key}".encode()).hexdigest()[:16]
             events.append(
                 {
-                    "id": uid[:64],
+                    "id": event_id,
                     "title": summary,
                     "start": start_str,
                     "end": end_str,
