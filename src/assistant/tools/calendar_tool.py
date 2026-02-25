@@ -48,9 +48,15 @@ class CalendarStore:
                     "url": str,
                     "name": str,
                     "last_synced": str,
+                    "origin": str,  # "config" or "manual"
                 },
                 pk="url",
             )
+        else:
+            # Migrate: add origin column if missing
+            cols = {col.name for col in self._db["feeds"].columns}
+            if "origin" not in cols:
+                self._db.execute("ALTER TABLE feeds ADD COLUMN origin TEXT DEFAULT 'manual'")
 
     # -- Events CRUD --------------------------------------------------------
 
@@ -114,9 +120,9 @@ class CalendarStore:
 
     # -- Feed management ----------------------------------------------------
 
-    def add_feed(self, url: str, name: str) -> None:
+    def add_feed(self, url: str, name: str, origin: str = "manual") -> None:
         self._db["feeds"].upsert(
-            {"url": url, "name": name, "last_synced": ""},
+            {"url": url, "name": name, "last_synced": "", "origin": origin},
             pk="url",
         )
 
@@ -214,9 +220,11 @@ CALENDAR_TOOL_DEF: dict[str, Any] = {
         "- today: shortcut to list today's events\n"
         "- update: modify a local event by id\n"
         "- delete: remove a local event by id\n"
-        "- add_feed: subscribe to an .ics calendar feed URL\n"
-        "- remove_feed: unsubscribe from a feed\n"
+        "- add_feed: subscribe to an .ics calendar feed URL (manually added)\n"
+        "- remove_feed: unsubscribe from a manually-added feed (config-managed feeds cannot be removed here — the user must edit .env)\n"
         "- sync_feeds: re-fetch all subscribed .ics feeds\n\n"
+        "Feeds have two origins: 'config' (from ASSISTANT_CALENDAR_FEEDS in .env, managed automatically) "
+        "and 'manual' (added via this tool). You can only add/remove manual feeds.\n\n"
         "All datetimes should be ISO 8601 (e.g. 2025-03-15T14:00:00)."
     ),
     "input_schema": {
@@ -500,6 +508,10 @@ async def _sqlite_calendar_handler(params: dict[str, Any]) -> str:
         url = params.get("url")
         if not url:
             return "Error: 'url' is required for remove_feed."
+        # Check if this is a config-managed feed
+        for existing in store.list_feeds():
+            if existing["url"] == url and existing.get("origin", "manual") == "config":
+                return "Error: this feed is managed by config (ASSISTANT_CALENDAR_FEEDS). Remove it from .env instead."
         if store.remove_feed(url):
             return f"Feed removed: {url}"
         return "Error: feed not found."
@@ -518,3 +530,38 @@ async def _sqlite_calendar_handler(params: dict[str, Any]) -> str:
 
     else:
         return f"Unknown calendar action: {action}"
+
+
+# ---------------------------------------------------------------------------
+# Auto-sync configured feeds from settings
+# ---------------------------------------------------------------------------
+
+async def sync_configured_feeds() -> None:
+    """Register and sync ICS feeds defined in ASSISTANT_CALENDAR_FEEDS.
+
+    Treats the env config as source of truth: feeds removed from config
+    are also removed from the database.
+    """
+    from assistant.core.config import get_settings
+
+    feeds = get_settings().calendar_feeds
+    store = _get_store()
+
+    configured_urls = {feed["url"] for feed in feeds}
+
+    # Remove config-origin feeds that are no longer in config
+    # Manual feeds (added by agent via tool) are left untouched
+    for existing in store.list_feeds():
+        if existing.get("origin", "manual") == "config" and existing["url"] not in configured_urls:
+            store.remove_feed(existing["url"])
+            logger.info("Removed stale calendar feed: %s", existing["url"])
+
+    if not feeds:
+        return
+
+    # Add/update configured feeds (tagged as config-origin)
+    for feed in feeds:
+        store.add_feed(url=feed["url"], name=feed["name"], origin="config")
+    results = await store.sync_all_feeds()
+    for url, result in results.items():
+        logger.info("Calendar feed sync %s: %s", url, result)
