@@ -37,7 +37,8 @@ MANAGE_AGENT_DEF: dict[str, Any] = {
                 "description": (
                     "Agent definition object for create/edit. Fields: "
                     "description (string), system_prompt (string), "
-                    "allowed_tools (list of strings), denied_tools (list of strings), "
+                    "allowed_tools (list of tool names), denied_tools (list of tool names), "
+                    "allowed_skills (list of skill names — limits which skills appear in the agent's system prompt), "
                     "model (string, optional), max_tool_rounds (int, default 5)."
                 ),
             },

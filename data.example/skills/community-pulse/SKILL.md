@@ -1,3 +1,7 @@
+---
+name: community-pulse
+description: Gather community perspectives and opinions from Reddit. Use when asked what people think about a topic.
+---
 # Community Pulse
 
 When asked about opinions, recommendations, experiences, or "what do people think about X", gather community perspectives from Reddit and cross-reference with other sources.

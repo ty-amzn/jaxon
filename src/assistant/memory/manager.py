@@ -51,8 +51,15 @@ class MemoryManager:
             )
             logger.info(f"Vector search enabled with model: {embedding_model}")
 
-    def get_system_prompt(self) -> str:
-        """Assemble system prompt from identity, durable memory, skills, and today's log."""
+    def get_system_prompt(
+        self, skill_names: list[str] | None = None,
+    ) -> str:
+        """Assemble system prompt from identity, durable memory, skills, and today's log.
+
+        Args:
+            skill_names: If provided, only include these skills in the metadata.
+                         Pass ``None`` to include all skills.
+        """
         from datetime import datetime, timezone
 
         parts: list[str] = []
@@ -67,9 +74,9 @@ class MemoryManager:
         if memory:
             parts.append(memory)
 
-        # Add skills section
+        # Add skills metadata (compact — full content loaded on-demand via activate_skill)
         if self.skills:
-            skills_prompt = self.skills.get_skills_prompt()
+            skills_prompt = self.skills.get_skills_metadata_prompt(skill_names)
             if skills_prompt:
                 parts.append(skills_prompt)
 

@@ -1,3 +1,7 @@
+---
+name: code-review
+description: Review code for quality, security, performance, and best practices. Use when asked to review, audit, or critique code.
+---
 # Code Review
 
 When asked to review code, follow this systematic approach:

@@ -1,3 +1,7 @@
+---
+name: video-researcher
+description: Research topics using video content from YouTube. Use when video explanations or tutorials would be valuable.
+---
 # Video Researcher
 
 When asked to learn about a topic from video content, or when video explanations would be valuable, follow this approach:

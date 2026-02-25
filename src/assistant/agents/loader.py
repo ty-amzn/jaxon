@@ -52,6 +52,7 @@ class AgentLoader:
             system_prompt=data.get("system_prompt", ""),
             allowed_tools=data.get("allowed_tools", []),
             denied_tools=data.get("denied_tools", []),
+            allowed_skills=data.get("allowed_skills", []),
             model=data.get("model", ""),
             max_tool_rounds=data.get("max_tool_rounds", 5),
             can_delegate=data.get("can_delegate", False),

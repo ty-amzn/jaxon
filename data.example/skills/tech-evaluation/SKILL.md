@@ -1,3 +1,7 @@
+---
+name: tech-evaluation
+description: Evaluate libraries, frameworks, tools, or technologies with multi-source investigation. Use when asked to assess or compare tech.
+---
 # Tech Evaluation
 
 When asked to evaluate a library, framework, tool, service, or technology, conduct a multi-source investigation and produce a structured assessment.

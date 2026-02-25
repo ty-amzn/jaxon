@@ -1,3 +1,7 @@
+---
+name: fact-check
+description: Systematically verify claims and statements using multiple sources. Use when asked to fact-check or confirm information.
+---
 # Fact Check
 
 When asked to verify, fact-check, or confirm a claim, statement, or piece of information, follow this systematic approach:

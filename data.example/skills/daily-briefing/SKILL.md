@@ -1,3 +1,7 @@
+---
+name: daily-briefing
+description: Compile a personalized daily digest from calendar, news, and community sources. Use for morning briefings.
+---
 # Daily Briefing
 
 When asked for a morning briefing, daily summary, or "what's going on today", compile a personalized digest from multiple sources.

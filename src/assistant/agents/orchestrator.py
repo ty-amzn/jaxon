@@ -73,7 +73,9 @@ class Orchestrator:
 
         _delegation_depth_var.set(depth + 1)
         try:
-            base_prompt = self._memory.get_system_prompt()
+            base_prompt = self._memory.get_system_prompt(
+                skill_names=agent.allowed_skills or None,
+            )
             return await self._runner.run(
                 agent, task, context=context,
                 base_system_prompt=base_prompt, content=content,
@@ -234,7 +236,9 @@ class Orchestrator:
                     await bt._deliver(f"Background task {bt.id} failed: {bt.error}")
                 return
 
-            base_prompt = self._memory.get_system_prompt()
+            base_prompt = self._memory.get_system_prompt(
+                skill_names=agent.allowed_skills or None,
+            )
             # Use auto-approve permissions for background agents
             auto_perms = PermissionManager(_auto_approve)
             result = await self._runner.run(

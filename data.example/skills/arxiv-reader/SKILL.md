@@ -1,3 +1,7 @@
+---
+name: arxiv-reader
+description: Read, analyze, and summarize arXiv papers. Use when asked about academic papers or research.
+---
 # arXiv Paper Reader
 
 When asked to read, analyze, or summarize an arXiv paper, follow this systematic approach:

@@ -21,7 +21,12 @@ from assistant.tools.memory_tool import (
 )
 from assistant.tools.registry import ToolRegistry
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
-from assistant.tools.skill_tool import MANAGE_SKILL_DEF, _make_manage_skill
+from assistant.tools.skill_tool import (
+    ACTIVATE_SKILL_DEF,
+    MANAGE_SKILL_DEF,
+    _make_activate_skill,
+    _make_manage_skill,
+)
 from assistant.tools.weather_tool import WEATHER_TOOL_DEF, get_weather
 from assistant.tools.browser_tool import BROWSE_WEB_DEF, browse_web
 from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
@@ -232,8 +237,14 @@ def create_tool_registry(
             _make_update_identity(memory),
         )
 
-        # Register skill management tool if skills loader is available
+        # Register skill tools if skills loader is available
         if memory.skills is not None:
+            registry.register(
+                ACTIVATE_SKILL_DEF["name"],
+                ACTIVATE_SKILL_DEF["description"],
+                ACTIVATE_SKILL_DEF["input_schema"],
+                _make_activate_skill(memory.skills),
+            )
             registry.register(
                 MANAGE_SKILL_DEF["name"],
                 MANAGE_SKILL_DEF["description"],

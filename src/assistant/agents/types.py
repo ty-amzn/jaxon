@@ -14,6 +14,7 @@ class AgentDef:
     system_prompt: str = ""
     allowed_tools: list[str] = field(default_factory=list)
     denied_tools: list[str] = field(default_factory=list)
+    allowed_skills: list[str] = field(default_factory=list)
     model: str = ""  # Empty = use default
     max_tool_rounds: int = 5
     can_delegate: bool = False
