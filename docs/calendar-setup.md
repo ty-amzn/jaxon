@@ -123,17 +123,39 @@ If both your Mac and iPhone use the same iCloud account, the CalDAV account adde
 Add to the assistant's `.env`:
 
 ```bash
+ASSISTANT_CALDAV_ENABLED=true
 ASSISTANT_CALDAV_URL=http://radicale:5232/assistant/calendar/
-ASSISTANT_CALDAV_USERNAME=assistant
-ASSISTANT_CALDAV_PASSWORD=<password>
+CALDAV_USERNAME=assistant
+CALDAV_PASSWORD=<password>
 ```
 
-The agent uses standard CalDAV operations:
-- `GET` — list/read events
-- `PUT` — create or update events
-- `DELETE` — remove events
+When `ASSISTANT_CALDAV_ENABLED=true`, the calendar tool routes CRUD operations (create, list, today, update, delete) through CalDAV. Feed subscriptions (`add_feed`, `sync_feeds`, `remove_feed`) continue to use the local SQLite store for read-only ICS imports.
 
-The `caldav` Python library simplifies this further.
+The `caldav` Python library handles the protocol — the agent calls `list_events()`, `create_event()`, `update_event()`, `delete_event()` which translate to standard CalDAV HTTP requests.
+
+## Reminders (VTODO)
+
+When CalDAV is enabled, a separate `reminders` tool is registered that manages VTODO items in the same Radicale calendar collection. VTODOs sync to the iOS Reminders app automatically.
+
+### Usage examples
+
+```
+reminders create title="Buy milk" due="2025-03-15T18:00:00" priority="medium"
+reminders list
+reminders complete reminder_id="<id>"
+reminders update reminder_id="<id>" title="Buy oat milk"
+reminders delete reminder_id="<id>"
+```
+
+### VTODO ↔ iOS Reminders mapping
+
+| VTODO field | iOS Reminders | Values |
+|---|---|---|
+| SUMMARY | Title | free text |
+| DUE | Due date | ISO 8601 datetime |
+| PRIORITY | Priority | 1 (high), 5 (medium), 9 (low) |
+| DESCRIPTION | Notes | free text |
+| STATUS | Completion | NEEDS-ACTION / COMPLETED |
 
 ## Google Calendar visibility (read-only)
 

@@ -81,10 +81,10 @@ class PermissionManager:
         self._approval_required: set[str] | None = approval_required_tools
 
     @staticmethod
-    def _is_google_calendar_enabled() -> bool:
+    def _is_caldav_enabled() -> bool:
         try:
             from assistant.core.config import get_settings
-            return get_settings().google_calendar_enabled
+            return get_settings().caldav_enabled
         except Exception:
             return False
 
@@ -259,17 +259,33 @@ class PermissionManager:
                 details=tool_input,
                 description=desc,
             )
+        elif tool_name == "google_calendar":
+            action = tool_input.get("action", "list")
+            if action in ("list", "today"):
+                cat = ActionCategory.NETWORK_READ
+            elif action == "delete":
+                cat = ActionCategory.NETWORK_WRITE
+            else:
+                cat = ActionCategory.NETWORK_WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Google Calendar {action}: {tool_input.get('title', tool_input.get('event_id', ''))}",
+            )
         elif tool_name == "calendar":
             action = tool_input.get("action", "list")
-            google_enabled = self._is_google_calendar_enabled()
-            if google_enabled:
-                # Google Calendar: all actions hit the network
+            caldav_enabled = self._is_caldav_enabled()
+            if caldav_enabled:
+                # CalDAV: all CRUD actions hit the network
                 if action in ("list", "today"):
                     cat = ActionCategory.NETWORK_READ
                 elif action == "delete":
                     cat = ActionCategory.NETWORK_WRITE
-                elif action in ("add_feed", "remove_feed", "sync_feeds"):
-                    cat = ActionCategory.NETWORK_READ  # just returns info message
+                elif action in ("add_feed", "sync_feeds"):
+                    cat = ActionCategory.NETWORK_READ
+                elif action == "remove_feed":
+                    cat = ActionCategory.DELETE
                 else:
                     cat = ActionCategory.NETWORK_WRITE
             else:
@@ -287,6 +303,20 @@ class PermissionManager:
                 action_category=cat,
                 details=tool_input,
                 description=f"Calendar {action}: {tool_input.get('title', tool_input.get('event_id', tool_input.get('url', '')))}",
+            )
+        elif tool_name == "reminders":
+            action = tool_input.get("action", "list")
+            if action == "list":
+                cat = ActionCategory.NETWORK_READ
+            elif action == "delete":
+                cat = ActionCategory.NETWORK_WRITE
+            else:
+                cat = ActionCategory.NETWORK_WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Reminders {action}: {tool_input.get('title', tool_input.get('reminder_id', ''))}",
             )
         elif tool_name == "contacts":
             action = tool_input.get("action", "list")

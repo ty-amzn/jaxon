@@ -279,7 +279,7 @@ CALENDAR_TOOL_DEF: dict[str, Any] = {
 # ---------------------------------------------------------------------------
 
 _store: CalendarStore | None = None
-_gcal_client: Any = None
+_caldav_client: Any = None
 
 
 def _get_store() -> CalendarStore:
@@ -298,31 +298,31 @@ def set_store(store: CalendarStore) -> None:
     _store = store
 
 
-def _get_google_client() -> Any:
-    """Lazily create GoogleCalendarClient if enabled."""
-    global _gcal_client
-    if _gcal_client is None:
+def _is_caldav_enabled() -> bool:
+    from assistant.core.config import get_settings
+    return get_settings().caldav_enabled
+
+
+def _get_caldav_client() -> Any:
+    """Lazily create CalDAVClient if enabled."""
+    global _caldav_client
+    if _caldav_client is None:
         from assistant.core.config import get_settings
-        from assistant.tools.google_calendar import GoogleCalendarClient
+        from assistant.tools.caldav_client import CalDAVClient
 
         settings = get_settings()
-        _gcal_client = GoogleCalendarClient(
-            credentials_path=settings.google_auth_dir / "credentials.json",
-            client_id=settings.google_client_id,
-            client_secret=settings.google_client_secret,
+        _caldav_client = CalDAVClient(
+            url=settings.caldav_url,
+            username=settings.caldav_username,
+            password=settings.caldav_password,
         )
-    return _gcal_client
+    return _caldav_client
 
 
-def set_google_client(client: Any) -> None:
-    """Override the Google client (for tests)."""
-    global _gcal_client
-    _gcal_client = client
-
-
-def _is_google_enabled() -> bool:
-    from assistant.core.config import get_settings
-    return get_settings().google_calendar_enabled
+def set_caldav_client(client: Any) -> None:
+    """Override the CalDAV client (for tests)."""
+    global _caldav_client
+    _caldav_client = client
 
 
 # ---------------------------------------------------------------------------
@@ -330,19 +330,23 @@ def _is_google_enabled() -> bool:
 # ---------------------------------------------------------------------------
 
 async def calendar_tool(params: dict[str, Any]) -> str:
-    """Handle calendar tool calls."""
-    if _is_google_enabled():
-        return await _google_calendar_handler(params)
+    """Handle calendar tool calls. Routes to CalDAV or SQLite."""
+    action = params.get("action", "list")
+
+    # Feed actions always use SQLite (read-only ICS imports)
+    if action in ("add_feed", "remove_feed", "sync_feeds"):
+        return await _sqlite_calendar_handler(params)
+
+    if _is_caldav_enabled():
+        return await _caldav_calendar_handler(params)
     return await _sqlite_calendar_handler(params)
 
 
-async def _google_calendar_handler(params: dict[str, Any]) -> str:
-    """Handle calendar actions via Google Calendar API."""
+async def _caldav_calendar_handler(params: dict[str, Any]) -> str:
+    """Handle calendar actions via CalDAV (Radicale)."""
     import json
 
-    from assistant.tools.google_calendar import format_event
-
-    client = _get_google_client()
+    client = _get_caldav_client()
     action = params.get("action", "list")
 
     if action == "create":
@@ -350,23 +354,27 @@ async def _google_calendar_handler(params: dict[str, Any]) -> str:
         start = params.get("start")
         if not title or not start:
             return "Error: 'title' and 'start' are required for create."
-        event = await client.create_event(
-            summary=title,
+        event = client.create_event(
+            title=title,
             start=start,
             end=params.get("end"),
             location=params.get("location"),
-            description=params.get("notes"),
+            notes=params.get("notes"),
         )
-        formatted = format_event(event)
-        return f"Event created: {formatted['title']} at {formatted['start']} (id: {formatted['id']})"
+        return f"Event created: {event['title']} at {event['start']} (id: {event['id']})"
 
     elif action == "today":
         today = datetime.now().strftime("%Y-%m-%dT00:00:00")
         tomorrow = (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%dT00:00:00")
-        events = await client.list_all_events(today, tomorrow)
-        if not events:
+        events = client.list_events(today, tomorrow)
+        # Also include feed events from SQLite
+        store = _get_store()
+        feed_events = store.list_events(today, tomorrow)
+        all_events = events + [e for e in feed_events if e.get("source", "local") != "local"]
+        if not all_events:
             return "No events today."
-        return json.dumps([format_event(e) for e in events], indent=2)
+        all_events.sort(key=lambda e: e["start"])
+        return json.dumps(all_events, indent=2)
 
     elif action == "list":
         start = params.get("start", datetime.now().strftime("%Y-%m-%dT00:00:00"))
@@ -374,39 +382,39 @@ async def _google_calendar_handler(params: dict[str, Any]) -> str:
             "end",
             (datetime.now() + timedelta(days=7)).strftime("%Y-%m-%dT23:59:59"),
         )
-        events = await client.list_all_events(start, end)
-        if not events:
+        events = client.list_events(start, end)
+        # Also include feed events from SQLite
+        store = _get_store()
+        feed_events = store.list_events(start, end)
+        all_events = events + [e for e in feed_events if e.get("source", "local") != "local"]
+        if not all_events:
             return f"No events between {start} and {end}."
-        return json.dumps([format_event(e) for e in events], indent=2)
+        all_events.sort(key=lambda e: e["start"])
+        return json.dumps(all_events, indent=2)
 
     elif action == "update":
         event_id = params.get("event_id")
         if not event_id:
             return "Error: 'event_id' is required for update."
-        result = await client.update_event(
+        result = client.update_event(
             event_id,
-            summary=params.get("title"),
+            title=params.get("title"),
             start=params.get("start"),
             end=params.get("end"),
             location=params.get("location"),
-            description=params.get("notes"),
+            notes=params.get("notes"),
         )
-        formatted = format_event(result)
-        return f"Event updated: {formatted['title']}"
+        if result is None:
+            return "Error: event not found."
+        return f"Event updated: {result['title']}"
 
     elif action == "delete":
         event_id = params.get("event_id")
         if not event_id:
             return "Error: 'event_id' is required for delete."
-        if await client.delete_event(event_id):
+        if client.delete_event(event_id):
             return f"Event {event_id} deleted."
-        return "Error: failed to delete event."
-
-    elif action in ("add_feed", "remove_feed", "sync_feeds"):
-        return (
-            "Google Calendar handles shared calendars natively. "
-            "Share calendars to your Google account and they appear automatically."
-        )
+        return "Error: event not found."
 
     else:
         return f"Unknown calendar action: {action}"

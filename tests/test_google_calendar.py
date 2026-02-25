@@ -8,7 +8,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from assistant.tools.calendar_tool import calendar_tool, set_google_client
+from assistant.tools.google_calendar_tool import google_calendar_tool, set_google_client
 from assistant.tools.google_calendar import format_event
 
 
@@ -156,93 +156,74 @@ class TestFormatEvent:
 class TestGoogleCalendarHandler:
     @pytest.mark.asyncio
     async def test_create_event(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({
-                "action": "create",
-                "title": "Standup",
-                "start": "2025-03-10T09:30:00",
-            })
+        result = await google_calendar_tool({
+            "action": "create",
+            "title": "Standup",
+            "start": "2025-03-10T09:30:00",
+        })
         assert "Event created" in result
         assert "Standup" in result
         assert "gcal_1" in result
 
     @pytest.mark.asyncio
     async def test_create_missing_fields(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "create"})
+        result = await google_calendar_tool({"action": "create"})
         assert "Error" in result
 
     @pytest.mark.asyncio
     async def test_list_empty(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "list"})
+        result = await google_calendar_tool({"action": "list"})
         assert "No events" in result
 
     @pytest.mark.asyncio
     async def test_list_with_events(self, gcal_client: MockGoogleCalendarClient) -> None:
         await gcal_client.create_event("Meeting", "2025-03-10T14:00:00")
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({
-                "action": "list",
-                "start": "2025-03-10T00:00:00",
-                "end": "2025-03-11T00:00:00",
-            })
+        result = await google_calendar_tool({
+            "action": "list",
+            "start": "2025-03-10T00:00:00",
+            "end": "2025-03-11T00:00:00",
+        })
         parsed = json.loads(result)
         assert len(parsed) == 1
         assert parsed[0]["title"] == "Meeting"
 
     @pytest.mark.asyncio
     async def test_today_empty(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "today"})
+        result = await google_calendar_tool({"action": "today"})
         assert "No events" in result
 
     @pytest.mark.asyncio
     async def test_update_event(self, gcal_client: MockGoogleCalendarClient) -> None:
         ev = await gcal_client.create_event("Original", "2025-03-10T10:00:00")
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({
-                "action": "update",
-                "event_id": ev["id"],
-                "title": "Updated",
-            })
+        result = await google_calendar_tool({
+            "action": "update",
+            "event_id": ev["id"],
+            "title": "Updated",
+        })
         assert "Updated" in result
 
     @pytest.mark.asyncio
     async def test_update_missing_id(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "update"})
+        result = await google_calendar_tool({"action": "update"})
         assert "Error" in result
 
     @pytest.mark.asyncio
     async def test_delete_event(self, gcal_client: MockGoogleCalendarClient) -> None:
         ev = await gcal_client.create_event("To Delete", "2025-03-10T10:00:00")
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "delete", "event_id": ev["id"]})
+        result = await google_calendar_tool({"action": "delete", "event_id": ev["id"]})
         assert "deleted" in result
 
     @pytest.mark.asyncio
     async def test_delete_missing_id(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "delete"})
+        result = await google_calendar_tool({"action": "delete"})
         assert "Error" in result
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "delete", "event_id": "no-such-id"})
+        result = await google_calendar_tool({"action": "delete", "event_id": "no-such-id"})
         assert "Error" in result or "failed" in result
 
     @pytest.mark.asyncio
-    async def test_feed_actions_return_message(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            for action in ("add_feed", "remove_feed", "sync_feeds"):
-                result = await calendar_tool({"action": action, "url": "https://example.com/cal.ics"})
-                assert "Google Calendar" in result
-                assert "natively" in result
-
-    @pytest.mark.asyncio
     async def test_unknown_action(self, gcal_client: MockGoogleCalendarClient) -> None:
-        with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=True):
-            result = await calendar_tool({"action": "explode"})
+        result = await google_calendar_tool({"action": "explode"})
         assert "Unknown" in result

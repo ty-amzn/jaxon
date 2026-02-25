@@ -8,15 +8,20 @@ from pathlib import Path
 
 import pytest
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
-from assistant.tools.calendar_tool import CalendarStore, calendar_tool, set_google_client, set_store
+from assistant.tools.calendar_tool import (
+    CalendarStore,
+    calendar_tool,
+    set_caldav_client,
+    set_store,
+)
 
 
 @pytest.fixture(autouse=True)
 def _force_sqlite_mode():
-    """Ensure all tests in this module use the SQLite backend."""
-    with patch("assistant.tools.calendar_tool._is_google_enabled", return_value=False):
+    """Ensure all tests in this module use the SQLite backend by default."""
+    with patch("assistant.tools.calendar_tool._is_caldav_enabled", return_value=False):
         yield
 
 
@@ -24,7 +29,6 @@ def _force_sqlite_mode():
 def store(tmp_path: Path) -> CalendarStore:
     s = CalendarStore(tmp_path / "calendar.db")
     set_store(s)
-    set_google_client(None)
     return s
 
 
@@ -263,3 +267,167 @@ END:VCALENDAR"""
         titles = {e["title"] for e in events}
         assert "Team Standup" in titles
         assert "1:1 with Manager" in titles
+
+
+# ---------------------------------------------------------------------------
+# CalDAV handler tests
+# ---------------------------------------------------------------------------
+
+
+class _MockCalDAVClient:
+    """Mock CalDAV client for testing the handler."""
+
+    def __init__(self):
+        self._events: dict[str, dict] = {}
+
+    def create_event(self, title, start, end=None, location=None, notes=None):
+        import uuid
+        eid = uuid.uuid4().hex[:12]
+        ev = {
+            "id": eid,
+            "title": title,
+            "start": start,
+            "end": end or "",
+            "location": location or "",
+            "notes": notes or "",
+            "source": "caldav",
+        }
+        self._events[eid] = ev
+        return ev
+
+    def list_events(self, start, end):
+        return [
+            e for e in self._events.values()
+            if e["start"] >= start and e["start"] <= end
+        ]
+
+    def update_event(self, event_id, title=None, start=None, end=None, location=None, notes=None):
+        ev = self._events.get(event_id)
+        if ev is None:
+            return None
+        if title:
+            ev["title"] = title
+        if start:
+            ev["start"] = start
+        if end:
+            ev["end"] = end
+        if location is not None:
+            ev["location"] = location
+        if notes is not None:
+            ev["notes"] = notes
+        return ev
+
+    def delete_event(self, event_id):
+        if event_id in self._events:
+            del self._events[event_id]
+            return True
+        return False
+
+
+class TestCalDAVHandler:
+    @pytest.fixture(autouse=True)
+    def _caldav_mode(self, store):
+        """Enable CalDAV mode with a mock client."""
+        mock_client = _MockCalDAVClient()
+        set_caldav_client(mock_client)
+        self._client = mock_client
+        with patch("assistant.tools.calendar_tool._is_caldav_enabled", return_value=True):
+            yield
+        set_caldav_client(None)
+
+    @pytest.mark.asyncio
+    async def test_create_event(self, store):
+        result = await calendar_tool({
+            "action": "create",
+            "title": "CalDAV Meeting",
+            "start": "2025-03-10T10:00:00",
+        })
+        assert "Event created" in result
+        assert "CalDAV Meeting" in result
+
+    @pytest.mark.asyncio
+    async def test_create_missing_fields(self, store):
+        result = await calendar_tool({"action": "create"})
+        assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_list_events(self, store):
+        self._client.create_event("Lunch", "2025-03-10T12:00:00")
+        result = await calendar_tool({
+            "action": "list",
+            "start": "2025-03-10T00:00:00",
+            "end": "2025-03-10T23:59:59",
+        })
+        assert "Lunch" in result
+
+    @pytest.mark.asyncio
+    async def test_list_empty(self, store):
+        result = await calendar_tool({
+            "action": "list",
+            "start": "2025-03-10T00:00:00",
+            "end": "2025-03-10T23:59:59",
+        })
+        assert "No events" in result
+
+    @pytest.mark.asyncio
+    async def test_update_event(self, store):
+        ev = self._client.create_event("Old Title", "2025-03-10T10:00:00")
+        result = await calendar_tool({
+            "action": "update",
+            "event_id": ev["id"],
+            "title": "New Title",
+        })
+        assert "New Title" in result
+
+    @pytest.mark.asyncio
+    async def test_update_not_found(self, store):
+        result = await calendar_tool({
+            "action": "update",
+            "event_id": "nonexistent",
+            "title": "X",
+        })
+        assert "not found" in result
+
+    @pytest.mark.asyncio
+    async def test_delete_event(self, store):
+        ev = self._client.create_event("Delete Me", "2025-03-10T10:00:00")
+        result = await calendar_tool({
+            "action": "delete",
+            "event_id": ev["id"],
+        })
+        assert "deleted" in result
+
+    @pytest.mark.asyncio
+    async def test_delete_not_found(self, store):
+        result = await calendar_tool({
+            "action": "delete",
+            "event_id": "nonexistent",
+        })
+        assert "not found" in result
+
+    @pytest.mark.asyncio
+    async def test_delete_missing_id(self, store):
+        result = await calendar_tool({"action": "delete"})
+        assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_update_missing_id(self, store):
+        result = await calendar_tool({"action": "update"})
+        assert "Error" in result
+
+    @pytest.mark.asyncio
+    async def test_unknown_action(self, store):
+        result = await calendar_tool({"action": "explode"})
+        assert "Unknown" in result
+
+    @pytest.mark.asyncio
+    async def test_feed_actions_use_sqlite(self, store):
+        """Feed actions should still work via SQLite even in CalDAV mode."""
+        result = await calendar_tool({"action": "sync_feeds"})
+        assert "No feeds" in result
+
+        result = await calendar_tool({"action": "add_feed"})
+        assert "Error" in result
+
+        result = await calendar_tool({"action": "remove_feed"})
+        assert "Error" in result

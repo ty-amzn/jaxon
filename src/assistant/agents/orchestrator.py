@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import contextvars
 import json
 import logging
 import tempfile
@@ -26,6 +27,13 @@ from assistant.memory.manager import MemoryManager
 
 logger = logging.getLogger(__name__)
 
+# Per-async-context delegation depth so background tasks get independent counters.
+_delegation_depth_var: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "_delegation_depth", default=0,
+)
+
+MAX_DELEGATION_DEPTH = 3
+
 
 class Orchestrator:
     """Orchestrates delegation to sub-agents. Provides tool definitions."""
@@ -40,7 +48,6 @@ class Orchestrator:
         self._loader = loader
         self._runner = runner
         self._memory = memory
-        self._delegation_depth = 0
         self._bg_manager = bg_manager
 
     async def delegate(
@@ -48,11 +55,12 @@ class Orchestrator:
         content: str | list[dict] | None = None,
     ) -> AgentResult:
         """Delegate a task to a named agent."""
-        if self._delegation_depth >= 2:
+        depth = _delegation_depth_var.get()
+        if depth >= MAX_DELEGATION_DEPTH:
             return AgentResult(
                 agent_name=agent_name,
                 response="",
-                error="Maximum delegation depth (2) exceeded. Cannot delegate further.",
+                error=f"Maximum delegation depth ({MAX_DELEGATION_DEPTH}) exceeded. Cannot delegate further.",
             )
 
         agent = self._loader.get_agent(agent_name)
@@ -63,7 +71,7 @@ class Orchestrator:
                 error=f"Agent '{agent_name}' not found.",
             )
 
-        self._delegation_depth += 1
+        _delegation_depth_var.set(depth + 1)
         try:
             base_prompt = self._memory.get_system_prompt()
             return await self._runner.run(
@@ -71,7 +79,7 @@ class Orchestrator:
                 base_system_prompt=base_prompt, content=content,
             )
         finally:
-            self._delegation_depth -= 1
+            _delegation_depth_var.set(depth)
 
     async def delegate_parallel(
         self, delegations: list[dict[str, Any]]
@@ -212,6 +220,9 @@ class Orchestrator:
         content: str | list[dict] | None = None,
     ) -> None:
         """Run an agent in the background, delivering results when done."""
+        # Reset delegation depth so background agents get a fresh counter
+        # independent of any foreground delegation in progress.
+        _delegation_depth_var.set(0)
         bt.status = TaskStatus.RUNNING
         try:
             agent = self._loader.get_agent(agent_name)

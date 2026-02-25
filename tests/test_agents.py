@@ -345,16 +345,21 @@ class TestOrchestrator:
 
     @pytest.mark.asyncio
     async def test_depth_guard_blocks_at_max(self, orchestrator):
-        orchestrator._delegation_depth = 2
-        result = await orchestrator.delegate("test_agent", "Do something")
-        assert not result.success
-        assert "depth" in result.error.lower()
+        from assistant.agents.orchestrator import _delegation_depth_var, MAX_DELEGATION_DEPTH
+        _delegation_depth_var.set(MAX_DELEGATION_DEPTH)
+        try:
+            result = await orchestrator.delegate("test_agent", "Do something")
+            assert not result.success
+            assert "depth" in result.error.lower()
+        finally:
+            _delegation_depth_var.set(0)
 
     @pytest.mark.asyncio
     async def test_depth_counter_resets_after_delegate(self, orchestrator):
-        assert orchestrator._delegation_depth == 0
+        from assistant.agents.orchestrator import _delegation_depth_var
+        assert _delegation_depth_var.get() == 0
         await orchestrator.delegate("test_agent", "Do something")
-        assert orchestrator._delegation_depth == 0
+        assert _delegation_depth_var.get() == 0
 
     def test_config_settings(self):
         from assistant.core.config import Settings

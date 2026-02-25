@@ -30,7 +30,9 @@ from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
 from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
 from assistant.tools.email_tool import SEND_EMAIL_DEF, send_email
 from assistant.tools.calendar_tool import CALENDAR_TOOL_DEF, calendar_tool
+from assistant.tools.google_calendar_tool import GOOGLE_CALENDAR_TOOL_DEF, google_calendar_tool
 from assistant.tools.contacts_tool import CONTACTS_TOOL_DEF, contacts_tool
+from assistant.tools.reminders_tool import REMINDERS_TOOL_DEF, reminders_tool
 from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
 
 
@@ -133,6 +135,25 @@ def create_tool_registry(
         CALENDAR_TOOL_DEF["input_schema"],
         calendar_tool,
     )
+
+    # Register reminders tool only when CalDAV is enabled
+    if settings and settings.caldav_enabled:
+        registry.register(
+            REMINDERS_TOOL_DEF["name"],
+            REMINDERS_TOOL_DEF["description"],
+            REMINDERS_TOOL_DEF["input_schema"],
+            reminders_tool,
+        )
+
+    # Register Google Calendar tool only when enabled
+    if settings and settings.google_calendar_enabled:
+        registry.register(
+            GOOGLE_CALENDAR_TOOL_DEF["name"],
+            GOOGLE_CALENDAR_TOOL_DEF["description"],
+            GOOGLE_CALENDAR_TOOL_DEF["input_schema"],
+            google_calendar_tool,
+        )
+
     registry.register(
         CONTACTS_TOOL_DEF["name"],
         CONTACTS_TOOL_DEF["description"],
