@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import os
 import time
 from collections import deque
@@ -35,6 +36,7 @@ class TaskStatus(str, Enum):
     RUNNING = "running"
     DONE = "done"
     ERROR = "error"
+    CANCELLED = "cancelled"
 
 
 @dataclass
@@ -49,6 +51,7 @@ class BackgroundTask:
     error: str = ""
     silent: bool = False
     _deliver: DeliveryCallback | None = field(default=None, repr=False)
+    _asyncio_task: asyncio.Task | None = field(default=None, repr=False)
 
 
 async def _auto_approve(request: PermissionRequest) -> bool:
@@ -94,6 +97,19 @@ class BackgroundTaskManager:
 
     def get(self, task_id: str) -> BackgroundTask | None:
         return self._tasks.get(task_id)
+
+    def cancel(self, task_id: str) -> tuple[bool, str]:
+        """Cancel a background task. Returns (success, message)."""
+        bt = self._tasks.get(task_id)
+        if bt is None:
+            return False, f"No task found with ID: {task_id}"
+        if bt.status in (TaskStatus.DONE, TaskStatus.ERROR, TaskStatus.CANCELLED):
+            return False, f"Task {task_id} already {bt.status.value}, cannot cancel."
+        if bt._asyncio_task is not None:
+            bt._asyncio_task.cancel()
+        bt.status = TaskStatus.CANCELLED
+        bt.finished_at = time.time()
+        return True, f"Task {task_id} ({bt.agent_name}) cancelled."
 
     def list_all(self) -> list[BackgroundTask]:
         return [self._tasks[tid] for tid in self._order if tid in self._tasks]

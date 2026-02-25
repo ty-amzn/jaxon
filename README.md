@@ -17,6 +17,8 @@ A self-hosted personal AI assistant with multi-provider LLM support, streaming C
 - **Conversation threading** — Save, load, and export named conversations
 - **Image support** — Send images to vision-capable models with `@image:` syntax
 - **Web search** — SearXNG-powered web search tool
+- **YouTube** — Search videos, get metadata, and extract transcripts via yt-dlp
+- **Reddit** — Search posts, browse subreddits, and read discussions via public API
 - **Telegram bot** — Chat with your assistant from Telegram
 - **WhatsApp bot** — Chat via WhatsApp linked-device QR code pairing (neonize)
 - **Scheduler** — Cron, interval, and one-shot reminders with SQLite persistence
@@ -234,6 +236,8 @@ See the [Configuration Reference](docs/USER_GUIDE.md#configuration-reference) fo
 | `ASSISTANT_WHATSAPP_ENABLED` | `false` | Enable WhatsApp bot |
 | `ASSISTANT_SCHEDULER_ENABLED` | `false` | Enable scheduled jobs |
 | `ASSISTANT_WEBHOOK_ENABLED` | `false` | Enable webhook endpoints |
+| `ASSISTANT_YOUTUBE_ENABLED` | `false` | Enable YouTube search/transcripts |
+| `ASSISTANT_REDDIT_ENABLED` | `false` | Enable Reddit search/browsing |
 
 ## Usage
 

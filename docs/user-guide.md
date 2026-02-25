@@ -644,6 +644,8 @@ The assistant can execute actions through a permission-gated tool system.
 | `delegate_parallel` | Run multiple agents in parallel | Auto-approved (if agents enabled) |
 | `task_status` | Check status of a background task | Auto-approved |
 | `browse_web` | Browse JS-heavy pages with Playwright | extract/screenshot/evaluate auto-approved; click/fill require approval |
+| `youtube_search` | Search YouTube, get video info, or extract transcripts | Auto-approved (if enabled) |
+| `reddit_search` | Search Reddit, browse subreddits, or read posts | Auto-approved (if enabled) |
 
 ### Browser Automation
 

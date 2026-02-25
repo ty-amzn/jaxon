@@ -9,15 +9,24 @@ if TYPE_CHECKING:
 
 
 async def handle_tasks(chat: ChatInterface, args: list[str]) -> None:
-    """List background tasks or show a specific task's result.
+    """List background tasks, show results, or cancel a task.
 
     Usage:
         /tasks              — list all background tasks
         /tasks result <id>  — show full result of a task
+        /tasks cancel <id>  — cancel a running or pending task
     """
     bg_manager = getattr(chat, "_bg_manager", None)
     if bg_manager is None:
         chat._console.print("[yellow]Background tasks not available (agents not enabled).[/yellow]")
+        return
+
+    # /tasks cancel <id>
+    if len(args) >= 2 and args[0] == "cancel":
+        task_id = args[1]
+        success, message = bg_manager.cancel(task_id)
+        color = "green" if success else "red"
+        chat._console.print(f"[{color}]{message}[/{color}]")
         return
 
     # /tasks result <id>
@@ -48,6 +57,7 @@ async def handle_tasks(chat: ChatInterface, args: list[str]) -> None:
         "running": "blue",
         "done": "green",
         "error": "red",
+        "cancelled": "dim",
     }
 
     for bt in tasks:

@@ -1,6 +1,6 @@
 services:
-  assistant:
-    container_name: assistant
+  jaxon:
+    container_name: jaxon
     build: .
     ports:
       - "51430:51430"

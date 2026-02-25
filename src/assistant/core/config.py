@@ -115,6 +115,12 @@ class Settings(BaseSettings):
     caldav_username: str = Field(default="", validation_alias="CALDAV_USERNAME")
     caldav_password: str = Field(default="", validation_alias="CALDAV_PASSWORD")
 
+    # YouTube
+    youtube_enabled: bool = False
+
+    # Reddit
+    reddit_enabled: bool = False
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"

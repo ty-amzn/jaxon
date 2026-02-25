@@ -34,6 +34,7 @@ dependencies = [
     { name = "trafilatura" },
     { name = "uvicorn", extra = ["standard"] },
     { name = "watchdog" },
+    { name = "yt-dlp" },
 ]
 
 [package.optional-dependencies]
@@ -69,6 +70,7 @@ requires-dist = [
     { name = "trafilatura", specifier = ">=2.0.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
     { name = "watchdog", specifier = ">=4.0" },
+    { name = "yt-dlp", specifier = ">=2024.0" },
 ]
 provides-extras = ["dev"]
 
@@ -2300,4 +2302,13 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/79/2b/8ae5f59ab852c8fe32dd37c1aa058eb98aca118fec2d3af5c3cd56fffb7b/x_wr_timezone-2.0.1.tar.gz", hash = "sha256:9166c40e6ffd4c0edebabc354e1a1e2cffc1bb473f88007694793757685cc8c3", size = 18212, upload-time = "2025-02-06T17:10:40.913Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/0f/b7/4bac35b4079b76c07d8faddf89467e9891b1610cfe8d03b0ebb5610e4423/x_wr_timezone-2.0.1-py3-none-any.whl", hash = "sha256:e74a53b9f4f7def8138455c240e65e47c224778bce3c024fcd6da2cbe91ca038", size = 11102, upload-time = "2025-02-06T17:10:39.192Z" },
+]
+
+[[package]]
+name = "yt-dlp"
+version = "2026.2.21"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/58/d9/55ffff25204733e94a507552ad984d5a8a8e4f9d1f0d91763e6b1a41c79b/yt_dlp-2026.2.21.tar.gz", hash = "sha256:4407dfc1a71fec0dee5ef916a8d4b66057812939b509ae45451fa8fb4376b539", size = 3116630, upload-time = "2026-02-21T20:40:53.522Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/5a/40/664c99ee36d80d84ce7a96cd98aebcb3d16c19e6c3ad3461d2cf5424040e/yt_dlp-2026.2.21-py3-none-any.whl", hash = "sha256:0d8408f5b6d20487f5caeb946dfd04f9bcd2f1a3a125b744a0a982b590e449f7", size = 3313392, upload-time = "2026-02-21T20:40:51.514Z" },
 ]

@@ -260,6 +260,10 @@ class Orchestrator:
                     await bt._deliver(
                         f"Background task {bt.id} ({agent_name}) completed:\n\n{result.response}"
                     )
+        except asyncio.CancelledError:
+            logger.info("Background task %s cancelled", bt.id)
+            bt.status = TaskStatus.CANCELLED
+            bt.finished_at = time.time()
         except Exception as e:
             logger.exception("Background task %s failed", bt.id)
             bt.status = TaskStatus.ERROR
@@ -374,7 +378,7 @@ class Orchestrator:
             },
         ]
 
-        # Add task_status tool if background manager is available
+        # Add task_status and cancel_task tools if background manager is available
         if self._bg_manager is not None:
             defs.append({
                 "name": "task_status",
@@ -385,6 +389,20 @@ class Orchestrator:
                         "task_id": {
                             "type": "string",
                             "description": "The background task ID to check",
+                        },
+                    },
+                    "required": ["task_id"],
+                },
+            })
+            defs.append({
+                "name": "cancel_task",
+                "description": "Cancel a running or pending background agent task.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {
+                        "task_id": {
+                            "type": "string",
+                            "description": "The background task ID to cancel",
                         },
                     },
                     "required": ["task_id"],
@@ -433,7 +451,7 @@ class Orchestrator:
                     deliver=deliver,
                     silent=silent,
                 )
-                asyncio.create_task(
+                bt._asyncio_task = asyncio.create_task(
                     self._run_background(
                         bt,
                         params["agent_name"],
@@ -479,6 +497,12 @@ class Orchestrator:
                 info += f"\n\nError: {bt.error}"
             return info
 
+        async def handle_cancel_task(params: dict[str, Any]) -> str:
+            if self._bg_manager is None:
+                return "Background tasks not available."
+            success, message = self._bg_manager.cancel(params["task_id"])
+            return message
+
         handlers = {
             "list_agents": handle_list_agents,
             "delegate_to_agent": handle_delegate,
@@ -487,5 +511,6 @@ class Orchestrator:
 
         if self._bg_manager is not None:
             handlers["task_status"] = handle_task_status
+            handlers["cancel_task"] = handle_cancel_task
 
         return handlers

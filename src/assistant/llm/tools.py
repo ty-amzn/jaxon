@@ -33,6 +33,8 @@ from assistant.tools.calendar_tool import CALENDAR_TOOL_DEF, calendar_tool
 from assistant.tools.google_calendar_tool import GOOGLE_CALENDAR_TOOL_DEF, google_calendar_tool
 from assistant.tools.contacts_tool import CONTACTS_TOOL_DEF, contacts_tool
 from assistant.tools.reminders_tool import REMINDERS_TOOL_DEF, reminders_tool
+from assistant.tools.youtube_tool import YOUTUBE_SEARCH_TOOL_DEF, youtube_search
+from assistant.tools.reddit_tool import REDDIT_SEARCH_TOOL_DEF, reddit_search
 from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
 
 
@@ -168,6 +170,24 @@ def create_tool_registry(
             SEND_NOTIFICATION_DEF["description"],
             SEND_NOTIFICATION_DEF["input_schema"],
             _make_send_notification(dispatcher),
+        )
+
+    # Register YouTube tool if enabled
+    if settings and settings.youtube_enabled:
+        registry.register(
+            YOUTUBE_SEARCH_TOOL_DEF["name"],
+            YOUTUBE_SEARCH_TOOL_DEF["description"],
+            YOUTUBE_SEARCH_TOOL_DEF["input_schema"],
+            youtube_search,
+        )
+
+    # Register Reddit tool if enabled
+    if settings and settings.reddit_enabled:
+        registry.register(
+            REDDIT_SEARCH_TOOL_DEF["name"],
+            REDDIT_SEARCH_TOOL_DEF["description"],
+            REDDIT_SEARCH_TOOL_DEF["input_schema"],
+            reddit_search,
         )
 
     # Register web_search if enabled

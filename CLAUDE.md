@@ -97,6 +97,11 @@ All 12 steps implemented:
 3. Permission-gated — extract/screenshot/evaluate auto-approved (NETWORK_READ), click/fill require approval (NETWORK_WRITE)
 4. Browser shutdown wired into app lifespan (`core/events.py`)
 
+## Phase 8 (YouTube & Reddit Tools)
+1. YouTube tool — `tools/youtube_tool.py`: `youtube_search` with search/video_info/transcript actions via yt-dlp
+2. Reddit tool — `tools/reddit_tool.py`: `reddit_search` with search/subreddit/post actions via public JSON API
+3. Both gated by `youtube_enabled` / `reddit_enabled` config flags, classified as NETWORK_READ (auto-approved)
+
 ## User Documentation
 - `docs/user-guide.md` — comprehensive user guide (all features)
 - `docs/quick-reference.md` — command cheat sheet

@@ -235,12 +235,35 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Check task: {tool_input.get('task_id', '')}",
             )
+        elif tool_name == "cancel_task":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.WRITE,
+                details=tool_input,
+                description=f"Cancel task: {tool_input.get('task_id', '')}",
+            )
         elif tool_name == "web_search":
             return PermissionRequest(
                 tool_name=tool_name,
                 action_category=ActionCategory.NETWORK_READ,
                 details=tool_input,
                 description=f"Search: {tool_input.get('query', '')}",
+            )
+        elif tool_name == "youtube_search":
+            action = tool_input.get("action", "search")
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"YouTube {action}: {tool_input.get('query', '')}",
+            )
+        elif tool_name == "reddit_search":
+            action = tool_input.get("action", "search")
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Reddit {action}: {tool_input.get('query', '')}",
             )
         elif tool_name == "schedule_reminder":
             action = tool_input.get("action", "create")

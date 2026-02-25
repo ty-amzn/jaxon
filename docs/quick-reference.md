@@ -88,6 +88,8 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `task_status` | Yes |
 | `browse_web` (extract/screenshot/evaluate) | Yes |
 | `browse_web` (click/fill) | No |
+| `youtube_search` | Yes |
+| `reddit_search` | Yes |
 
 ## Configuration (`.env`)
 
