@@ -109,6 +109,10 @@ class Settings(BaseSettings):
     google_client_id: str = Field(default="", validation_alias="GOOGLE_CLIENT_ID")
     google_client_secret: str = Field(default="", validation_alias="GOOGLE_CLIENT_SECRET")
 
+    # Calendar ICS feeds — auto-synced on startup
+    # Comma-separated "name|url" pairs, e.g. Personal|https://...basic.ics,Work|https://...
+    calendar_feeds_raw: str = Field(default="", validation_alias="ASSISTANT_CALENDAR_FEEDS")
+
     # CalDAV (Radicale)
     caldav_enabled: bool = False
     caldav_url: str = ""
@@ -121,11 +125,33 @@ class Settings(BaseSettings):
     # Reddit
     reddit_enabled: bool = False
 
+    # Tool output pagination
+    tool_output_cap: int = 15_000
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"
     dnd_end: str = "07:00"
     dnd_allow_urgent: bool = True
+
+    @property
+    def calendar_feeds(self) -> list[dict[str, str]]:
+        """Parse 'name|url,name|url,...' into list of {name, url} dicts."""
+        raw = self.calendar_feeds_raw.strip()
+        if not raw:
+            return []
+        feeds = []
+        for entry in raw.split(","):
+            entry = entry.strip()
+            if not entry:
+                continue
+            if "|" in entry:
+                name, url = entry.split("|", 1)
+                feeds.append({"name": name.strip(), "url": url.strip()})
+            else:
+                # URL only — use URL as name
+                feeds.append({"name": entry, "url": entry})
+        return feeds
 
     @property
     def telegram_allowed_user_ids(self) -> list[int]:

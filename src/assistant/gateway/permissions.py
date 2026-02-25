@@ -228,6 +228,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Weather: {tool_input.get('location', '')}",
             )
+        elif tool_name == "read_output_page":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.READ,
+                details=tool_input,
+                description=f"Read page: {tool_input.get('page_id', '')} p{tool_input.get('page', '')}",
+            )
         elif tool_name == "task_status":
             return PermissionRequest(
                 tool_name=tool_name,

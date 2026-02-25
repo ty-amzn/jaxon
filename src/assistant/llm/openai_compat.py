@@ -193,6 +193,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                         yield StreamEvent(
                             type=StreamEventType.ERROR,
                             error=f"{label} API error: {response.status_code} - {error_text.decode()}",
+                            error_code=response.status_code,
                         )
                         return
 

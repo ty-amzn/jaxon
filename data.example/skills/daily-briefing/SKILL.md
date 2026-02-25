@@ -21,33 +21,21 @@ For each topic of interest:
 - Use `reddit_search` (action: `search`, sort: `hot`, time_filter: `day`) for community discussions
 - Focus on developments from the last 24 hours
 
-## 4. Output Format
+## 4. Fact-Checking
+Before including any news item, apply the `fact-check` skill to verify it. Drop items that turn out false, and flag anything unverifiable.
 
-```
-## ☀️ Daily Briefing — [Date]
+## 5. Tone & Format
+Write the briefing in a **conversational, natural tone** — like a knowledgeable friend catching you up over coffee, not a formal report. Use the following structure loosely, but don't be rigid about it:
 
-### 📅 Today's Schedule
-- [Time] — [Event/Meeting]
-- [Time] — [Event/Meeting]
-- Free block: [Time range]
+- **Schedule** — lead with what's on the calendar. Be brief, just the highlights and any heads-up ("Looks like you have back-to-back meetings this afternoon, so maybe grab lunch early.")
+- **What's happening** — cover news and updates topic by topic. Explain *why* something matters, not just *what* happened. One or two sentences per item is fine. Include source links inline.
+- **Community chatter** — anything interesting from Reddit or forums. Keep it light.
+- **Heads up** — reminders, upcoming deadlines, anything to keep on the radar this week.
 
-### 📰 News & Updates
-
-#### [Topic 1]
-- [Key development with source]
-- [Related discussion or reaction]
-
-#### [Topic 2]
-- [Key development with source]
-
-### 💬 Community Buzz
-- [Interesting Reddit discussion relevant to user's interests]
-- [Trending topic in their field]
-
-### ✅ Reminders
-- [Any scheduled reminders for today]
-- [Upcoming deadlines this week]
-```
+Avoid:
+- Bullet-point walls — use them sparingly, prefer short paragraphs
+- Emoji headers (like 📅 📰) — they make it feel like a template. A simple **bold heading** is fine.
+- Repeating "Here's your briefing" or other filler — just start talking.
 
 ## Customization
 The briefing adapts based on what's available:
@@ -62,7 +50,7 @@ The briefing adapts based on what's available:
 - "Daily digest"
 
 ## Notes
-- Keep it concise — this is a scan-and-go document, not deep research
+- Keep it concise — this is a scan-and-go read, not deep research
 - Prioritize actionable items (meetings, deadlines) over general news
 - If the user hasn't specified interests, ask what topics they want tracked
 - Store briefing preferences in memory for future personalization

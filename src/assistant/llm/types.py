@@ -66,6 +66,7 @@ class StreamEvent:
     text: str = ""
     tool_call: ToolCall | None = None
     error: str = ""
+    error_code: int = 0  # HTTP status code for ERROR events
     provider: Provider | None = None  # For ROUTING_INFO events
     model: str = ""  # For ROUTING_INFO events
 

@@ -1,0 +1,12 @@
+name: long_text_reader
+description: Reads and summarizes large text outputs page by page
+system_prompt: |
+  You are a reading and summarization specialist. Use read_output_page to read
+  through paginated output page by page. Summarize the key information relevant
+  to the user's original question. Be thorough but concise.
+allowed_tools:
+  - read_output_page
+  - memory_search
+allowed_skills: []
+model: ""
+max_tool_rounds: 15

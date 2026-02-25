@@ -23,11 +23,13 @@ class ToolRegistry:
         self,
         permission_manager: PermissionManager,
         audit_logger: AuditLogger,
+        output_cap: int = 15_000,
     ) -> None:
         self._handlers: dict[str, ToolHandler] = {}
         self._definitions: list[dict[str, Any]] = []
         self._permissions = permission_manager
         self._audit = audit_logger
+        self._output_cap = output_cap
 
     def register(
         self,
@@ -120,6 +122,25 @@ class ToolRegistry:
                 approval_required=perm_request.requires_approval,
                 duration_ms=duration_ms,
             )
+            # Paginate oversized output (skip for read_output_page itself)
+            if (
+                len(result_text) > self._output_cap
+                and tool_call.name != "read_output_page"
+            ):
+                from assistant.tools.page_cache import get_page_cache
+
+                cache = get_page_cache()
+                page_id, total_pages = cache.store(result_text)
+                first_page = cache.get_page(page_id, 1)
+                assert first_page is not None
+                page_text, _ = first_page
+                result_text = (
+                    f"[Page 1/{total_pages}] Output was {len(result_text):,} chars, "
+                    f"paginated into {total_pages} pages.\n"
+                    f"Use read_output_page(page_id={page_id!r}, page=N) to read more.\n\n"
+                    f"{page_text}"
+                )
+
             return ToolResult(tool_use_id=tool_call.id, content=result_text)
         except Exception as e:
             duration_ms = int((time.monotonic() - start) * 1000)

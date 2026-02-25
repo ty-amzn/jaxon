@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import AsyncGenerator
+import re
+from collections.abc import AsyncGenerator, Callable, Awaitable
 from typing import Any
 
 from assistant.core.config import Settings
@@ -22,6 +23,13 @@ from assistant.llm.types import (
 logger = logging.getLogger(__name__)
 
 
+_CONTEXT_TOO_LONG_RE = re.compile(
+    r"prompt.{0,20}too long|exceed.*context|context.{0,20}length|"
+    r"too many tokens|maximum context|token limit|input.{0,20}too long",
+    re.IGNORECASE,
+)
+
+
 class LLMRouter(BaseLLMClient):
     """Routes requests between multiple LLM providers based on config."""
 
@@ -33,6 +41,9 @@ class LLMRouter(BaseLLMClient):
         self._gemini_client: GeminiClient | None = None
         self._ollama_available: bool | None = None
         self._model_clients: dict[str, BaseLLMClient] = {}
+
+        # Context-too-long fallback (set by chat.py)
+        self._context_fallback: Callable[[str], Awaitable[str | None]] | None = None
 
         # Create config for router (used for metadata)
         self._config = LLMConfig(
@@ -204,6 +215,30 @@ class LLMRouter(BaseLLMClient):
             return True
         return await self._check_ollama_available()
 
+    @staticmethod
+    def _is_context_too_long_error(event: StreamEvent) -> bool:
+        """Check if an error event indicates context/prompt too long."""
+        if event.type != StreamEventType.ERROR:
+            return False
+        if event.error_code == 400 and _CONTEXT_TOO_LONG_RE.search(event.error):
+            return True
+        # Some providers return 413 or include the pattern without 400
+        if _CONTEXT_TOO_LONG_RE.search(event.error):
+            return True
+        return False
+
+    def _get_cloud_fallback(self, current_provider: Provider) -> tuple[BaseLLMClient, Provider, str] | None:
+        """Find an alternative cloud provider to fall back to."""
+        candidates: list[tuple[Callable[[], BaseLLMClient], Provider, str, bool]] = [
+            (self._get_claude_client, Provider.CLAUDE, self._settings.model, bool(self._settings.anthropic_api_key)),
+            (self._get_openai_client, Provider.OPENAI, self._settings.openai_model, self._settings.openai_enabled and bool(self._settings.openai_api_key)),
+            (self._get_gemini_client, Provider.GEMINI, self._settings.gemini_model, self._settings.gemini_enabled and bool(self._settings.gemini_api_key)),
+        ]
+        for factory, prov, model, available in candidates:
+            if prov != current_provider and available:
+                return factory(), prov, model
+        return None
+
     async def stream_with_tool_loop(
         self,
         system: str,
@@ -243,7 +278,8 @@ class LLMRouter(BaseLLMClient):
             model=self._config.model,
         )
 
-        # Stream from selected client
+        # Stream from selected client, watching for context-too-long errors
+        context_error_event: StreamEvent | None = None
         async for event in client.stream_with_tool_loop(
             system=system,
             messages=messages,
@@ -251,7 +287,66 @@ class LLMRouter(BaseLLMClient):
             tool_executor=tool_executor,
             max_tool_rounds=max_tool_rounds,
         ):
+            if self._is_context_too_long_error(event):
+                context_error_event = event
+                break
             yield event
+
+        if context_error_event is None:
+            return
+
+        # --- Context too long: attempt fallback chain ---
+        logger.warning(
+            "Context too long for %s/%s — attempting fallback", provider.value, model
+        )
+
+        # 1. Try context_fallback callback (delegates to long_context_reader agent)
+        if self._context_fallback is not None:
+            # Extract the user's last text message
+            user_text = ""
+            for msg in reversed(messages):
+                if msg.get("role") == "user":
+                    c = msg.get("content", "")
+                    user_text = c if isinstance(c, str) else str(c)
+                    break
+            try:
+                fallback_result = await self._context_fallback(user_text)
+                if fallback_result:
+                    logger.info("Context fallback agent produced a result")
+                    yield StreamEvent(
+                        type=StreamEventType.TEXT_DELTA,
+                        text=fallback_result,
+                    )
+                    yield StreamEvent(
+                        type=StreamEventType.MESSAGE_COMPLETE,
+                        text=fallback_result,
+                    )
+                    return
+            except Exception as exc:
+                logger.warning("Context fallback agent failed: %s", exc)
+
+        # 2. Try a cloud provider with larger context window
+        cloud = self._get_cloud_fallback(provider)
+        if cloud is not None:
+            fallback_client, fb_provider, fb_model = cloud
+            logger.info("Falling back to %s/%s", fb_provider.value, fb_model)
+            yield StreamEvent(
+                type=StreamEventType.ROUTING_INFO,
+                provider=fb_provider,
+                model=fb_model,
+            )
+            async for event in fallback_client.stream_with_tool_loop(
+                system=system,
+                messages=messages,
+                tools=tools,
+                tool_executor=tool_executor,
+                max_tool_rounds=max_tool_rounds,
+            ):
+                yield event
+            return
+
+        # 3. Nothing worked — yield the original error
+        yield context_error_event
 
     _PROVIDER_MAP: dict[str, Provider] = {
         "claude": Provider.CLAUDE,

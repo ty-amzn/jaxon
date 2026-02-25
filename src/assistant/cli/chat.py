@@ -130,6 +130,23 @@ class ChatInterface:
             _make_manage_agent(loader),
         )
 
+        # Wire context-too-long fallback via long_context_reader agent
+        orchestrator = self._orchestrator
+
+        async def _context_fallback(user_text: str) -> str | None:
+            try:
+                agent_result = await orchestrator.delegate(
+                    agent_name="long_text_reader",
+                    task=user_text or "Summarize the paginated output.",
+                )
+                if agent_result.error:
+                    return None
+                return agent_result.response or None
+            except Exception:
+                return None
+
+        self._llm._context_fallback = _context_fallback
+
     def set_command_registry(self, registry: Any) -> None:
         self._command_registry = registry
 
@@ -579,6 +596,14 @@ class ChatInterface:
 
     async def run(self) -> None:
         """Main interactive chat loop."""
+        # Sync configured calendar feeds
+        from assistant.tools.calendar_tool import sync_configured_feeds
+
+        try:
+            await sync_configured_feeds()
+        except Exception:
+            pass  # logged inside sync_configured_feeds
+
         # Start plugins
         await self._start_plugins()
 
