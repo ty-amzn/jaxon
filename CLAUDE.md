@@ -3,6 +3,7 @@
 ## Quick Start
 ```bash
 cp .env.example .env   # set ANTHROPIC_API_KEY
+cp -r data.example data # seed data directory (agents, skills, identity)
 uv sync --all-extras
 playwright install chromium   # browser tool (one-time)
 uv run assistant chat   # interactive mode
@@ -15,14 +16,16 @@ Single-user personal AI assistant with multi-provider LLM support (Claude, OpenA
 
 ### Key Directories
 - `src/assistant/` — all source code
-- `data/memory/` — IDENTITY.md (personality), MEMORY.md (facts), daily logs
-- `data/skills/` — skill definitions (.md files)
-- `data/agents/` — agent definitions (.yaml files)
-- `data/threads/` — saved conversation threads
-- `data/workflows/` — workflow YAML definitions
-- `data/backups/` — config backup tarballs
-- `data/logs/` — audit.jsonl, app.log
-- `data/db/` — SQLite FTS5 search index, embeddings, scheduler
+- `data.example/` — template data directory (copy to `data/` on first run)
+- `data/` — runtime data directory (gitignored, personal)
+  - `memory/` — IDENTITY.md (personality), MEMORY.md (facts), daily logs
+  - `skills/` — skill definitions (.md files)
+  - `agents/` — agent definitions (.yaml files)
+  - `threads/` — saved conversation threads
+  - `workflows/` — workflow YAML definitions
+  - `backups/` — config backup tarballs
+  - `logs/` — audit.jsonl, app.log
+  - `db/` — SQLite FTS5 search index, embeddings, scheduler
 
 ### Data Flow
 User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills + identity) → LLMRouter → Claude/OpenAI/Gemini/OllamaClient → Rich Live rendering → save to daily log + FTS5 + embeddings

@@ -6,10 +6,7 @@ __pycache__/
 dist/
 build/
 .env
-data/logs/
-data/db/
-data/memory/daily/
-data/whatsapp_auth/
+data/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/
