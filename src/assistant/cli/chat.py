@@ -279,7 +279,7 @@ class ChatInterface:
 
             full_response = ""
             last_error: str | None = None
-            max_retries = 2
+            max_retries = 10
 
             # Create tool executor bound to this session (no rendering)
             # Pass permission_override so we never mutate the shared registry attribute
@@ -317,7 +317,7 @@ class ChatInterface:
 
                 # No response and error — retry after backoff (unless last attempt)
                 if last_error and attempt < max_retries:
-                    delay = 2 ** attempt  # 2s, 4s
+                    delay = min(1 + attempt, 10)  # 2s, 3s, 4s, ... 10s cap
                     logger.info("Retrying LLM call in %ds...", delay)
                     await asyncio.sleep(delay)
                     continue
