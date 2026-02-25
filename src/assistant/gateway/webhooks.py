@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-import hashlib
-import hmac
 import logging
+import secrets
 from typing import Any, TYPE_CHECKING
 
 from fastapi import APIRouter, Header, HTTPException, Request
@@ -38,27 +37,26 @@ def configure_webhooks(
     _dispatcher = dispatcher
 
 
-def verify_signature(payload: bytes, signature: str, secret: str) -> bool:
-    """Verify HMAC-SHA256 signature."""
-    expected = hmac.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    return hmac.compare_digest(f"sha256={expected}", signature)
+def verify_bearer_token(token: str, secret: str) -> bool:
+    """Verify a bearer token against the configured secret (constant-time)."""
+    return secrets.compare_digest(token, secret)
 
 
 @router.post("/{name}")
 async def receive_webhook(
     name: str,
     request: Request,
-    x_hub_signature_256: str | None = Header(default=None),
+    authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Receive a webhook and trigger the matching workflow."""
-    body = await request.body()
-
-    # Validate HMAC if secret is configured
+    # Validate bearer token if secret is configured
     if _webhook_secret:
-        if not x_hub_signature_256:
-            raise HTTPException(status_code=401, detail="Missing signature")
-        if not verify_signature(body, x_hub_signature_256, _webhook_secret):
-            raise HTTPException(status_code=403, detail="Invalid signature")
+        if not authorization:
+            raise HTTPException(status_code=401, detail="Missing Authorization header")
+        # Accept "Bearer <token>" or raw token
+        token = authorization.removeprefix("Bearer ").strip()
+        if not verify_bearer_token(token, _webhook_secret):
+            raise HTTPException(status_code=403, detail="Invalid token")
 
     # Parse JSON payload
     try:

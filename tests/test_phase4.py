@@ -11,7 +11,7 @@ import pytest
 
 from assistant.core.config import Settings
 from assistant.core.notifications import NotificationDispatcher, in_dnd_window, parse_time
-from assistant.gateway.webhooks import verify_signature
+from assistant.gateway.webhooks import verify_bearer_token
 from assistant.scheduler.workflow import WorkflowDefinition, WorkflowRunner, WorkflowManager
 from assistant.tools.sanitize import sanitize_tool_input, strip_injection_patterns, sanitize_path
 
@@ -193,25 +193,17 @@ def test_workflow_manager_load(tmp_path: Path):
     assert mgr.get("nonexistent") is None
 
 
-# --- Webhook signature ---
+# --- Webhook bearer token ---
 
 
-def test_verify_signature_valid():
-    """Valid HMAC signature passes verification."""
-    import hashlib
-    import hmac as hmac_mod
-
-    secret = "test-secret"
-    payload = b'{"event": "push"}'
-    expected = hmac_mod.new(secret.encode(), payload, hashlib.sha256).hexdigest()
-    sig = f"sha256={expected}"
-
-    assert verify_signature(payload, sig, secret) is True
+def test_verify_bearer_token_valid():
+    """Valid bearer token passes verification."""
+    assert verify_bearer_token("my-secret-token", "my-secret-token") is True
 
 
-def test_verify_signature_invalid():
-    """Invalid HMAC signature fails verification."""
-    assert verify_signature(b"payload", "sha256=invalid", "secret") is False
+def test_verify_bearer_token_invalid():
+    """Invalid bearer token fails verification."""
+    assert verify_bearer_token("wrong-token", "my-secret-token") is False
 
 
 # --- DND ---

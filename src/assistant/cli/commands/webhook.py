@@ -43,9 +43,12 @@ async def handle_webhook(chat: ChatInterface, args: list[str]) -> None:
         import httpx
 
         url = f"http://{settings.host}:{settings.port}/webhooks/{name}"
+        headers = {}
+        if settings.webhook_secret:
+            headers["Authorization"] = f"Bearer {settings.webhook_secret}"
         try:
             async with httpx.AsyncClient() as client:
-                resp = await client.post(url, json={"test": True})
+                resp = await client.post(url, json={"test": True}, headers=headers)
             if resp.status_code == 200:
                 console.print(f"[green]Webhook test successful: {resp.json()}[/green]")
             else:
