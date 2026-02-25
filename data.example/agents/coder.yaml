@@ -9,7 +9,6 @@ allowed_tools:
   - shell_exec
   - read_file
   - write_file
-  - activate_skill
 allowed_skills:
   - code-review
 max_tool_rounds: 10

@@ -37,6 +37,14 @@ class AgentRunner:
         else:
             tools = list(all_tools)
 
+        # Auto-include activate_skill when agent has skills available
+        has_skills = agent.allowed_skills is None or len(agent.allowed_skills) > 0
+        if has_skills and not any(t["name"] == "activate_skill" for t in tools):
+            for t in all_tools:
+                if t["name"] == "activate_skill":
+                    tools.append(t)
+                    break
+
         # Remove delegation tools unless agent is allowed to delegate
         if not agent.can_delegate:
             tools = [t for t in tools if t["name"] not in ("delegate_to_agent", "delegate_parallel", "list_agents")]

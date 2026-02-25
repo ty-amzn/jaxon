@@ -17,5 +17,4 @@ allowed_tools:
   - web_search
   - web_fetch
   - http_request
-  - activate_skill
 max_tool_rounds: 10
