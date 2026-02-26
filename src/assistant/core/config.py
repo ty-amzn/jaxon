@@ -128,6 +128,11 @@ class Settings(BaseSettings):
     # Tool output pagination
     tool_output_cap: int = 15_000
 
+    # Reflection — nightly extraction of long-term memories from daily logs
+    reflection_enabled: bool = False
+    reflection_model: str = "ollama/minimax-m2.5:cloud"
+    reflection_hour: int = 0  # hour in scheduler_timezone (reviews previous day)
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"

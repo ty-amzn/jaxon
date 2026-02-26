@@ -92,6 +92,13 @@ class DailyLog:
         async with aiofiles.open(path, "a") as f:
             await f.write("\n".join(parts) + "\n")
 
+    def read_full(self, date: datetime | None = None) -> str:
+        """Read the full log for a given date (defaults to today) without truncation."""
+        path = self._path_for(date)
+        if not path.exists():
+            return ""
+        return path.read_text()
+
     def clear_today(self) -> None:
         """Delete today's log file."""
         path = self._path_for()

@@ -62,9 +62,20 @@ class AgentLoader:
         logger.debug("Loaded agent: %s", name)
 
     def get_agent(self, name: str) -> AgentDef | None:
-        """Get an agent definition by name."""
+        """Get an agent definition by name (hot-reloads from disk)."""
         if not self._agents:
             self.load_all()
+
+        # Hot-reload: re-read the YAML file so edits are picked up without restart
+        path = self._agents_dir / f"{name}.yaml"
+        if not path.exists():
+            path = self._agents_dir / f"{name}.yml"
+        if path.exists():
+            try:
+                self._load_file(path)
+            except Exception:
+                logger.warning("Failed to hot-reload agent %s", name)
+
         return self._agents.get(name)
 
     def list_agents(self) -> list[AgentDef]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 from typing import Any, TYPE_CHECKING
 
@@ -56,6 +57,106 @@ async def run_workflow_job(
     except Exception:
         logger.exception("Error running workflow job: %s", workflow_name)
         await dispatcher.send(f"Workflow '{workflow_name}' failed")
+
+
+_REFLECTION_SYSTEM = (
+    "You extract long-term facts from daily conversation logs. "
+    "Focus on: preferences, habits, interests, personal info, recurring topics, "
+    "opinions, and project context."
+)
+
+_REFLECTION_PROMPT = """\
+Review yesterday's conversations and extract any facts worth remembering long-term \
+about the user. Focus on: preferences, habits, interests, personal info, \
+recurring topics, opinions, and project context.
+
+Current durable memory (avoid duplicates):
+{current_memory}
+
+Today's conversations:
+{daily_log}
+
+Respond with ONLY a JSON array of objects: [{{"section": "...", "fact": "..."}}]
+If nothing new is worth remembering, respond with an empty array: []"""
+
+
+async def run_reflection_job(
+    memory: MemoryManager,
+    reflection_model: str,
+) -> None:
+    """Review today's conversations and extract long-term facts into MEMORY.md.
+
+    Makes a direct LLM call (no tools, no daily log pollution) and appends
+    any new insights to durable memory.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from assistant.core.config import get_settings
+    from assistant.llm.router import LLMRouter
+    from assistant.llm.types import StreamEventType
+
+    yesterday = datetime.now(timezone.utc) - timedelta(days=1)
+    daily_log = memory.daily_log.read_full(date=yesterday)
+    if not daily_log.strip():
+        logger.info("Reflection: no daily log entries for %s, skipping", yesterday.strftime("%Y-%m-%d"))
+        return
+
+    current_memory = memory.durable.read()
+
+    prompt = _REFLECTION_PROMPT.format(
+        current_memory=current_memory,
+        daily_log=daily_log,
+    )
+
+    settings = get_settings()
+    router = LLMRouter(settings)
+    client = router.get_client_for_model(reflection_model)
+
+    full_response = ""
+    try:
+        async for event in client.stream_with_tool_loop(
+            system=_REFLECTION_SYSTEM,
+            messages=[{"role": "user", "content": prompt}],
+            tools=None,
+            tool_executor=None,
+            max_tool_rounds=0,
+        ):
+            if event.type == StreamEventType.TEXT_DELTA:
+                full_response += event.text
+            elif event.type == StreamEventType.MESSAGE_COMPLETE:
+                full_response = event.text
+            elif event.type == StreamEventType.ERROR:
+                logger.error("Reflection LLM error: %s", event.error)
+                return
+    except Exception:
+        logger.exception("Reflection: LLM call failed")
+        return
+
+    # Parse JSON response
+    text = full_response.strip()
+    # Strip markdown code fences if present
+    if text.startswith("```"):
+        text = text.split("\n", 1)[1] if "\n" in text else text[3:]
+        if text.endswith("```"):
+            text = text[:-3].strip()
+
+    try:
+        insights = json.loads(text)
+    except json.JSONDecodeError:
+        logger.warning("Reflection: could not parse LLM response as JSON: %s", text[:200])
+        return
+
+    if not isinstance(insights, list):
+        logger.warning("Reflection: expected JSON array, got %s", type(insights).__name__)
+        return
+
+    added = 0
+    for item in insights:
+        if isinstance(item, dict) and "section" in item and "fact" in item:
+            await memory.durable.append(item["section"], item["fact"])
+            added += 1
+
+    logger.info("Reflection: extracted %d new facts from daily log", added)
 
 
 _SILENT_PROMPT_PREFIX = (

@@ -14,6 +14,36 @@ from assistant.core.logging import setup_logging
 logger = logging.getLogger(__name__)
 
 
+def _ensure_reflection_job(
+    scheduler_manager: object,
+    settings: object,
+    memory: object,
+) -> None:
+    """Register the nightly reflection cron job if not already present."""
+    from apscheduler.triggers.cron import CronTrigger
+    from assistant.scheduler.jobs import run_reflection_job
+
+    job_id = "reflection_daily"
+    scheduler = scheduler_manager._scheduler  # type: ignore[attr-defined]
+
+    # Idempotent — skip if already registered
+    if scheduler.get_job(job_id):
+        logger.info("Reflection job already registered")
+        return
+
+    scheduler.add_job(
+        run_reflection_job,
+        trigger=CronTrigger(hour=settings.reflection_hour, timezone=scheduler.timezone),  # type: ignore[attr-defined]
+        id=job_id,
+        replace_existing=True,
+        kwargs={
+            "memory": memory,
+            "reflection_model": settings.reflection_model,  # type: ignore[attr-defined]
+        },
+    )
+    logger.info("Registered daily reflection job at hour %s", settings.reflection_hour)  # type: ignore[attr-defined]
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings = get_settings()
@@ -77,6 +107,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         )
         await scheduler_manager.start()
         app.state.scheduler_manager = scheduler_manager
+
+        # Register daily reflection job if enabled
+        if settings.reflection_enabled:
+            _ensure_reflection_job(scheduler_manager, settings, chat_interface._memory)
 
         # Wire the real handler
         handler = create_schedule_reminder_handler(scheduler_manager)
