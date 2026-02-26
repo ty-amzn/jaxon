@@ -97,6 +97,7 @@ PDF_READ_TOOL_DEF = {
         "properties": {
             "url": {
                 "type": "string",
+                "minLength": 1,
                 "description": "URL of the PDF to fetch and read",
             },
             "pages": {

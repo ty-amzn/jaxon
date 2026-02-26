@@ -85,6 +85,7 @@ ARXIV_SEARCH_TOOL_DEF = {
         "properties": {
             "query": {
                 "type": "string",
+                "minLength": 1,
                 "description": "Search query for arXiv papers",
             },
             "max_results": {

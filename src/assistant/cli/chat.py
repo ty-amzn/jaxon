@@ -55,6 +55,7 @@ class ChatInterface:
             ollama_base_url=settings.ollama_base_url,
             embedding_model=settings.embedding_model,
             vector_search_enabled=settings.vector_search_enabled,
+            timezone=settings.scheduler_timezone,
         )
 
         # Audit

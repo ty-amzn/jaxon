@@ -79,6 +79,7 @@ WEB_SEARCH_TOOL_DEF = {
         "properties": {
             "query": {
                 "type": "string",
+                "minLength": 1,
                 "description": "Search query",
             },
             "num_results": {

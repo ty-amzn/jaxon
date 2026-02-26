@@ -19,6 +19,7 @@ SEND_NOTIFICATION_DEF: dict[str, Any] = {
         "properties": {
             "message": {
                 "type": "string",
+                "minLength": 1,
                 "description": "The notification message to send to the user.",
             },
             "urgent": {

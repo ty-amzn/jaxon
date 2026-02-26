@@ -22,10 +22,10 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
         "asks for a simple notification with no AI involvement.\n\n"
         "Trigger types:\n"
         "- 'date': one-time at a specific time. Use for 'remind me in 10 minutes' — "
-        "compute the absolute UTC datetime from the current time and pass as run_date.\n"
+        "compute the absolute datetime from the current time shown in the system prompt and pass as run_date.\n"
         "- 'cron': recurring on a schedule (e.g. every weekday at 9am).\n"
         "- 'interval': repeating at a fixed interval (e.g. every 30 minutes).\n\n"
-        "All times must be in UTC."
+        "All times must be in the user's local timezone as shown in the system prompt (NOT UTC unless that IS the user's timezone)."
     ),
     "input_schema": {
         "type": "object",

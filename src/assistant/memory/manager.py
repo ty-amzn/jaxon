@@ -30,12 +30,15 @@ class MemoryManager:
         ollama_base_url: str = "http://localhost:11434",
         embedding_model: str = "nomic-embed-text",
         vector_search_enabled: bool = False,
+        timezone: str = "UTC",
     ) -> None:
         self.identity = IdentityLoader(identity_path)
         self.durable = DurableMemory(memory_path)
         self.daily_log = DailyLog(daily_log_dir)
         self.search = SearchIndex(search_db_path)
         self.skills = SkillLoader(skills_dir) if skills_dir else None
+
+        self._timezone = timezone
 
         # Plugin skills (injected at runtime)
         self._plugin_skills: dict[str, str] = {}
@@ -61,10 +64,17 @@ class MemoryManager:
                          Pass ``None`` to include all skills.
         """
         from datetime import datetime, timezone
+        from zoneinfo import ZoneInfo
 
         parts: list[str] = []
-        now = datetime.now(timezone.utc)
-        parts.append(f"Current date/time: {now.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+        tz_name = self._timezone
+        try:
+            local_tz = ZoneInfo(tz_name)
+        except Exception:
+            local_tz = timezone.utc
+            tz_name = "UTC"
+        now = datetime.now(local_tz)
+        parts.append(f"Current date/time: {now.strftime('%Y-%m-%d %H:%M:%S')} ({tz_name})")
 
         identity = self.identity.load()
         if identity:

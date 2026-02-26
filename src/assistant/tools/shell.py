@@ -54,6 +54,7 @@ SHELL_TOOL_DEF = {
         "properties": {
             "command": {
                 "type": "string",
+                "minLength": 1,
                 "description": "The shell command to execute",
             },
             "working_dir": {

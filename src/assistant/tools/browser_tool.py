@@ -116,6 +116,7 @@ BROWSE_WEB_DEF = {
         "properties": {
             "url": {
                 "type": "string",
+                "minLength": 1,
                 "description": "The URL to navigate to",
             },
             "action": {

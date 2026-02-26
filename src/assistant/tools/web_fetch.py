@@ -77,6 +77,7 @@ WEB_FETCH_TOOL_DEF = {
         "properties": {
             "url": {
                 "type": "string",
+                "minLength": 1,
                 "description": "The URL to fetch and extract content from",
             },
             "include_links": {

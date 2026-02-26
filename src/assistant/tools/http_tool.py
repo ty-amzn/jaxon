@@ -54,7 +54,7 @@ HTTP_TOOL_DEF = {
                 "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
                 "default": "GET",
             },
-            "url": {"type": "string", "description": "URL to request"},
+            "url": {"type": "string", "minLength": 1, "description": "URL to request"},
             "headers": {
                 "type": "object",
                 "description": "Request headers",

@@ -239,6 +239,7 @@ REDDIT_SEARCH_TOOL_DEF = {
         "properties": {
             "query": {
                 "type": "string",
+                "minLength": 1,
                 "description": (
                     "Search query (for search), subreddit name like 'python' (for subreddit), "
                     "or full Reddit post URL (for post)"
