@@ -474,9 +474,9 @@ class TestBackgroundDelegation:
             "task": "Find papers on transformers",
             "background": True,
         })
-        assert "Background task started:" in result
+        assert "task_id=" in result
         # Extract task ID
-        task_id = result.split(":")[1].strip().split(".")[0]
+        task_id = result.split("task_id=")[1].rstrip(")")
         assert len(task_id) == 8
 
     @pytest.mark.asyncio
@@ -513,7 +513,7 @@ class TestBackgroundDelegation:
                 "task": "Find papers",
                 "background": True,
             })
-            task_id = result.split(":")[1].strip().split(".")[0]
+            task_id = result.split("task_id=")[1].rstrip(")")
 
             # Wait for completion
             await asyncio.sleep(0.5)

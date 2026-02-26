@@ -486,7 +486,7 @@ class Orchestrator:
                         content=content,
                     )
                 )
-                return f"Background task started: {bt.id}. Results will be delivered when complete. Use task_status to check progress."
+                return f"Acknowledged — working on it. (task_id={bt.id})"
 
             # Foreground path
             result = await self.delegate(
