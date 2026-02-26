@@ -26,6 +26,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     settings.audit_log_path.parent.mkdir(parents=True, exist_ok=True)
     settings.search_db_path.parent.mkdir(parents=True, exist_ok=True)
 
+    # Sync configured calendar feeds
+    from assistant.tools.calendar_tool import sync_configured_feeds
+
+    try:
+        await sync_configured_feeds()
+    except Exception:
+        logger.warning("Calendar feed sync failed at startup", exc_info=True)
+
     from assistant.core.notifications import NotificationDispatcher
 
     dispatcher = NotificationDispatcher(

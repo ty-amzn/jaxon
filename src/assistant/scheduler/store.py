@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import logging
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,24 @@ class JobStore:
             return True
         except Exception:
             return False
+
+    def prune_expired(self) -> int:
+        """Delete one-time (date trigger) jobs whose run_date is in the past."""
+        now = datetime.now(timezone.utc)
+        expired_ids: list[str] = []
+        for row in self._db["jobs"].rows_where("trigger_type = ?", ["date"]):
+            try:
+                args = json.loads(row["trigger_args"])
+                run_date = datetime.fromisoformat(args["run_date"])
+                if run_date.tzinfo is None:
+                    run_date = run_date.replace(tzinfo=timezone.utc)
+                if run_date < now:
+                    expired_ids.append(row["id"])
+            except (KeyError, ValueError, TypeError):
+                continue
+        for job_id in expired_ids:
+            self._db["jobs"].delete(job_id)
+        return len(expired_ids)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         try:

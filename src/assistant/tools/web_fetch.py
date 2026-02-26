@@ -27,7 +27,7 @@ async def web_fetch(params: dict[str, Any]) -> str:
     include_links = params.get("include_links", False)
 
     if not url:
-        raise ValueError("No URL provided")
+        return "Error: 'url' parameter is required. Usage: web_fetch(url=\"https://example.com\")"
 
     try:
         async with make_httpx_client(timeout=30.0, follow_redirects=True) as client:

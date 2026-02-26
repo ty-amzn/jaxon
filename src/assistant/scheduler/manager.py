@@ -52,6 +52,9 @@ class SchedulerManager:
 
     def _load_persisted_jobs(self) -> None:
         """Re-register persisted jobs with APScheduler."""
+        pruned = self._store.prune_expired()
+        if pruned:
+            logger.info("Pruned %d expired one-time job(s)", pruned)
         jobs = self._store.load_all()
         for job_data in jobs:
             try:
@@ -68,6 +71,11 @@ class SchedulerManager:
 
         from assistant.scheduler.jobs import run_notification_job, run_assistant_job
 
+        # For one-time jobs, pass store reference so they self-delete after firing
+        cleanup_kwargs: dict[str, Any] = {}
+        if job_data["trigger_type"] == "date":
+            cleanup_kwargs = {"job_store": self._store, "job_id": job_data["id"]}
+
         if job_data["job_type"] == "notification":
             self._scheduler.add_job(
                 run_notification_job,
@@ -78,6 +86,7 @@ class SchedulerManager:
                     "dispatcher": self._dispatcher,
                     "message": job_data["job_args"].get("message", ""),
                     "memory": self._memory,
+                    **cleanup_kwargs,
                 },
             )
         elif job_data["job_type"] == "assistant" and self._chat_interface:
@@ -93,6 +102,7 @@ class SchedulerManager:
                     "dispatcher": self._dispatcher,
                     "memory": self._memory,
                     "silent": job_data["job_args"].get("silent", False),
+                    **cleanup_kwargs,
                 },
             )
 

@@ -18,6 +18,8 @@ async def run_notification_job(
     dispatcher: NotificationDispatcher,
     message: str,
     memory: MemoryManager | None = None,
+    job_store: Any | None = None,
+    job_id: str | None = None,
 ) -> None:
     """Send a notification message via dispatcher."""
     notification = f"Reminder: {message}"
@@ -28,6 +30,9 @@ async def run_notification_job(
             notification,
             session_id="scheduler",
         )
+    if job_store and job_id:
+        job_store.delete(job_id)
+        logger.debug("Cleaned up one-time job %s from store", job_id)
 
 
 async def run_workflow_job(
@@ -68,6 +73,8 @@ async def run_assistant_job(
     dispatcher: NotificationDispatcher,
     memory: MemoryManager | None = None,
     silent: bool = False,
+    job_store: Any | None = None,
+    job_id: str | None = None,
 ) -> None:
     """Run a prompt through the assistant and send the response as a notification.
 
@@ -85,3 +92,7 @@ async def run_assistant_job(
     except Exception:
         logger.exception("Error running assistant job")
         await dispatcher.send(f"Scheduled task failed for prompt: {prompt}")
+    finally:
+        if job_store and job_id:
+            job_store.delete(job_id)
+            logger.debug("Cleaned up one-time job %s from store", job_id)
