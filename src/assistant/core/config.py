@@ -104,6 +104,13 @@ class Settings(BaseSettings):
     webhook_enabled: bool = False
     webhook_secret: str = ""
 
+    # Slack
+    slack_enabled: bool = False
+    slack_bot_token: str = Field(default="", validation_alias="SLACK_BOT_TOKEN")
+    slack_app_token: str = Field(default="", validation_alias="SLACK_APP_TOKEN")
+    slack_allowed_user_ids_raw: str = Field(default="", validation_alias="ASSISTANT_SLACK_ALLOWED_USER_IDS")
+    slack_allowed_channel_ids_raw: str = Field(default="", validation_alias="ASSISTANT_SLACK_ALLOWED_CHANNEL_IDS")
+
     # WhatsApp
     whatsapp_enabled: bool = False
     whatsapp_allowed_numbers_raw: str = Field(default="", validation_alias="ASSISTANT_WHATSAPP_ALLOWED_NUMBERS")
@@ -173,6 +180,20 @@ class Settings(BaseSettings):
     @property
     def watchdog_paths(self) -> list[str]:
         raw = self.watchdog_paths_raw.strip()
+        if not raw:
+            return []
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def slack_allowed_user_ids(self) -> list[str]:
+        raw = self.slack_allowed_user_ids_raw.strip()
+        if not raw:
+            return []
+        return [x.strip() for x in raw.split(",") if x.strip()]
+
+    @property
+    def slack_allowed_channel_ids(self) -> list[str]:
+        raw = self.slack_allowed_channel_ids_raw.strip()
         if not raw:
             return []
         return [x.strip() for x in raw.split(",") if x.strip()]

@@ -197,9 +197,35 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                     await whatsapp_bot.send_message(num, msg)
                 dispatcher.register(wa_sink)
 
+    # Start Slack bot if enabled
+    slack_bot = None
+    if settings.slack_enabled and settings.slack_bot_token and settings.slack_app_token:
+        from assistant.slack.bot import SlackBot
+
+        slack_bot = SlackBot(
+            bot_token=settings.slack_bot_token,
+            app_token=settings.slack_app_token,
+            chat_interface=chat_interface,
+            allowed_user_ids=settings.slack_allowed_user_ids,
+            allowed_channel_ids=settings.slack_allowed_channel_ids,
+            scheduler_manager=scheduler_manager,
+            file_monitor=file_monitor,
+        )
+        await slack_bot.start()
+        app.state.slack_bot = slack_bot
+
+        # Register Slack as notification sink for allowed channels
+        if settings.slack_allowed_channel_ids:
+            for channel_id in settings.slack_allowed_channel_ids:
+                async def slack_sink(msg: str, ch=channel_id) -> None:
+                    await slack_bot.send_message(ch, msg)
+                dispatcher.register(slack_sink)
+
     yield
 
     # Shutdown
+    if slack_bot:
+        await slack_bot.stop()
     if whatsapp_bot:
         await whatsapp_bot.stop()
     if telegram_bot:

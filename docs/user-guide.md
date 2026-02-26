@@ -26,18 +26,19 @@ A personal AI assistant with multi-provider LLM support, streaming CLI, tool use
 18. [Vector Search](#vector-search)
 19. [Telegram Bot](#telegram-bot)
 20. [WhatsApp Bot](#whatsapp-bot)
-21. [Scheduler](#scheduler)
-22. [File Monitoring](#file-monitoring)
-23. [Workflows](#workflows)
-24. [Webhooks](#webhooks)
-25. [Do Not Disturb](#do-not-disturb)
-26. [Backups](#backups)
-27. [Security](#security)
-28. [API Server](#api-server)
-29. [Docker](#docker)
-30. [Configuration Reference](#configuration-reference)
-31. [Directory Structure](#directory-structure)
-32. [Troubleshooting](#troubleshooting)
+21. [Slack Bot](#slack-bot)
+22. [Scheduler](#scheduler)
+23. [File Monitoring](#file-monitoring)
+24. [Workflows](#workflows)
+25. [Webhooks](#webhooks)
+26. [Do Not Disturb](#do-not-disturb)
+27. [Backups](#backups)
+28. [Security](#security)
+29. [API Server](#api-server)
+30. [Docker](#docker)
+31. [Configuration Reference](#configuration-reference)
+32. [Directory Structure](#directory-structure)
+33. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -871,6 +872,40 @@ The session persists in `data/whatsapp_auth/`, so you only need to scan the QR c
 
 ---
 
+## Slack Bot
+
+Chat with the assistant from Slack using Socket Mode (WebSocket connection, no public URL needed). Supports tool approval via Block Kit interactive buttons.
+
+### Setup
+
+1. Create a Slack app at [api.slack.com/apps](https://api.slack.com/apps)
+2. Enable **Socket Mode** and generate an App-Level Token (`xapp-...`)
+3. Add Bot Token Scopes: `chat:write`, `app_mentions:read`, `im:history`, `im:read`, `im:write`
+4. Subscribe to bot events: `message.im` (direct messages)
+5. Install the app to your workspace and copy the Bot Token (`xoxb-...`)
+
+### Configuration
+
+```bash
+ASSISTANT_SLACK_ENABLED=true
+SLACK_BOT_TOKEN=xoxb-your-bot-token
+SLACK_APP_TOKEN=xapp-your-app-token
+ASSISTANT_SLACK_ALLOWED_USER_IDS=U01ABC123,U02DEF456
+ASSISTANT_SLACK_ALLOWED_CHANNEL_IDS=
+```
+
+### Usage
+
+DM the bot in Slack or invite it to a channel. When a tool requires approval, the bot sends a Block Kit message with **Approve** / **Deny** buttons. Background task results are delivered to the channel where the request originated.
+
+### Access Control
+
+- `ASSISTANT_SLACK_ALLOWED_USER_IDS` — comma-separated Slack user IDs (e.g. `U01ABC123`)
+- `ASSISTANT_SLACK_ALLOWED_CHANNEL_IDS` — comma-separated channel IDs (e.g. `C01XYZ789`)
+- If either list is empty, that dimension is unrestricted
+
+---
+
 ## Scheduler
 
 Schedule reminders and automated tasks using natural language or the API.
@@ -1170,6 +1205,16 @@ No API key settings — uses the standard AWS credential chain (AWS_PROFILE, ~/.
 | `ASSISTANT_WHATSAPP_ENABLED` | `false` | Enable WhatsApp bot |
 | `ASSISTANT_WHATSAPP_ALLOWED_NUMBERS` | `""` | Comma-separated E.164 numbers |
 | `ASSISTANT_WHATSAPP_SESSION_NAME` | `assistant` | Session name |
+
+### Slack
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_SLACK_ENABLED` | `false` | Enable Slack bot |
+| `SLACK_BOT_TOKEN` | `""` | Bot token (no prefix) |
+| `SLACK_APP_TOKEN` | `""` | App-level token for Socket Mode (no prefix) |
+| `ASSISTANT_SLACK_ALLOWED_USER_IDS` | `""` | Comma-separated Slack user IDs |
+| `ASSISTANT_SLACK_ALLOWED_CHANNEL_IDS` | `""` | Comma-separated channel IDs |
 
 ### Scheduler
 

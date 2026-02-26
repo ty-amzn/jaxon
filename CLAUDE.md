@@ -12,7 +12,7 @@ uv run pytest           # run tests
 ```
 
 ## Architecture
-Single-user personal AI assistant with multi-provider LLM support (Claude, OpenAI, Gemini, Ollama, AWS Bedrock), streaming CLI (Rich + prompt_toolkit), tool use with permission gates, persistent memory, agent delegation, and first-run onboarding.
+Single-user personal AI assistant with multi-provider LLM support (Claude, OpenAI, Gemini, Ollama, AWS Bedrock), streaming CLI (Rich + prompt_toolkit), tool use with permission gates, persistent memory, agent delegation, messaging integrations (Telegram, WhatsApp, Slack), and first-run onboarding.
 
 ### Key Directories
 - `src/assistant/` — all source code
@@ -61,6 +61,7 @@ All 12 steps implemented:
 ## Phase 3 (Integrations) — COMPLETE
 - Telegram bot (`telegram/bot.py`)
 - WhatsApp bot (`whatsapp/bot.py`) — neonize linked-device QR pairing
+- Slack bot (`slack/bot.py`) — Socket Mode (WebSocket, no public URL needed), Block Kit approval buttons
 - APScheduler automations (`scheduler/`)
 - Watchdog file monitoring (`watchdog_monitor/monitor.py`)
 - Notification dispatcher (`core/notifications.py`)
