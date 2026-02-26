@@ -51,6 +51,11 @@ class Settings(BaseSettings):
     gemini_enabled: bool = False
     gemini_model: str = "gemini-2.0-flash"
 
+    # AWS Bedrock (uses boto3 credential chain — AWS_PROFILE, IAM roles, etc.)
+    bedrock_enabled: bool = False
+    bedrock_region: str = "us-east-1"
+    bedrock_model: str = "us.anthropic.claude-sonnet-4-20250514-v1:0"
+
     # Ollama (Phase 2)
     ollama_enabled: bool = False
     ollama_base_url: str = "http://localhost:11434"

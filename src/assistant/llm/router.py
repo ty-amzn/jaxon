@@ -9,6 +9,7 @@ from typing import Any
 
 from assistant.core.config import Settings
 from assistant.llm.base import BaseLLMClient, ToolExecutor
+from assistant.llm.bedrock import BedrockClient
 from assistant.llm.client import ClaudeClient
 from assistant.llm.gemini import GeminiClient
 from assistant.llm.ollama import OllamaClient
@@ -39,6 +40,7 @@ class LLMRouter(BaseLLMClient):
         self._ollama_client: OllamaClient | None = None
         self._openai_client: OpenAIClient | None = None
         self._gemini_client: GeminiClient | None = None
+        self._bedrock_client: BedrockClient | None = None
         self._ollama_available: bool | None = None
         self._model_clients: dict[str, BaseLLMClient] = {}
 
@@ -100,6 +102,18 @@ class LLMRouter(BaseLLMClient):
             self._gemini_client = GeminiClient(config)
         return self._gemini_client
 
+    def _get_bedrock_client(self) -> BedrockClient:
+        """Get or create Bedrock client."""
+        if self._bedrock_client is None:
+            config = LLMConfig(
+                provider=Provider.BEDROCK,
+                model=self._settings.bedrock_model,
+                max_tokens=self._settings.max_tokens,
+                region=self._settings.bedrock_region,
+            )
+            self._bedrock_client = BedrockClient(config)
+        return self._bedrock_client
+
     async def _check_ollama_available(self) -> bool:
         """Check if Ollama is available (cached)."""
         if self._ollama_available is None:
@@ -158,6 +172,12 @@ class LLMRouter(BaseLLMClient):
                 Provider.GEMINI,
                 self._settings.gemini_model,
             )
+        if default == "bedrock" and self._settings.bedrock_enabled:
+            return (
+                self._get_bedrock_client(),
+                Provider.BEDROCK,
+                self._settings.bedrock_model,
+            )
         if default == "ollama" and self._settings.ollama_enabled:
             return (
                 self._get_ollama_client(),
@@ -213,6 +233,8 @@ class LLMRouter(BaseLLMClient):
             return True
         if self._settings.gemini_enabled and self._settings.gemini_api_key:
             return True
+        if self._settings.bedrock_enabled:
+            return True
         return await self._check_ollama_available()
 
     @staticmethod
@@ -233,6 +255,7 @@ class LLMRouter(BaseLLMClient):
             (self._get_claude_client, Provider.CLAUDE, self._settings.model, bool(self._settings.anthropic_api_key)),
             (self._get_openai_client, Provider.OPENAI, self._settings.openai_model, self._settings.openai_enabled and bool(self._settings.openai_api_key)),
             (self._get_gemini_client, Provider.GEMINI, self._settings.gemini_model, self._settings.gemini_enabled and bool(self._settings.gemini_api_key)),
+            (self._get_bedrock_client, Provider.BEDROCK, self._settings.bedrock_model, self._settings.bedrock_enabled),
         ]
         for factory, prov, model, available in candidates:
             if prov != current_provider and available:
@@ -353,6 +376,7 @@ class LLMRouter(BaseLLMClient):
         "openai": Provider.OPENAI,
         "gemini": Provider.GEMINI,
         "ollama": Provider.OLLAMA,
+        "bedrock": Provider.BEDROCK,
     }
 
     def get_client_for_model(self, model: str) -> BaseLLMClient:
@@ -398,6 +422,14 @@ class LLMRouter(BaseLLMClient):
                 api_key=self._settings.gemini_api_key,
             )
             client = GeminiClient(config)
+        elif provider == Provider.BEDROCK:
+            config = LLMConfig(
+                provider=Provider.BEDROCK,
+                model=model_name,
+                max_tokens=self._settings.max_tokens,
+                region=self._settings.bedrock_region,
+            )
+            client = BedrockClient(config)
         elif provider == Provider.OLLAMA:
             config = LLMConfig(
                 provider=Provider.OLLAMA,
@@ -434,6 +466,8 @@ class LLMRouter(BaseLLMClient):
             await self._openai_client.close()
         if self._gemini_client:
             await self._gemini_client.close()
+        if self._bedrock_client:
+            await self._bedrock_client.close()
         for client in self._model_clients.values():
             await client.close()
         self._model_clients.clear()

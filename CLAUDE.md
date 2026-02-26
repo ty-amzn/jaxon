@@ -12,7 +12,7 @@ uv run pytest           # run tests
 ```
 
 ## Architecture
-Single-user personal AI assistant with multi-provider LLM support (Claude, OpenAI, Gemini, Ollama), streaming CLI (Rich + prompt_toolkit), tool use with permission gates, persistent memory, agent delegation, and first-run onboarding.
+Single-user personal AI assistant with multi-provider LLM support (Claude, OpenAI, Gemini, Ollama, AWS Bedrock), streaming CLI (Rich + prompt_toolkit), tool use with permission gates, persistent memory, agent delegation, and first-run onboarding.
 
 ### Key Directories
 - `src/assistant/` — all source code
@@ -28,7 +28,7 @@ Single-user personal AI assistant with multi-provider LLM support (Claude, OpenA
   - `db/` — SQLite FTS5 search index, embeddings, scheduler
 
 ### Data Flow
-User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills + identity) → LLMRouter → Claude/OpenAI/Gemini/OllamaClient → Rich Live rendering → save to daily log + FTS5 + embeddings
+User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills + identity) → LLMRouter → Claude/OpenAI/Gemini/Ollama/BedrockClient → Rich Live rendering → save to daily log + FTS5 + embeddings
 
 ### Config
 - `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY` — no prefix, read via `validation_alias`
@@ -73,7 +73,7 @@ All 12 steps implemented:
 5. Config backup/restore — `/backup` command
 
 ## Phase 5 (Agentic Features) — COMPLETE
-1. Multi-provider LLM — OpenAI, Gemini via `llm/openai_compat.py`, `llm/openai_client.py`, `llm/gemini.py`
+1. Multi-provider LLM — OpenAI, Gemini, Bedrock via `llm/openai_compat.py`, `llm/openai_client.py`, `llm/gemini.py`, `llm/bedrock.py`
 2. Configurable `max_tool_rounds` — `ASSISTANT_MAX_TOOL_ROUNDS`, per-agent override in YAML
 3. Graceful summary on tool limit — final LLM call without tools to summarize progress
 4. `/clear` command — clear session, history, memory, search, or all

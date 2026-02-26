@@ -381,6 +381,7 @@ Supported provider prefixes:
 | `openai/` | OpenAI | `openai/gpt-4o` |
 | `gemini/` | Google Gemini | `gemini/gemini-2.0-flash` |
 | `ollama/` | Ollama (local) | `ollama/llama3` |
+| `bedrock/` | AWS Bedrock | `bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0` |
 
 If `model` is empty or omitted, the agent uses the default provider. If you omit the `provider/` prefix, the configured default provider is used with the given model name.
 
@@ -688,7 +689,7 @@ The assistant has a configurable maximum number of tool calls per response (`ASS
 The assistant supports multiple LLM providers. Configure your preferred default:
 
 ```bash
-ASSISTANT_DEFAULT_PROVIDER=claude   # claude | openai | gemini | ollama
+ASSISTANT_DEFAULT_PROVIDER=claude   # claude | openai | gemini | ollama | bedrock
 ```
 
 ### OpenAI
@@ -706,6 +707,21 @@ GEMINI_API_KEY=your-key
 ASSISTANT_GEMINI_ENABLED=true
 ASSISTANT_GEMINI_MODEL=gemini-2.0-flash
 ```
+
+### AWS Bedrock
+
+Uses the native Converse API with boto3. Auth via standard AWS credential chain (AWS_PROFILE, IAM roles, env vars) — no API key needed.
+
+```bash
+ASSISTANT_BEDROCK_ENABLED=true
+ASSISTANT_BEDROCK_REGION=us-east-1
+ASSISTANT_BEDROCK_MODEL=us.anthropic.claude-sonnet-4-20250514-v1:0
+```
+
+Configure AWS credentials the usual way:
+- `AWS_PROFILE` environment variable
+- `~/.aws/credentials` file
+- IAM instance roles (EC2/ECS/Lambda)
 
 ### Smart Routing
 
@@ -1087,6 +1103,16 @@ All settings can be set in `.env`. Settings use the `ASSISTANT_` prefix unless n
 | `ASSISTANT_MAX_TOOL_ROUNDS` | `10` | Max tool calls per LLM response |
 | `ASSISTANT_AUTO_APPROVE_READS` | `true` | Auto-approve read operations |
 | `ASSISTANT_DEFAULT_PROVIDER` | `claude` | Default LLM provider |
+
+### AWS Bedrock
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_BEDROCK_ENABLED` | `false` | Enable Bedrock provider |
+| `ASSISTANT_BEDROCK_REGION` | `us-east-1` | AWS region |
+| `ASSISTANT_BEDROCK_MODEL` | `us.anthropic.claude-sonnet-4-20250514-v1:0` | Bedrock model ID |
+
+No API key settings — uses the standard AWS credential chain (AWS_PROFILE, ~/.aws/credentials, IAM roles).
 
 ### OpenAI
 

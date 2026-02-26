@@ -17,6 +17,7 @@ class Provider(str, Enum):
     OLLAMA = "ollama"
     OPENAI = "openai"
     GEMINI = "gemini"
+    BEDROCK = "bedrock"
 
 
 @dataclass
@@ -80,3 +81,4 @@ class LLMConfig:
     max_tokens: int = 8192
     base_url: str = ""  # For Ollama
     api_key: str = ""  # For Claude
+    region: str = ""  # For Bedrock

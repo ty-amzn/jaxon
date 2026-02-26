@@ -99,7 +99,7 @@ ANTHROPIC_API_KEY=your-key
 ASSISTANT_MODEL=claude-sonnet-4-20250514
 ASSISTANT_MAX_TOKENS=8192
 ASSISTANT_DATA_DIR=./data
-ASSISTANT_DEFAULT_PROVIDER=claude      # claude | openai | gemini | ollama
+ASSISTANT_DEFAULT_PROVIDER=claude      # claude | openai | gemini | ollama | bedrock
 ASSISTANT_MAX_TOOL_ROUNDS=10
 ```
 
@@ -112,6 +112,14 @@ ASSISTANT_OPENAI_MODEL=gpt-4o
 GEMINI_API_KEY=
 ASSISTANT_GEMINI_ENABLED=false
 ASSISTANT_GEMINI_MODEL=gemini-2.0-flash
+```
+
+### AWS Bedrock
+```bash
+ASSISTANT_BEDROCK_ENABLED=false
+ASSISTANT_BEDROCK_REGION=us-east-1
+ASSISTANT_BEDROCK_MODEL=us.anthropic.claude-sonnet-4-20250514-v1:0
+# Auth via AWS credential chain (AWS_PROFILE, ~/.aws/credentials, IAM roles)
 ```
 
 ### Ollama (Local LLM)
@@ -183,7 +191,7 @@ model: openai/gpt-4o          # optional — provider/model syntax
 max_tool_rounds: 50
 ```
 
-Model providers: `claude/`, `openai/`, `gemini/`, `ollama/`. Omit for default.
+Model providers: `claude/`, `openai/`, `gemini/`, `ollama/`, `bedrock/`. Omit for default.
 
 ## Plugin (Python)
 
