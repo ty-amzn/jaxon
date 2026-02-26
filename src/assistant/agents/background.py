@@ -17,10 +17,18 @@ from assistant.gateway.permissions import PermissionRequest
 # Type alias for delivery callbacks (channel → user message sender)
 DeliveryCallback = Callable[[str], Awaitable[None]]
 
+# Review delivery: takes (raw_result, agent_name), routes through main agent
+ReviewDeliveryCallback = Callable[[str, str], Awaitable[None]]
+
 # ContextVar carries the channel's delivery callback into tool handlers.
 # Each asyncio task gets its own copy — no race conditions.
 current_delivery: ContextVar[DeliveryCallback | None] = ContextVar(
     "current_delivery", default=None
+)
+
+# ContextVar for review delivery callback (routes results through main agent).
+current_review_delivery: ContextVar[ReviewDeliveryCallback | None] = ContextVar(
+    "current_review_delivery", default=None
 )
 
 # ContextVar carries the current turn's images so delegation tools can
@@ -51,6 +59,7 @@ class BackgroundTask:
     error: str = ""
     silent: bool = False
     _deliver: DeliveryCallback | None = field(default=None, repr=False)
+    _review_deliver: ReviewDeliveryCallback | None = field(default=None, repr=False)
     _asyncio_task: asyncio.Task | None = field(default=None, repr=False)
 
 
@@ -76,6 +85,7 @@ class BackgroundTaskManager:
         agent_name: str,
         task_description: str,
         deliver: DeliveryCallback | None = None,
+        review_deliver: ReviewDeliveryCallback | None = None,
         silent: bool = False,
     ) -> BackgroundTask:
         """Create a new background task with an 8-char hex ID."""
@@ -86,6 +96,7 @@ class BackgroundTaskManager:
             task_description=task_description,
             silent=silent,
             _deliver=deliver,
+            _review_deliver=review_deliver,
         )
         # Evict oldest if at capacity
         if len(self._order) >= self._maxlen:

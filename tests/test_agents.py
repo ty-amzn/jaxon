@@ -14,6 +14,7 @@ from assistant.agents.background import (
     TaskStatus,
     _auto_approve,
     current_delivery,
+    current_review_delivery,
 )
 from assistant.agents.types import AgentDef, AgentResult
 from assistant.agents.loader import AgentLoader
@@ -500,7 +501,6 @@ class TestBackgroundDelegation:
             current_delivery.reset(token)
 
         assert len(delivered) == 1
-        assert "completed" in delivered[0]
         assert "Research result" in delivered[0]
 
     @pytest.mark.asyncio
@@ -533,6 +533,97 @@ class TestBackgroundDelegation:
         defs = bg_orchestrator.get_tool_definitions()
         delegate_def = next(d for d in defs if d["name"] == "delegate_to_agent")
         assert "background" in delegate_def["input_schema"]["properties"]
+
+    @pytest.mark.asyncio
+    async def test_background_uses_review_delivery(self, bg_orchestrator):
+        """When review delivery is set, results route through it instead of direct delivery."""
+        reviewed = []
+        direct = []
+
+        async def mock_review(raw_result: str, agent_name: str) -> None:
+            reviewed.append((raw_result, agent_name))
+
+        async def mock_direct(text: str) -> None:
+            direct.append(text)
+
+        token_d = current_delivery.set(mock_direct)
+        token_r = current_review_delivery.set(mock_review)
+        try:
+            handlers = bg_orchestrator.get_tool_handlers()
+            await handlers["delegate_to_agent"]({
+                "agent_name": "researcher",
+                "task": "Find papers",
+                "background": True,
+            })
+            await asyncio.sleep(0.5)
+        finally:
+            current_delivery.reset(token_d)
+            current_review_delivery.reset(token_r)
+
+        # Review delivery was used, not direct
+        assert len(reviewed) == 1
+        assert "Research result" in reviewed[0][0]
+        assert reviewed[0][1] == "researcher"
+        assert len(direct) == 0
+
+    @pytest.mark.asyncio
+    async def test_review_delivery_fallback_on_error(self, bg_orchestrator):
+        """If review delivery fails, falls back to direct delivery."""
+        direct = []
+
+        async def failing_review(raw_result: str, agent_name: str) -> None:
+            raise RuntimeError("review failed")
+
+        async def mock_direct(text: str) -> None:
+            direct.append(text)
+
+        token_d = current_delivery.set(mock_direct)
+        token_r = current_review_delivery.set(failing_review)
+        try:
+            handlers = bg_orchestrator.get_tool_handlers()
+            await handlers["delegate_to_agent"]({
+                "agent_name": "researcher",
+                "task": "Find papers",
+                "background": True,
+            })
+            await asyncio.sleep(0.5)
+        finally:
+            current_delivery.reset(token_d)
+            current_review_delivery.reset(token_r)
+
+        # Fell back to direct delivery
+        assert len(direct) == 1
+        assert "Research result" in direct[0]
+
+    @pytest.mark.asyncio
+    async def test_silent_skips_review_delivery(self, bg_orchestrator):
+        """Silent tasks skip both review and direct delivery."""
+        reviewed = []
+        direct = []
+
+        async def mock_review(raw_result: str, agent_name: str) -> None:
+            reviewed.append(raw_result)
+
+        async def mock_direct(text: str) -> None:
+            direct.append(text)
+
+        token_d = current_delivery.set(mock_direct)
+        token_r = current_review_delivery.set(mock_review)
+        try:
+            handlers = bg_orchestrator.get_tool_handlers()
+            await handlers["delegate_to_agent"]({
+                "agent_name": "researcher",
+                "task": "Find papers",
+                "background": True,
+                "silent": True,
+            })
+            await asyncio.sleep(0.5)
+        finally:
+            current_delivery.reset(token_d)
+            current_review_delivery.reset(token_r)
+
+        assert len(reviewed) == 0
+        assert len(direct) == 0
 
     @pytest.mark.asyncio
     async def test_foreground_still_works(self, bg_orchestrator):

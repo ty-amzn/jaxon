@@ -18,6 +18,7 @@ from assistant.agents.background import (
     _auto_approve,
     current_delivery,
     current_images,
+    current_review_delivery,
 )
 from assistant.agents.loader import AgentLoader
 from assistant.agents.runner import AgentRunner
@@ -213,6 +214,27 @@ class Orchestrator:
             })
         return content
 
+    @staticmethod
+    async def _deliver_result(bt: Any, response: str) -> None:
+        """Deliver a background task result, preferring review delivery.
+
+        If _review_deliver is set, route through the main agent for
+        summarization. Falls back to direct _deliver on failure or if
+        _review_deliver is not available.
+        """
+        if bt._review_deliver:
+            try:
+                await bt._review_deliver(response, bt.agent_name)
+                return
+            except Exception:
+                logger.exception(
+                    "Review delivery failed for task %s, falling back to direct",
+                    bt.id,
+                )
+        # Fallback to direct delivery
+        if bt._deliver:
+            await bt._deliver(response)
+
     async def _run_background(
         self,
         bt: Any,  # BackgroundTask
@@ -233,7 +255,7 @@ class Orchestrator:
                 bt.error = f"Agent '{agent_name}' not found."
                 bt.finished_at = time.time()
                 if bt._deliver:
-                    await bt._deliver(f"Background task {bt.id} failed: {bt.error}")
+                    await bt._deliver(f"Something went wrong — agent '{agent_name}' not found.")
                 return
 
             base_prompt = self._memory.get_system_prompt(
@@ -254,16 +276,14 @@ class Orchestrator:
                 bt.finished_at = time.time()
                 if bt._deliver:
                     await bt._deliver(
-                        f"Background task {bt.id} ({agent_name}) failed:\n{result.error}"
+                        f"Ran into an issue with that — {result.error}"
                     )
             else:
                 bt.status = TaskStatus.DONE
                 bt.result = result.response
                 bt.finished_at = time.time()
-                if bt._deliver and not bt.silent:
-                    await bt._deliver(
-                        f"Background task {bt.id} ({agent_name}) completed:\n\n{result.response}"
-                    )
+                if not bt.silent:
+                    await self._deliver_result(bt, result.response)
         except asyncio.CancelledError:
             logger.info("Background task %s cancelled", bt.id)
             bt.status = TaskStatus.CANCELLED
@@ -276,7 +296,7 @@ class Orchestrator:
             if bt._deliver:
                 try:
                     await bt._deliver(
-                        f"Background task {bt.id} ({agent_name}) error:\n{e}"
+                        f"Ran into an issue with that — {e}"
                     )
                 except Exception:
                     logger.exception("Failed to deliver background task error")
@@ -449,10 +469,12 @@ class Orchestrator:
                 # Background path: fire-and-forget
                 silent = params.get("silent", False)
                 deliver = current_delivery.get()
+                review_deliver = current_review_delivery.get()
                 bt = self._bg_manager.create(
                     agent_name=params["agent_name"],
                     task_description=params["task"],
                     deliver=deliver,
+                    review_deliver=review_deliver,
                     silent=silent,
                 )
                 bt._asyncio_task = asyncio.create_task(

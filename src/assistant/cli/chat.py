@@ -218,8 +218,13 @@ class ChatInterface:
                      @image: parsing and uses this directly as message content.
         """
         # Set delivery callback for background tasks
-        from assistant.agents.background import current_delivery, current_images
+        from assistant.agents.background import current_delivery, current_images, current_review_delivery
         token = current_delivery.set(delivery_callback)
+
+        # Build review delivery that routes results through the main agent
+        session_id = session.id
+        review_cb = self._make_review_delivery(session_id, delivery_callback)
+        review_token = current_review_delivery.set(review_cb)
 
         async with session.lock:
             # Dispatch pre_message hook
@@ -347,6 +352,7 @@ class ChatInterface:
                 )
 
             current_delivery.reset(token)
+            current_review_delivery.reset(review_token)
             current_images.reset(images_token)
             return full_response
 
@@ -405,11 +411,54 @@ class ChatInterface:
         self._console.print()
         self._console.print(Markdown(text))
 
+    def _make_review_delivery(
+        self,
+        session_id: str,
+        direct_deliver: Any = None,
+    ) -> Any:
+        """Build a review delivery callback that routes results through the main agent.
+
+        The main agent sees the raw result and can summarize, email long
+        reports, or choose the best delivery channel.  Falls back to
+        *direct_deliver* if review fails.
+        """
+
+        async def _review(raw_result: str, agent_name: str) -> None:
+            synthetic = (
+                f'[Background research from agent "{agent_name}" is complete. '
+                f"Here is the raw output:]\n\n"
+                f"{raw_result}\n\n"
+                "[Deliver this result to the user. You decide how:\n"
+                "- SHORT results (a few sentences, a quick answer): just reply "
+                "here with the summary — it will be sent as a chat message.\n"
+                "- LONG results (detailed reports, multi-section research, large "
+                "tables): use send_email to deliver the full report, then reply "
+                "here with a one-line summary like \"Emailed you the full "
+                "report on X.\"\n"
+                "Always reply with something so the user knows the task finished.]"
+            )
+            response = await self.get_response(
+                session_id,
+                synthetic,
+                delivery_callback=direct_deliver,
+            )
+            # get_response returns the text but doesn't deliver it —
+            # the caller normally does that.  We must deliver explicitly.
+            if response and direct_deliver:
+                await direct_deliver(response)
+
+        return _review
+
     async def handle_message(self, user_input: str) -> str:
         """Process a user message with Rich Live rendering."""
         # Set delivery callback for background tasks
-        from assistant.agents.background import current_delivery, current_images
+        from assistant.agents.background import current_delivery, current_images, current_review_delivery
         token = current_delivery.set(self._cli_delivery)
+
+        # Review delivery routes results through main agent for summarization
+        cli_session = self._session_manager.active_session
+        review_cb = self._make_review_delivery(cli_session.id, self._cli_delivery)
+        review_token = current_review_delivery.set(review_cb)
 
         # Parse @image: references
         clean_text, image_paths = self._media_handler.parse_image_reference(user_input)
@@ -490,6 +539,7 @@ class ChatInterface:
 
         self._active_live = None
         current_delivery.reset(token)
+        current_review_delivery.reset(review_token)
         current_images.reset(images_token)
 
         # Print final rendered response
