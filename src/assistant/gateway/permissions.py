@@ -228,6 +228,20 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Weather: {tool_input.get('location', '')}",
             )
+        elif tool_name == "finance":
+            action = tool_input.get("action", "stock")
+            if action == "stock":
+                desc = f"Stock: {tool_input.get('symbol', '')}"
+            elif action == "crypto":
+                desc = f"Crypto: {tool_input.get('coin', '')}"
+            else:
+                desc = f"Currency: {tool_input.get('amount', '')} {tool_input.get('from', 'USD')} → {tool_input.get('to', 'EUR')}"
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=desc,
+            )
         elif tool_name == "read_output_page":
             return PermissionRequest(
                 tool_name=tool_name,

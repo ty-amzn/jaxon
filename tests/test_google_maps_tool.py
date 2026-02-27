@@ -246,8 +246,10 @@ async def test_unknown_action():
 
 
 @pytest.mark.asyncio
-async def test_config_defaults():
+async def test_config_defaults(monkeypatch):
+    monkeypatch.delenv("ASSISTANT_GOOGLE_MAPS_ENABLED", raising=False)
+    monkeypatch.delenv("GOOGLE_MAPS_API_KEY", raising=False)
     from assistant.core.config import Settings
-    s = Settings()
+    s = Settings(_env_file=None)
     assert s.google_maps_enabled is False
     assert s.google_maps_api_key == ""

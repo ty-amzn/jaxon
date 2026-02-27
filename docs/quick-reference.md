@@ -91,6 +91,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `youtube_search` | Yes |
 | `reddit_search` | Yes |
 | `google_maps` | Yes |
+| `finance` | Yes |
 
 ## Configuration (`.env`)
 

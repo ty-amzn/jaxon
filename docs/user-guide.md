@@ -649,6 +649,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `youtube_search` | Search YouTube, get video info, or extract transcripts | Auto-approved (if enabled) |
 | `reddit_search` | Search Reddit, browse subreddits, or read posts | Auto-approved (if enabled) |
 | `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
+| `finance` | Stock quotes, crypto prices, and currency conversion | Auto-approved |
 
 ### Browser Automation
 
