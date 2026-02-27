@@ -272,6 +272,14 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Reddit {action}: {tool_input.get('query', '')}",
             )
+        elif tool_name == "google_maps":
+            action = tool_input.get("action", "directions")
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Maps {action}: {tool_input.get('query', tool_input.get('origin', ''))}",
+            )
         elif tool_name == "schedule_reminder":
             action = tool_input.get("action", "create")
             if action == "list":

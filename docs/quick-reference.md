@@ -90,6 +90,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `browse_web` (click/fill) | No |
 | `youtube_search` | Yes |
 | `reddit_search` | Yes |
+| `google_maps` | Yes |
 
 ## Configuration (`.env`)
 
@@ -128,6 +129,12 @@ ASSISTANT_OLLAMA_ENABLED=false
 ASSISTANT_OLLAMA_BASE_URL=http://localhost:11434
 ASSISTANT_OLLAMA_MODEL=llama3.2
 ASSISTANT_LOCAL_MODEL_THRESHOLD_TOKENS=1000
+```
+
+### Google Maps
+```bash
+ASSISTANT_GOOGLE_MAPS_ENABLED=false
+GOOGLE_MAPS_API_KEY=your-key
 ```
 
 ### Search

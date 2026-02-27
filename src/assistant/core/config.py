@@ -137,6 +137,10 @@ class Settings(BaseSettings):
     # Reddit
     reddit_enabled: bool = False
 
+    # Google Maps
+    google_maps_enabled: bool = False
+    google_maps_api_key: str = Field(default="", validation_alias="GOOGLE_MAPS_API_KEY")
+
     # Tool output pagination
     tool_output_cap: int = 15_000
 

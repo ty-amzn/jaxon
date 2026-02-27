@@ -648,6 +648,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `browse_web` | Browse JS-heavy pages with Playwright | extract/screenshot/evaluate auto-approved; click/fill require approval |
 | `youtube_search` | Search YouTube, get video info, or extract transcripts | Auto-approved (if enabled) |
 | `reddit_search` | Search Reddit, browse subreddits, or read posts | Auto-approved (if enabled) |
+| `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
 
 ### Browser Automation
 
