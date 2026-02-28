@@ -15,6 +15,57 @@ logger = logging.getLogger(__name__)
 feed_router = APIRouter(prefix="/feed", tags=["feed"])
 
 
+async def _generate_agent_reply(request: Request, parent: dict, user_reply: str) -> str:
+    """Generate a feed reply using the original agent's persona."""
+    chat_interface = request.app.state.chat_interface
+    author = parent["author"]
+
+    # Try to load the agent's persona from YAML definitions
+    agent_persona = ""
+    # Map "assistant" back to "jax" for agent lookup
+    agent_key = "jax" if author == "assistant" else author
+    orchestrator = getattr(chat_interface, "_orchestrator", None)
+    if orchestrator:
+        loader = getattr(orchestrator, "_loader", None)
+        if loader:
+            agent_def = loader.get_agent(agent_key)
+            if agent_def and agent_def.system_prompt:
+                agent_persona = agent_def.system_prompt
+
+    # Build system prompt with the agent's own voice
+    if agent_persona:
+        system = (
+            f"# Agent Role: {agent_key}\n\n{agent_persona}\n\n---\n\n"
+            f"You are replying in a feed thread. Keep replies concise — "
+            f"1-2 sentences, tweet-style. Stay in character."
+        )
+    else:
+        system = (
+            f"You are {author}. You are replying in a feed thread. "
+            f"Keep replies concise — 1-2 sentences, tweet-style."
+        )
+
+    # Direct LLM call — lightweight, no tools needed
+    from assistant.llm.types import StreamEventType
+
+    llm = chat_interface._llm
+    messages = [
+        {
+            "role": "user",
+            "content": (
+                f"Your original post was:\n\"{parent['content']}\"\n\n"
+                f"Ty replied: \"{user_reply}\"\n\n"
+                f"Write your reply."
+            ),
+        }
+    ]
+    full_text = ""
+    async for event in llm.stream_with_tool_loop(system=system, messages=messages):
+        if event.type == StreamEventType.TEXT_DELTA:
+            full_text += event.text
+    return full_text
+
+
 class CreatePostBody(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
     reply_to: int | None = None
@@ -146,26 +197,14 @@ async def create_post(request: Request, body: CreatePostBody):
 
     result = {"post": user_post}
 
-    # If replying to a non-user post, generate an agent response
+    # If replying to a non-user post, generate a response from that agent
     if body.reply_to is not None:
         parent = store.get_post(body.reply_to)
         if parent and parent["author"] != "user":
             try:
-                chat_interface = request.app.state.chat_interface
-                # Build a synthetic prompt with context
-                synthetic = (
-                    f"You are replying in a feed thread. "
-                    f"The original post by @{parent['author']} was:\n"
-                    f'"{parent["content"]}"\n\n'
-                    f'The user replied: "{body.content}"\n\n'
-                    f"Respond concisely in 1-2 sentences, like a tweet-length reply."
-                )
-                agent_text = await chat_interface.get_response(
-                    session_id=f"feed-{body.reply_to}",
-                    user_input=synthetic,
-                )
+                agent_text = await _generate_agent_reply(request, parent, body.content)
                 agent_reply = store.create_post(
-                    author="assistant",
+                    author=parent["author"],
                     content=agent_text.strip(),
                     reply_to=body.reply_to,
                     feed_id=feed_id,

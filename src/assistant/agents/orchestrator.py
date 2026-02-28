@@ -78,6 +78,7 @@ class Orchestrator:
         try:
             base_prompt = self._memory.get_system_prompt(
                 skill_names=agent.allowed_skills,
+                include_identity=False,
             )
             return await self._runner.run(
                 agent, task, context=context,
@@ -264,6 +265,7 @@ class Orchestrator:
 
             base_prompt = self._memory.get_system_prompt(
                 skill_names=agent.allowed_skills,
+                include_identity=False,
             )
             # Use auto-approve permissions for background agents
             auto_perms = PermissionManager(_auto_approve)

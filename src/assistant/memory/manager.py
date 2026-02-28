@@ -33,6 +33,7 @@ class MemoryManager:
         timezone: str = "UTC",
     ) -> None:
         self.identity = IdentityLoader(identity_path)
+        self._rules_path = identity_path.parent / "RULES.md"
         self.durable = DurableMemory(memory_path)
         self.daily_log = DailyLog(daily_log_dir)
         self.search = SearchIndex(search_db_path)
@@ -55,13 +56,17 @@ class MemoryManager:
             logger.info(f"Vector search enabled with model: {embedding_model}")
 
     def get_system_prompt(
-        self, skill_names: list[str] | None = None,
+        self,
+        skill_names: list[str] | None = None,
+        include_identity: bool = True,
     ) -> str:
         """Assemble system prompt from identity, durable memory, skills, and today's log.
 
         Args:
             skill_names: If provided, only include these skills in the metadata.
                          Pass ``None`` to include all skills.
+            include_identity: If False, skip IDENTITY.md (for sub-agents that
+                              have their own persona). Shared RULES.md is always included.
         """
         from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
@@ -76,9 +81,16 @@ class MemoryManager:
         now = datetime.now(local_tz)
         parts.append(f"Current date/time: {now.strftime('%Y-%m-%d %H:%M:%S')} ({tz_name})")
 
-        identity = self.identity.load()
-        if identity:
-            parts.append(identity)
+        if include_identity:
+            identity = self.identity.load()
+            if identity:
+                parts.append(identity)
+
+        # Shared operational rules (feed, delegation) — always included
+        if self._rules_path.exists():
+            rules = self._rules_path.read_text()
+            if rules.strip():
+                parts.append(rules)
 
         memory = self.durable.read()
         if memory:
