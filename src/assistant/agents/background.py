@@ -38,6 +38,12 @@ current_images: ContextVar[list[dict] | None] = ContextVar(
     "current_images", default=None
 )
 
+# ContextVar carries the name of the currently executing agent so tools
+# (e.g. feed_tool) can attribute actions to the right author.
+current_agent_name: ContextVar[str] = ContextVar(
+    "current_agent_name", default="assistant"
+)
+
 
 class TaskStatus(str, Enum):
     PENDING = "pending"

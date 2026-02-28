@@ -16,6 +16,7 @@ from assistant.agents.background import (
     BackgroundTaskManager,
     TaskStatus,
     _auto_approve,
+    current_agent_name,
     current_delivery,
     current_images,
     current_review_delivery,
@@ -73,6 +74,7 @@ class Orchestrator:
             )
 
         _delegation_depth_var.set(depth + 1)
+        prev_agent = current_agent_name.set(agent.name)
         try:
             base_prompt = self._memory.get_system_prompt(
                 skill_names=agent.allowed_skills,
@@ -82,6 +84,7 @@ class Orchestrator:
                 base_system_prompt=base_prompt, content=content,
             )
         finally:
+            current_agent_name.reset(prev_agent)
             _delegation_depth_var.set(depth)
 
     async def delegate_parallel(
@@ -247,6 +250,7 @@ class Orchestrator:
         # Reset delegation depth so background agents get a fresh counter
         # independent of any foreground delegation in progress.
         _delegation_depth_var.set(0)
+        current_agent_name.set(agent_name)
         bt.status = TaskStatus.RUNNING
         try:
             agent = self._loader.get_agent(agent_name)
