@@ -2,12 +2,18 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, TYPE_CHECKING
 
 from assistant.agents.background import current_agent_name
 
 if TYPE_CHECKING:
     from assistant.feed.store import FeedStore
+
+# Matches trailing JSON parameter fragments that smaller models sometimes
+# bleed into the content field, e.g.: ', "feed": "research"'
+_TRAILING_FEED_RE = re.compile(r',\s*"feed"\s*:\s*"([^"]*)"\s*\}?\s*$')
+_TRAILING_REPLY_RE = re.compile(r',\s*"reply_to"\s*:\s*(\d+)\s*\}?\s*$')
 
 POST_TO_FEED_DEF: dict[str, Any] = {
     "name": "post_to_feed",
@@ -78,9 +84,27 @@ def _make_post_to_feed(feed_store: FeedStore):
         content = params.get("content", "")
         if not content:
             return "Error: content is required."
+
+        # Smaller models sometimes bleed tool params into the content
+        # string (e.g. 'Cool finding, "feed": "research"').  Extract
+        # the values so they aren't lost, then clean the content.
+        feed_name = params.get("feed")
+        reply_to = params.get("reply_to")
+
+        m_feed = _TRAILING_FEED_RE.search(content)
+        if m_feed:
+            if not feed_name:
+                feed_name = m_feed.group(1)
+            content = content[:m_feed.start()].rstrip()
+
+        m_reply = _TRAILING_REPLY_RE.search(content)
+        if m_reply:
+            if reply_to is None:
+                reply_to = int(m_reply.group(1))
+            content = content[:m_reply.start()].rstrip()
+
         if len(content) > 2000:
             return "Error: content exceeds 2000 character limit."
-        reply_to = params.get("reply_to")
         if reply_to is not None:
             parent = feed_store.get_post(reply_to)
             if parent is None:
@@ -88,7 +112,6 @@ def _make_post_to_feed(feed_store: FeedStore):
 
         # Resolve feed
         feed_id = None
-        feed_name = params.get("feed")
         if feed_name:
             feed = feed_store.get_feed(feed_name)
             if feed is None:
