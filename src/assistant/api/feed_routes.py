@@ -148,6 +148,20 @@ async def delete_channel(request: Request, name: str):
     return {"ok": True}
 
 
+@feed_router.post("/posts/{post_id}/like")
+async def like_post(request: Request, post_id: int):
+    store = request.app.state.feed_store
+    store.like_post(post_id)
+    return {"ok": True}
+
+
+@feed_router.delete("/posts/{post_id}/like")
+async def unlike_post(request: Request, post_id: int):
+    store = request.app.state.feed_store
+    store.unlike_post(post_id)
+    return {"ok": True}
+
+
 @feed_router.get("/posts")
 async def get_posts(request: Request, limit: int = 50, before_id: int | None = None, feed: str | None = None):
     store = request.app.state.feed_store
@@ -160,11 +174,13 @@ async def get_posts(request: Request, limit: int = 50, before_id: int | None = N
     else:
         posts = store.get_timeline(limit=limit, before_id=before_id)
 
-    # Attach reply counts and feed name
+    # Attach reply counts, feed name, and liked status
     feeds_cache: dict[int, str] = {}
+    liked_ids = store.get_liked_post_ids()
     for p in posts:
         thread = store.get_thread(p["id"])
         p["reply_count"] = len(thread) - 1
+        p["liked"] = p["id"] in liked_ids
         fid = p.get("feed_id")
         if fid and fid not in feeds_cache:
             # Look up feed name by id
@@ -196,7 +212,11 @@ async def delete_post(request: Request, post_id: int):
 @feed_router.get("/posts/{post_id}/thread")
 async def get_thread(request: Request, post_id: int):
     store = request.app.state.feed_store
-    return store.get_thread(post_id)
+    posts = store.get_thread(post_id)
+    liked_ids = store.get_liked_post_ids()
+    for p in posts:
+        p["liked"] = p["id"] in liked_ids
+    return posts
 
 
 @feed_router.post("/posts")

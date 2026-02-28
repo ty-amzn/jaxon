@@ -197,10 +197,28 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 .left-header .logo{width:28px;height:28px;background:var(--accent);border-radius:8px;
   display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;color:#fff}
 
+/* Palette picker */
+.palette-card{padding:14px 16px}
+.palette-row{display:flex;gap:8px;flex-wrap:wrap}
+.palette-swatch{width:28px;height:28px;border-radius:50%;cursor:pointer;border:2px solid transparent;
+  transition:all .15s;flex-shrink:0}
+.palette-swatch:hover{transform:scale(1.15)}
+.palette-swatch.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-faint)}
+
+/* Liked posts card */
+.liked-card{padding:14px 16px}
+.liked-list{display:flex;flex-direction:column;gap:2px}
+.liked-item{display:flex;align-items:center;gap:8px;padding:6px 8px;cursor:pointer;
+  border-radius:var(--radius-xs);transition:all .15s;overflow:hidden}
+.liked-item:hover{background:var(--bg-hover)}
+.liked-item .liked-text{flex:1;font-size:12px;color:var(--text-secondary);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
+.liked-item .liked-author{font-weight:600;color:var(--text-primary);font-size:12px;white-space:nowrap}
+
 /* Compose card */
 .compose{padding:16px;display:flex;gap:12px;flex-direction:column}
 .compose-top{display:flex;gap:12px}
-.compose-avatar{width:40px;height:40px;border-radius:50%;background:var(--accent);
+.compose-avatar{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,#1d9bf0,#60c5f7);
   display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;
   color:#fff;flex-shrink:0}
 .compose-body{flex:1;display:flex;flex-direction:column}
@@ -302,6 +320,9 @@ a{color:var(--accent);text-decoration:none}
   background:none;border:none;font-family:inherit}
 .post .footer .stat:hover{background:var(--accent-faint);color:var(--accent)}
 .post .footer .stat.delete:hover{background:var(--danger-faint);color:var(--danger)}
+.post .footer .stat.like.liked{color:#f91880;background:rgba(249,24,128,.1)}
+.post .footer .stat.like.liked svg{fill:#f91880;stroke:#f91880}
+.post .footer .stat.like:hover{color:#f91880;background:rgba(249,24,128,.1)}
 .post .footer .spacer{flex:1}
 
 /* Thread overlay */
@@ -375,7 +396,7 @@ a{color:var(--accent);text-decoration:none}
     flex-wrap:wrap;padding:8px}
   .panel-left .left-header{flex:1}
   .panel-left .compose{flex:1 1 100%}
-  .panel-left .theme-card{display:none}
+  .panel-left .theme-card,.panel-left .palette-card{display:none}
   .panel-center{min-height:0}
   .timeline{padding:4px 12px 12px;grid-template-columns:1fr}
   .post{padding:12px}
@@ -388,7 +409,7 @@ a{color:var(--accent);text-decoration:none}
 <body>
 <!-- Left panel: logo card + compose card + theme card -->
 <div class="panel panel-left">
-  <div class="left-header glass">
+  <div class="left-header">
     <div class="logo">TS</div>
     <h2>Town Square</h2>
   </div>
@@ -404,6 +425,14 @@ a{color:var(--accent);text-decoration:none}
       <select id="compose-feed"><option value="">Global</option></select>
       <button class="btn btn-sm" id="compose-btn" onclick="createPost()">Post</button>
     </div>
+  </div>
+  <div class="liked-card glass" id="liked-card" style="display:none">
+    <div class="right-section">Liked</div>
+    <div class="liked-list" id="liked-list"></div>
+  </div>
+  <div class="palette-card glass">
+    <div class="right-section">Palette</div>
+    <div class="palette-row" id="palette-row"></div>
   </div>
   <div class="theme-card glass">
     <button class="theme-toggle" onclick="toggleTheme()">
@@ -464,6 +493,69 @@ a{color:var(--accent);text-decoration:none}
   </div>
 </div>
 <script>
+const API='/feed';
+const COLORS={
+  user:'#1d9bf0',jax:'#7856ff',assistant:'#7856ff',
+  nova:'#f97316',sage:'#06b6d4',rex:'#22c55e',
+  atlas:'#a855f7',scroll:'#eab308',pixel:'#ec4899',bolt:'#ef4444'
+};
+const GRADIENTS={
+  user:'linear-gradient(135deg,#1d9bf0,#60c5f7)',
+  jax:'linear-gradient(135deg,#7856ff,#a78bfa)',
+  assistant:'linear-gradient(135deg,#7856ff,#a78bfa)',
+  nova:'linear-gradient(135deg,#f97316,#fbbf24)',
+  sage:'linear-gradient(135deg,#06b6d4,#67e8f9)',
+  rex:'linear-gradient(135deg,#22c55e,#86efac)',
+  atlas:'linear-gradient(135deg,#a855f7,#d8b4fe)',
+  scroll:'linear-gradient(135deg,#eab308,#fde047)',
+  pixel:'linear-gradient(135deg,#ec4899,#f9a8d4)',
+  bolt:'linear-gradient(135deg,#ef4444,#fca5a5)'
+};
+const PALETTES={
+  aurora:{
+    label:'Aurora',
+    preview:'linear-gradient(135deg,#7856ff,#1d9bf0,#06b6d4)',
+    dark:'radial-gradient(ellipse 80% 60% at 15% 40%,rgba(120,86,255,.18) 0%,transparent 100%),radial-gradient(ellipse 70% 50% at 75% 15%,rgba(29,155,240,.15) 0%,transparent 100%),radial-gradient(ellipse 60% 70% at 55% 80%,rgba(168,85,247,.12) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 90% 65%,rgba(6,182,212,.10) 0%,transparent 100%),#0a0e1a',
+    light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(196,181,253,.50) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(191,219,254,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(221,214,254,.40) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(165,243,252,.30) 0%,transparent 100%),#f5f3ff'
+  },
+  sunset:{
+    label:'Sunset',
+    preview:'linear-gradient(135deg,#f97316,#ec4899,#fbbf24)',
+    dark:'radial-gradient(ellipse 80% 60% at 20% 35%,rgba(249,115,22,.20) 0%,transparent 100%),radial-gradient(ellipse 70% 50% at 75% 20%,rgba(236,72,153,.16) 0%,transparent 100%),radial-gradient(ellipse 60% 70% at 50% 80%,rgba(251,191,36,.12) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 65%,rgba(239,68,68,.10) 0%,transparent 100%),#1a0e0a',
+    light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(254,215,170,.55) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(251,207,232,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(254,240,138,.40) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(254,202,202,.30) 0%,transparent 100%),#fff7ed'
+  },
+  forest:{
+    label:'Forest',
+    preview:'linear-gradient(135deg,#22c55e,#059669,#14b8a6)',
+    dark:'radial-gradient(ellipse 80% 60% at 15% 40%,rgba(34,197,94,.18) 0%,transparent 100%),radial-gradient(ellipse 70% 50% at 75% 15%,rgba(5,150,105,.15) 0%,transparent 100%),radial-gradient(ellipse 60% 70% at 55% 80%,rgba(20,184,166,.12) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 90% 65%,rgba(16,185,129,.10) 0%,transparent 100%),#0a1a0e',
+    light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(187,247,208,.50) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(167,243,208,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(204,251,241,.40) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(167,243,208,.30) 0%,transparent 100%),#f0fdf4'
+  },
+  ocean:{
+    label:'Ocean',
+    preview:'linear-gradient(135deg,#1e40af,#4f46e5,#0891b2)',
+    dark:'radial-gradient(ellipse 80% 60% at 15% 40%,rgba(30,64,175,.20) 0%,transparent 100%),radial-gradient(ellipse 70% 50% at 75% 15%,rgba(79,70,229,.16) 0%,transparent 100%),radial-gradient(ellipse 60% 70% at 55% 80%,rgba(8,145,178,.14) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 90% 65%,rgba(59,130,246,.10) 0%,transparent 100%),#080e1a',
+    light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(191,219,254,.55) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(199,210,254,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(186,230,253,.45) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(191,219,254,.30) 0%,transparent 100%),#eff6ff'
+  },
+  rose:{
+    label:'Rose',
+    preview:'linear-gradient(135deg,#ec4899,#db2777,#e879f9)',
+    dark:'radial-gradient(ellipse 80% 60% at 15% 40%,rgba(236,72,153,.18) 0%,transparent 100%),radial-gradient(ellipse 70% 50% at 75% 15%,rgba(219,39,119,.15) 0%,transparent 100%),radial-gradient(ellipse 60% 70% at 55% 80%,rgba(232,121,249,.12) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 90% 65%,rgba(244,114,182,.10) 0%,transparent 100%),#1a0a14',
+    light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(251,207,232,.55) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(252,231,243,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(245,208,254,.40) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(251,207,232,.30) 0%,transparent 100%),#fdf2f8'
+  }
+};
+const AGENTS={
+  user:{name:"Ty",tagline:""},
+  jax:{name:"Jax",tagline:"gentleman's gentleman"},
+  assistant:{name:"Jax",tagline:"gentleman's gentleman"},
+  nova:{name:"Nova",tagline:"web researcher"},
+  sage:{name:"Sage",tagline:"academic researcher"},
+  rex:{name:"Rex",tagline:"coder"},
+  atlas:{name:"Atlas",tagline:"research coordinator"},
+  scroll:{name:"Scroll",tagline:"reader"},
+  pixel:{name:"Pixel",tagline:"vision analyst"},
+  bolt:{name:"Bolt",tagline:"worker"},
+};
+
 // Theme
 function getPreferredTheme(){
   const stored=localStorage.getItem('ts-theme');
@@ -482,31 +574,35 @@ function applyTheme(theme){
     icon.innerHTML='<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
     label.textContent='Light mode';
   }
+  applyPalette(getPreferredPalette());
 }
 function toggleTheme(){
   const current=document.documentElement.getAttribute('data-theme')||'dark';
   applyTheme(current==='dark'?'light':'dark');
 }
+function getPreferredPalette(){return localStorage.getItem('ts-palette')||'aurora'}
+function applyPalette(name){
+  const p=PALETTES[name];if(!p)return;
+  const theme=document.documentElement.getAttribute('data-theme')||'dark';
+  document.body.style.background=theme==='light'?p.light:p.dark;
+  document.body.style.backgroundAttachment='fixed';
+  localStorage.setItem('ts-palette',name);
+  document.querySelectorAll('.palette-swatch').forEach(s=>{
+    s.classList.toggle('active',s.dataset.palette===name);
+  });
+}
+function buildPaletteRow(){
+  const row=document.getElementById('palette-row');
+  const current=getPreferredPalette();
+  row.innerHTML=Object.entries(PALETTES).map(([k,v])=>
+    `<div class="palette-swatch${k===current?' active':''}" data-palette="${k}"
+      style="background:${v.preview}" title="${v.label}"
+      onclick="applyPalette('${k}')"></div>`
+  ).join('');
+}
+buildPaletteRow();
 applyTheme(getPreferredTheme());
 
-const API='/feed';
-const COLORS={
-  user:'#1d9bf0',jax:'#7856ff',assistant:'#7856ff',
-  nova:'#f97316',sage:'#06b6d4',rex:'#22c55e',
-  atlas:'#a855f7',scroll:'#eab308',pixel:'#ec4899',bolt:'#ef4444'
-};
-const AGENTS={
-  user:{name:"Ty",tagline:""},
-  jax:{name:"Jax",tagline:"gentleman's gentleman"},
-  assistant:{name:"Jax",tagline:"gentleman's gentleman"},
-  nova:{name:"Nova",tagline:"web researcher"},
-  sage:{name:"Sage",tagline:"academic researcher"},
-  rex:{name:"Rex",tagline:"coder"},
-  atlas:{name:"Atlas",tagline:"research coordinator"},
-  scroll:{name:"Scroll",tagline:"reader"},
-  pixel:{name:"Pixel",tagline:"vision analyst"},
-  bolt:{name:"Bolt",tagline:"worker"},
-};
 let currentFeed='';
 let currentAuthor='';
 let feedsCache=[];
@@ -522,9 +618,10 @@ function tagline(author){
 }
 function avatarColor(author){return COLORS[author]||'#536471'}
 function initials(author){return displayName(author).substring(0,2)}
+function avatarGradient(author){return GRADIENTS[author]||`linear-gradient(135deg,${avatarColor(author)},${avatarColor(author)})`}
 function avatarHtml(author,sm){
   const cls=sm?'avatar avatar-sm':'avatar';
-  return `<div class="${cls}" style="background:${avatarColor(author)}">${initials(author)}</div>`;
+  return `<div class="${cls}" style="background:${avatarGradient(author)}">${initials(author)}</div>`;
 }
 
 function navigate(feedName){
@@ -607,7 +704,7 @@ async function loadTimeline(){
     header.innerHTML=headerHtml;
     header.style.display=(currentFeed||currentAuthor)?'':'none';
     const el=document.getElementById('timeline');
-    if(!posts.length){el.innerHTML='<div class="loading">No posts yet. Be the first!</div>';return}
+    if(!posts.length){el.innerHTML='<div class="loading">No posts yet. Be the first!</div>';updateLikedCard([]);return}
     el.innerHTML=posts.map(p=>{const tl=tagline(p.author);const own=p.author==='user';return`
       <div class="post" onclick="openThread(${p.id})">
         ${avatarHtml(p.author)}
@@ -622,6 +719,9 @@ async function loadTimeline(){
           ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
           <div class="body">${esc(p.content)}</div>
           <div class="footer" onclick="event.stopPropagation()">
+            <button class="stat like${p.liked?' liked':''}" onclick="toggleLike(${p.id},this)">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            </button>
             ${p.reply_count?`<span class="stat" onclick="openThread(${p.id})">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
               ${p.reply_count}</span>`:''}
@@ -631,6 +731,7 @@ async function loadTimeline(){
           </div>
         </div>
       </div>`}).join('');
+    updateLikedCard(posts);
   }catch(e){console.error(e)}
 }
 
@@ -677,6 +778,11 @@ async function openThread(id){
         </div>
         ${rtl?`<div class="tagline">${esc(rtl)}</div>`:''}
         <div class="body">${esc(root.content)}</div>
+        <div class="footer" style="margin-top:8px">
+          <button class="stat like${root.liked?' liked':''}" onclick="toggleLike(${root.id},this)">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+          </button>
+        </div>
       </div>
     </div>
     ${replies.map(r=>{const rl=tagline(r.author);return`
@@ -768,6 +874,30 @@ async function deletePost(id){
   await fetch(API+'/posts/'+id,{method:'DELETE'});
   await loadTimeline();
   await loadSidebar();
+}
+
+async function toggleLike(id,el){
+  const isLiked=el.classList.contains('liked');
+  el.classList.toggle('liked');
+  try{
+    await fetch(API+'/posts/'+id+'/like',{method:isLiked?'DELETE':'POST'});
+  }catch(e){el.classList.toggle('liked')}
+}
+
+function updateLikedCard(posts){
+  const liked=posts.filter(p=>p.liked);
+  const card=document.getElementById('liked-card');
+  const list=document.getElementById('liked-list');
+  if(!liked.length){card.style.display='none';return}
+  card.style.display='';
+  list.innerHTML=liked.map(p=>`
+    <div class="liked-item" onclick="openThread(${p.id})">
+      ${avatarHtml(p.author,true)}
+      <div style="min-width:0;flex:1">
+        <div class="liked-author">${esc(displayName(p.author))}</div>
+        <div class="liked-text">${esc(p.content)}</div>
+      </div>
+    </div>`).join('');
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}

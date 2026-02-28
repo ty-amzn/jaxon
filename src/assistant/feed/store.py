@@ -41,6 +41,16 @@ class FeedStore:
             if "feed_id" not in cols:
                 self._db.execute("ALTER TABLE posts ADD COLUMN feed_id INTEGER")
 
+        # Likes table
+        if "likes" not in self._db.table_names():
+            self._db.execute(
+                "CREATE TABLE likes ("
+                "  id INTEGER PRIMARY KEY,"
+                "  post_id INTEGER NOT NULL UNIQUE,"
+                "  created_at TEXT NOT NULL"
+                ")"
+            )
+
         # Feeds table
         if "feeds" not in self._db.table_names():
             self._db["feeds"].create(
@@ -217,5 +227,47 @@ class FeedStore:
             return False
         # Delete replies first
         self._db.execute("DELETE FROM posts WHERE reply_to = ?", [post_id])
+        self._db.execute("DELETE FROM likes WHERE post_id = ?", [post_id])
         self._db["posts"].delete(post_id)
         return True
+
+    # ------------------------------------------------------------------
+    # Likes
+    # ------------------------------------------------------------------
+
+    def like_post(self, post_id: int) -> bool:
+        """Like a post. Returns True if newly liked."""
+        try:
+            self._db.execute(
+                "INSERT OR IGNORE INTO likes (post_id, created_at) VALUES (?, ?)",
+                [post_id, datetime.now(timezone.utc).isoformat()],
+            )
+            return self._db.execute("SELECT changes()").fetchone()[0] > 0
+        except Exception:
+            return False
+
+    def unlike_post(self, post_id: int) -> bool:
+        """Unlike a post. Returns True if was liked."""
+        self._db.execute("DELETE FROM likes WHERE post_id = ?", [post_id])
+        return self._db.execute("SELECT changes()").fetchone()[0] > 0
+
+    def is_liked(self, post_id: int) -> bool:
+        """Check if a post is liked."""
+        row = self._db.execute(
+            "SELECT 1 FROM likes WHERE post_id = ?", [post_id]
+        ).fetchone()
+        return row is not None
+
+    def get_liked_post_ids(self) -> set[int]:
+        """Return all liked post IDs."""
+        rows = self._db.execute("SELECT post_id FROM likes").fetchall()
+        return {r[0] for r in rows}
+
+    def get_liked_posts(self, limit: int = 20) -> list[dict]:
+        """Return liked posts, newest-liked first."""
+        sql = (
+            "SELECT p.* FROM posts p "
+            "JOIN likes l ON l.post_id = p.id "
+            "ORDER BY l.created_at DESC LIMIT ?"
+        )
+        return _rows_to_dicts(self._db.execute(sql, [limit]))
