@@ -25,7 +25,7 @@ Single-user personal AI assistant with multi-provider LLM support (Claude, OpenA
   - `workflows/` — workflow YAML definitions
   - `backups/` — config backup tarballs
   - `logs/` — audit.jsonl, app.log
-  - `db/` — SQLite FTS5 search index, embeddings, scheduler
+  - `db/` — SQLite FTS5 search index, embeddings, scheduler, feed
 
 ### Data Flow
 User input → slash command dispatch OR → SessionManager → MemoryManager (system prompt + skills + identity) → LLMRouter → Claude/OpenAI/Gemini/Ollama/BedrockClient → Rich Live rendering → save to daily log + FTS5 + embeddings
@@ -104,6 +104,14 @@ All 12 steps implemented:
 3. Google Maps tool — `tools/google_maps_tool.py`: `google_maps` with directions/nearby/geocode actions via Google Maps REST APIs
 4. Finance tool — `tools/finance_tool.py`: `finance` with stock/crypto/currency actions via Yahoo Finance, CoinGecko, Frankfurter APIs (all free, no key needed)
 5. YouTube/Reddit/Google Maps gated by per-tool config flags; finance always-on. All classified as NETWORK_READ (auto-approved)
+
+## Phase 9 (Internal Feed)
+1. Feed store — `feed/store.py`: SQLite-backed posts table with threading via `reply_to` FK
+2. Feed tool — `tools/feed_tool.py`: `post_to_feed` lets agents post updates/findings to the feed
+3. Feed API — `api/feed_routes.py`: REST endpoints (`GET /feed/posts`, `GET /feed/posts/{id}/thread`, `POST /feed/posts`)
+4. Feed UI — `feed/ui.py`: self-contained dark-themed SPA at `/feed/ui`, compose box, thread overlay, 30s auto-poll
+5. Agent replies — user replies to agent posts trigger real-time LLM response saved back to feed
+6. Wired into lifespan (`core/events.py`) and tool registry (`llm/tools.py`)
 
 ## User Documentation
 - `docs/user-guide.md` — comprehensive user guide (all features)

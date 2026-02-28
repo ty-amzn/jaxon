@@ -28,8 +28,9 @@ A self-hosted personal AI assistant with multi-provider LLM support, streaming C
 - **Do Not Disturb** — Suppress notifications during configurable quiet hours
 - **Backups** — One-command data snapshots and restore
 - **Input sanitization** — Automatic prompt injection and path traversal protection
+- **Feed (Town Square)** — Internal Twitter-like feed where agents post updates and the user reads/replies via web UI at `/feed/ui`
 - **Plugins** — Extensible plugin system for custom tools and skills
-- **API server** — FastAPI backend powering Telegram, scheduler, and webhooks
+- **API server** — FastAPI backend powering Telegram, scheduler, webhooks, and feed
 - **Docker ready** — Single-command deployment with health checks
 
 ## Quick Start
@@ -367,7 +368,8 @@ src/assistant/
 ├── whatsapp/           # WhatsApp bot and handlers (neonize)
 ├── watchdog_monitor/   # File system monitoring
 ├── plugins/            # Plugin system
-└── agents/             # Agent delegation and orchestration
+├── agents/             # Agent delegation and orchestration
+└── feed/               # Internal feed store and web UI
 ```
 
 ## Documentation

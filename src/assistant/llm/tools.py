@@ -44,6 +44,7 @@ from assistant.tools.reddit_tool import REDDIT_SEARCH_TOOL_DEF, reddit_search
 from assistant.tools.google_maps_tool import GOOGLE_MAPS_TOOL_DEF, google_maps
 from assistant.tools.read_page_tool import READ_OUTPUT_PAGE_DEF, read_output_page
 from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
+from assistant.tools.feed_tool import POST_TO_FEED_DEF, _make_post_to_feed
 
 
 def register_orchestrator_tools(
@@ -72,6 +73,7 @@ def create_tool_registry(
     settings: Settings | None = None,
     memory: Any | None = None,
     dispatcher: Any | None = None,
+    feed_store: Any | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     output_cap = settings.tool_output_cap if settings else 15_000
@@ -193,6 +195,15 @@ def create_tool_registry(
             SEND_NOTIFICATION_DEF["description"],
             SEND_NOTIFICATION_DEF["input_schema"],
             _make_send_notification(dispatcher),
+        )
+
+    # Register post_to_feed if feed store is available
+    if feed_store is not None:
+        registry.register(
+            POST_TO_FEED_DEF["name"],
+            POST_TO_FEED_DEF["description"],
+            POST_TO_FEED_DEF["input_schema"],
+            _make_post_to_feed(feed_store),
         )
 
     # Register YouTube tool if enabled

@@ -90,6 +90,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _make_send_notification(dispatcher),
     )
 
+    # Initialize feed store and wire post_to_feed tool
+    from assistant.feed.store import FeedStore
+    from assistant.tools.feed_tool import POST_TO_FEED_DEF, _make_post_to_feed
+
+    feed_store = FeedStore(settings.data_dir / "db" / "feed.db")
+    app.state.feed_store = feed_store
+    chat_interface._tool_registry.register(
+        POST_TO_FEED_DEF["name"],
+        POST_TO_FEED_DEF["description"],
+        POST_TO_FEED_DEF["input_schema"],
+        _make_post_to_feed(feed_store),
+    )
+
     # Start scheduler if enabled
     scheduler_manager = None
     if settings.scheduler_enabled:

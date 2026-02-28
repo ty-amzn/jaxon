@@ -189,7 +189,25 @@ async def run_assistant_job(
         effective_prompt = _SILENT_PROMPT_PREFIX + prompt if silent else prompt
         response = await chat_interface.get_response(session_id, effective_prompt)
         if not silent:
-            await dispatcher.send(f"Scheduled task result:\n{response}")
+            # Route through main agent for review/summarization
+            synthetic = (
+                f'[Scheduled task completed. The original prompt was: "{prompt}"]\n'
+                f"[Here is the raw output:]\n\n"
+                f"{response}\n\n"
+                "[Deliver this result to the user. You decide how:\n"
+                "- NOT NOTEWORTHY (nothing interesting or actionable): respond "
+                'with exactly "[SKIP]" and nothing else — the user will not be '
+                "notified.\n"
+                "- SHORT results (a few sentences, a quick answer): just reply "
+                "here with the summary — it will be sent as a chat message.\n"
+                "- LONG results (detailed reports, multi-section research, large "
+                "tables): use send_email to deliver the full report, then reply "
+                'here with a one-line summary like "Emailed you the full '
+                'report on X."]'
+            )
+            review_response = await chat_interface.get_response(session_id, synthetic)
+            if review_response and review_response.strip() != "[SKIP]":
+                await dispatcher.send(review_response)
     except Exception:
         logger.exception("Error running assistant job")
         await dispatcher.send(f"Scheduled task failed for prompt: {prompt}")

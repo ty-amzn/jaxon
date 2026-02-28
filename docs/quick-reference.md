@@ -92,6 +92,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `reddit_search` | Yes |
 | `google_maps` | Yes |
 | `finance` | Yes |
+| `post_to_feed` | Yes |
 
 ## Configuration (`.env`)
 
@@ -246,7 +247,7 @@ data/
 ├── agents/           # Agent definitions (.yaml)
 ├── backups/          # Data backups (.tar.gz)
 ├── plugins/          # Plugin modules
-├── db/               # search.db, embeddings.db, scheduler.db
+├── db/               # search.db, embeddings.db, scheduler.db, feed.db
 └── logs/             # audit.jsonl, app.log
 ```
 

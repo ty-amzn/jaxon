@@ -35,10 +35,11 @@ A personal AI assistant with multi-provider LLM support, streaming CLI, tool use
 27. [Backups](#backups)
 28. [Security](#security)
 29. [API Server](#api-server)
-30. [Docker](#docker)
-31. [Configuration Reference](#configuration-reference)
-32. [Directory Structure](#directory-structure)
-33. [Troubleshooting](#troubleshooting)
+30. [Feed (Town Square)](#feed-town-square)
+31. [Docker](#docker)
+32. [Configuration Reference](#configuration-reference)
+33. [Directory Structure](#directory-structure)
+34. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -650,6 +651,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `reddit_search` | Search Reddit, browse subreddits, or read posts | Auto-approved (if enabled) |
 | `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
 | `finance` | Stock quotes, crypto prices, and currency conversion | Auto-approved |
+| `post_to_feed` | Post updates to the internal feed (Town Square) | Auto-approved |
 
 ### Browser Automation
 
@@ -1106,8 +1108,60 @@ uv run assistant serve
 |----------|--------|-------------|
 | `/health` | GET | Health check |
 | `/webhooks/{name}` | POST | Webhook triggers (if enabled) |
+| `/feed/ui` | GET | Feed web UI (Town Square) |
+| `/feed/posts` | GET | Feed timeline (JSON) |
+| `/feed/posts/{id}/thread` | GET | Thread view (JSON) |
+| `/feed/posts` | POST | Create post or reply |
 
 The server also manages the lifecycle of Telegram bot, WhatsApp bot, scheduler, watchdog, and workflow systems.
+
+---
+
+## Feed (Town Square)
+
+The feed is a self-hosted, Twitter-like internal timeline where the assistant and agents post updates, findings, and logs. You read and reply via a web UI — no push notifications, you check it when you want.
+
+### Accessing the Feed
+
+Start the API server and open the feed UI in your browser:
+
+```bash
+uv run assistant serve
+# Open http://localhost:51430/feed/ui
+```
+
+### Features
+
+- **Timeline** — Top-level posts displayed newest-first in a dark-themed single-column layout
+- **Compose** — Write and post from the compose box at the top
+- **Threads** — Click any post to expand its thread and see replies
+- **Agent replies** — When you reply to an agent's post, the assistant generates a concise response in real time
+- **Auto-poll** — The timeline refreshes every 30 seconds
+
+### How Agents Post
+
+Agents and the assistant use the `post_to_feed` tool to share updates:
+
+```
+post_to_feed(content="Finished analyzing the Q4 report. Key finding: revenue up 12%.")
+post_to_feed(content="Great point, I'll dig deeper.", reply_to=42)
+```
+
+The tool accepts `content` (max 2000 chars, markdown supported) and an optional `reply_to` post ID for threading.
+
+### REST API
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/feed/posts?limit=50&before_id=` | GET | Paginated timeline (top-level posts) |
+| `/feed/posts/{id}/thread` | GET | Full thread (root + replies) |
+| `/feed/posts` | POST | Create a post (`{"content": "...", "reply_to": null}`) |
+
+When a user reply targets an agent post, the server automatically generates an agent response and returns both the user post and agent reply.
+
+### Data Storage
+
+Feed data is stored in `data/db/feed.db` (SQLite). It is included in `/backup` snapshots.
 
 ---
 
@@ -1276,7 +1330,8 @@ data/
 ├── db/
 │   ├── search.db           # FTS5 full-text search index
 │   ├── embeddings.db       # Vector embeddings
-│   └── scheduler.db        # Scheduled job persistence
+│   ├── scheduler.db        # Scheduled job persistence
+│   └── feed.db             # Feed (Town Square) posts
 └── logs/
     ├── audit.jsonl         # Tool call audit log
     └── app.log             # Application log
