@@ -1,4 +1,94 @@
-"""Single-page HTML app for the feed UI."""
+"""Single-page HTML app for the feed UI (PWA-enabled)."""
+
+import json
+
+MANIFEST_JSON = json.dumps(
+    {
+        "name": "Town Square",
+        "short_name": "Town Square",
+        "start_url": "/feed/ui",
+        "scope": "/feed/",
+        "display": "standalone",
+        "background_color": "#0f1419",
+        "theme_color": "#0f1419",
+        "icons": [
+            {
+                "src": "/feed/icon-192.svg",
+                "sizes": "192x192",
+                "type": "image/svg+xml",
+                "purpose": "any",
+            },
+            {
+                "src": "/feed/icon-512.svg",
+                "sizes": "512x512",
+                "type": "image/svg+xml",
+                "purpose": "any",
+            },
+        ],
+    }
+)
+
+SERVICE_WORKER_JS = """\
+const CACHE='town-square-v1';
+const SHELL=['/feed/ui','/feed/icon-192.svg'];
+const FONT_RE=/fonts\\.googleapis\\.com|fonts\\.gstatic\\.com/;
+const API_RE=/\\/feed\\/(posts|channels)/;
+
+self.addEventListener('install',e=>{
+  e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));
+});
+
+self.addEventListener('activate',e=>{
+  e.waitUntil(caches.keys().then(ks=>Promise.all(
+    ks.filter(k=>k!==CACHE).map(k=>caches.delete(k))
+  )).then(()=>self.clients.claim()));
+});
+
+self.addEventListener('fetch',e=>{
+  const url=new URL(e.request.url);
+  // Network-first for API calls
+  if(API_RE.test(url.pathname)){
+    e.respondWith(
+      fetch(e.request).then(r=>{
+        const cl=r.clone();
+        caches.open(CACHE).then(c=>c.put(e.request,cl));
+        return r;
+      }).catch(()=>caches.match(e.request))
+    );
+    return;
+  }
+  // Cache-first for fonts and icons
+  if(FONT_RE.test(url.hostname)||url.pathname.startsWith('/feed/icon')){
+    e.respondWith(
+      caches.match(e.request).then(r=>r||fetch(e.request).then(nr=>{
+        const cl=nr.clone();
+        caches.open(CACHE).then(c=>c.put(e.request,cl));
+        return nr;
+      }))
+    );
+    return;
+  }
+  // Shell (the UI page itself) — network-first with cache fallback
+  e.respondWith(
+    fetch(e.request).then(r=>{
+      const cl=r.clone();
+      caches.open(CACHE).then(c=>c.put(e.request,cl));
+      return r;
+    }).catch(()=>caches.match(e.request))
+  );
+});
+"""
+
+APP_ICON_SVG = """\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f1419"/>
+  <rect x="56" y="56" width="400" height="400" rx="64" fill="#1d9bf0"/>
+  <rect x="120" y="176" width="200" height="24" rx="12" fill="#fff" opacity=".9"/>
+  <rect x="120" y="224" width="272" height="24" rx="12" fill="#fff" opacity=".7"/>
+  <rect x="120" y="272" width="160" height="24" rx="12" fill="#fff" opacity=".5"/>
+  <rect x="120" y="320" width="232" height="24" rx="12" fill="#fff" opacity=".35"/>
+</svg>
+"""
 
 FEED_HTML = """\
 <!DOCTYPE html>
@@ -7,6 +97,12 @@ FEED_HTML = """\
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Town Square</title>
+<link rel="manifest" href="/feed/manifest.json">
+<meta name="theme-color" content="#0f1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="/feed/icon-192.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/feed/icon-192.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
@@ -689,6 +785,7 @@ loadSidebar();
 loadTimeline();
 window.addEventListener('hashchange',()=>{readHash();loadSidebar();loadTimeline()});
 polling=setInterval(()=>{loadTimeline();loadSidebar()},30000);
+if('serviceWorker' in navigator) navigator.serviceWorker.register('/feed/sw.js',{scope:'/feed/'});
 </script>
 </body>
 </html>

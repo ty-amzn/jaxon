@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from assistant.feed.ui import FEED_HTML
+from assistant.feed.ui import APP_ICON_SVG, FEED_HTML, MANIFEST_JSON, SERVICE_WORKER_JS
 
 logger = logging.getLogger(__name__)
 
@@ -84,6 +84,30 @@ class CreateFeedBody(BaseModel):
 @feed_router.get("/ui", response_class=HTMLResponse)
 async def feed_ui():
     return HTMLResponse(FEED_HTML)
+
+
+@feed_router.get("/manifest.json")
+async def feed_manifest():
+    return Response(MANIFEST_JSON, media_type="application/manifest+json")
+
+
+@feed_router.get("/sw.js")
+async def feed_service_worker():
+    return Response(
+        SERVICE_WORKER_JS,
+        media_type="application/javascript",
+        headers={"Service-Worker-Allowed": "/feed/"},
+    )
+
+
+@feed_router.get("/icon-192.svg")
+async def feed_icon_192():
+    return Response(APP_ICON_SVG, media_type="image/svg+xml")
+
+
+@feed_router.get("/icon-512.svg")
+async def feed_icon_512():
+    return Response(APP_ICON_SVG, media_type="image/svg+xml")
 
 
 @feed_router.get("/channels")
