@@ -17,6 +17,8 @@ COPY src/ src/
 # Install project
 RUN uv sync --frozen --no-dev 2>/dev/null || uv sync --no-dev
 
+RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf /var/lib/apt/lists/*
+
 RUN mkdir -p data
 
 EXPOSE 51431
