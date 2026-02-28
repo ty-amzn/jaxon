@@ -188,6 +188,11 @@ ASSISTANT_DND_END=07:00
 ASSISTANT_DND_ALLOW_URGENT=true
 ```
 
+### Town Square (Feed)
+```bash
+ASSISTANT_TOWNSQUARE_URL=http://localhost:51431   # or http://townsquare:51431 in Docker
+```
+
 ### Plugins & Agents
 ```bash
 ASSISTANT_PLUGINS_ENABLED=false
