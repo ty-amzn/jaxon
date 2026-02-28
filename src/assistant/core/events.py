@@ -90,29 +90,33 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         _make_send_notification(dispatcher),
     )
 
-    # Initialize feed store and wire post_to_feed tool
-    from assistant.feed.store import FeedStore
-    from assistant.tools.feed_tool import (
-        MANAGE_FEEDS_DEF,
-        POST_TO_FEED_DEF,
-        _make_manage_feeds,
-        _make_post_to_feed,
-    )
+    # Wire Town Square feed tools (HTTP) if configured
+    if settings.townsquare_url:
+        from assistant.tools.feed_tool import (
+            MANAGE_FEEDS_DEF,
+            POST_TO_FEED_DEF,
+            _make_manage_feeds,
+            _make_post_to_feed,
+        )
 
-    feed_store = FeedStore(settings.data_dir / "db" / "feed.db")
-    app.state.feed_store = feed_store
-    chat_interface._tool_registry.register(
-        POST_TO_FEED_DEF["name"],
-        POST_TO_FEED_DEF["description"],
-        POST_TO_FEED_DEF["input_schema"],
-        _make_post_to_feed(feed_store),
-    )
-    chat_interface._tool_registry.register(
-        MANAGE_FEEDS_DEF["name"],
-        MANAGE_FEEDS_DEF["description"],
-        MANAGE_FEEDS_DEF["input_schema"],
-        _make_manage_feeds(feed_store),
-    )
+        chat_interface._tool_registry.register(
+            POST_TO_FEED_DEF["name"],
+            POST_TO_FEED_DEF["description"],
+            POST_TO_FEED_DEF["input_schema"],
+            _make_post_to_feed(settings.townsquare_url),
+        )
+        chat_interface._tool_registry.register(
+            MANAGE_FEEDS_DEF["name"],
+            MANAGE_FEEDS_DEF["description"],
+            MANAGE_FEEDS_DEF["input_schema"],
+            _make_manage_feeds(settings.townsquare_url),
+        )
+
+        # Register webhook receiver for agent replies
+        from assistant.api.townsquare_webhook import townsquare_webhook_router
+
+        app.state.settings = settings
+        app.include_router(townsquare_webhook_router)
 
     # Start scheduler if enabled
     scheduler_manager = None

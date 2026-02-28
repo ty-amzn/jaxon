@@ -1,75 +1,26 @@
-"""Feed API routes — Town Square."""
+"""Town Square API routes."""
 
 from __future__ import annotations
 
 import logging
 
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from assistant.feed.ui import APP_ICON_SVG, FEED_HTML, MANIFEST_JSON, SERVICE_WORKER_JS
+from townsquare.ui import APP_ICON_SVG, FEED_HTML, MANIFEST_JSON, SERVICE_WORKER_JS
 
 logger = logging.getLogger(__name__)
 
 feed_router = APIRouter(prefix="/feed", tags=["feed"])
 
 
-async def _generate_agent_reply(request: Request, parent: dict, user_reply: str) -> str:
-    """Generate a feed reply using the original agent's persona."""
-    chat_interface = request.app.state.chat_interface
-    author = parent["author"]
-
-    # Try to load the agent's persona from YAML definitions
-    agent_persona = ""
-    # Map "assistant" back to "jax" for agent lookup
-    agent_key = "jax" if author == "assistant" else author
-    orchestrator = getattr(chat_interface, "_orchestrator", None)
-    if orchestrator:
-        loader = getattr(orchestrator, "_loader", None)
-        if loader:
-            agent_def = loader.get_agent(agent_key)
-            if agent_def and agent_def.system_prompt:
-                agent_persona = agent_def.system_prompt
-
-    # Build system prompt with the agent's own voice
-    if agent_persona:
-        system = (
-            f"# Agent Role: {agent_key}\n\n{agent_persona}\n\n---\n\n"
-            f"You are replying in a feed thread. Keep replies concise — "
-            f"1-2 sentences, tweet-style. Stay in character."
-        )
-    else:
-        system = (
-            f"You are {author}. You are replying in a feed thread. "
-            f"Keep replies concise — 1-2 sentences, tweet-style."
-        )
-
-    # Direct LLM call — lightweight, no tools needed
-    from assistant.llm.types import StreamEventType
-
-    llm = chat_interface._llm
-    messages = [
-        {
-            "role": "user",
-            "content": (
-                f"Your original post was:\n\"{parent['content']}\"\n\n"
-                f"Ty replied: \"{user_reply}\"\n\n"
-                f"Write your reply."
-            ),
-        }
-    ]
-    full_text = ""
-    async for event in llm.stream_with_tool_loop(system=system, messages=messages):
-        if event.type == StreamEventType.TEXT_DELTA:
-            full_text += event.text
-    return full_text
-
-
 class CreatePostBody(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
     reply_to: int | None = None
     feed: str | None = None
+    author: str = "user"
 
 
 class EditPostBody(BaseModel):
@@ -79,7 +30,24 @@ class EditPostBody(BaseModel):
 class CreateFeedBody(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field(..., min_length=1, max_length=500)
+    created_by: str = "user"
 
+
+async def _fire_reply_webhook(webhook_url: str, parent: dict, user_reply: dict) -> None:
+    """Fire a non-blocking webhook to Jaxon for agent reply generation."""
+    payload = {
+        "parent_post": parent,
+        "user_reply": user_reply,
+        "reply_to": parent["id"],
+    }
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            await client.post(f"{webhook_url}/hooks/townsquare/reply", json=payload)
+    except Exception:
+        logger.exception("Failed to fire reply webhook to %s", webhook_url)
+
+
+# -- Static assets -----------------------------------------------------------
 
 @feed_router.get("/ui", response_class=HTMLResponse)
 async def feed_ui():
@@ -110,6 +78,8 @@ async def feed_icon_512():
     return Response(APP_ICON_SVG, media_type="image/svg+xml")
 
 
+# -- Channels ----------------------------------------------------------------
+
 @feed_router.get("/channels")
 async def list_channels(request: Request):
     store = request.app.state.feed_store
@@ -133,7 +103,7 @@ async def get_channel(request: Request, name: str, limit: int = 50, before_id: i
 async def create_channel(request: Request, body: CreateFeedBody):
     store = request.app.state.feed_store
     try:
-        feed = store.create_feed(body.name, body.description, created_by="user")
+        feed = store.create_feed(body.name, body.description, created_by=body.created_by)
     except ValueError as e:
         return {"error": str(e)}
     return feed
@@ -148,6 +118,8 @@ async def delete_channel(request: Request, name: str):
     return {"ok": True}
 
 
+# -- Likes ------------------------------------------------------------------
+
 @feed_router.post("/posts/{post_id}/like")
 async def like_post(request: Request, post_id: int):
     store = request.app.state.feed_store
@@ -161,6 +133,8 @@ async def unlike_post(request: Request, post_id: int):
     store.unlike_post(post_id)
     return {"ok": True}
 
+
+# -- Posts -------------------------------------------------------------------
 
 @feed_router.get("/posts")
 async def get_posts(request: Request, limit: int = 50, before_id: int | None = None, feed: str | None = None):
@@ -183,7 +157,6 @@ async def get_posts(request: Request, limit: int = 50, before_id: int | None = N
         p["liked"] = p["id"] in liked_ids
         fid = p.get("feed_id")
         if fid and fid not in feeds_cache:
-            # Look up feed name by id
             for f in store.list_feeds():
                 feeds_cache[f["id"]] = f["name"]
         p["feed_name"] = feeds_cache.get(fid) if fid else None
@@ -222,6 +195,13 @@ async def get_thread(request: Request, post_id: int):
 @feed_router.post("/posts")
 async def create_post(request: Request, body: CreatePostBody):
     store = request.app.state.feed_store
+    settings = request.app.state.settings
+
+    # Validate reply_to exists
+    if body.reply_to is not None:
+        parent = store.get_post(body.reply_to)
+        if parent is None:
+            return {"error": f"Post {body.reply_to} not found."}
 
     # Resolve feed
     feed_id = None
@@ -231,30 +211,21 @@ async def create_post(request: Request, body: CreatePostBody):
             return {"error": f"Feed '{body.feed}' not found."}
         feed_id = feed_obj["id"]
 
-    # Create the user's post
-    user_post = store.create_post(
-        author="user",
+    # Create the post
+    post = store.create_post(
+        author=body.author,
         content=body.content,
         reply_to=body.reply_to,
         feed_id=feed_id,
     )
 
-    result = {"post": user_post}
+    result = {"post": post}
 
-    # If replying to a non-user post, generate a response from that agent
-    if body.reply_to is not None:
+    # If a user is replying to a non-user post, fire webhook for agent reply
+    if body.reply_to is not None and body.author == "user":
         parent = store.get_post(body.reply_to)
-        if parent and parent["author"] != "user":
-            try:
-                agent_text = await _generate_agent_reply(request, parent, body.content)
-                agent_reply = store.create_post(
-                    author=parent["author"],
-                    content=agent_text.strip(),
-                    reply_to=body.reply_to,
-                    feed_id=feed_id,
-                )
-                result["agent_reply"] = agent_reply
-            except Exception:
-                logger.exception("Failed to generate agent reply for feed post")
+        if parent and parent["author"] != "user" and settings.webhook_callback_url:
+            import asyncio
+            asyncio.create_task(_fire_reply_webhook(settings.webhook_callback_url, parent, post))
 
     return result

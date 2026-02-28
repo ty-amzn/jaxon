@@ -149,6 +149,9 @@ class Settings(BaseSettings):
     reflection_model: str = "ollama/minimax-m2.5:cloud"
     reflection_hour: int = 0  # hour in scheduler_timezone (reviews previous day)
 
+    # Town Square (standalone feed service)
+    townsquare_url: str = ""
+
     # DND (Phase 4)
     dnd_enabled: bool = False
     dnd_start: str = "23:00"

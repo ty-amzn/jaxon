@@ -1,0 +1,22 @@
+services:
+  townsquare:
+    container_name: townsquare
+    build: .
+    ports:
+      - "51431:51431"
+    env_file:
+      - .env
+    volumes:
+      - ./data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51431/feed/channels').raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - npm-shared
+networks:
+  npm-shared:
+    external: true
+    name: npm-shared

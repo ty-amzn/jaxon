@@ -1,14 +1,13 @@
-"""LLM tools for posting to and managing themed feeds."""
+"""LLM tools for posting to and managing themed feeds via Town Square HTTP API."""
 
 from __future__ import annotations
 
 import re
-from typing import Any, TYPE_CHECKING
+from typing import Any
+
+import httpx
 
 from assistant.agents.background import current_agent_name
-
-if TYPE_CHECKING:
-    from assistant.feed.store import FeedStore
 
 # Matches trailing JSON parameter fragments that smaller models sometimes
 # bleed into the content field, e.g.: ', "feed": "research"'
@@ -77,8 +76,8 @@ MANAGE_FEEDS_DEF: dict[str, Any] = {
 }
 
 
-def _make_post_to_feed(feed_store: FeedStore):
-    """Factory: returns an async handler bound to the feed store."""
+def _make_post_to_feed(base_url: str):
+    """Factory: returns an async handler that posts via Town Square HTTP API."""
 
     async def post_to_feed(params: dict[str, Any]) -> str:
         content = params.get("content", "")
@@ -105,83 +104,95 @@ def _make_post_to_feed(feed_store: FeedStore):
 
         if len(content) > 2000:
             return "Error: content exceeds 2000 character limit."
-        if reply_to is not None:
-            parent = feed_store.get_post(reply_to)
-            if parent is None:
-                return f"Error: post {reply_to} not found."
-
-        # Resolve feed
-        feed_id = None
-        if feed_name:
-            feed = feed_store.get_feed(feed_name)
-            if feed is None:
-                return f"Error: feed '{feed_name}' not found. Use manage_feeds to create it first."
-            feed_id = feed["id"]
 
         author = current_agent_name.get("assistant")
-        post = feed_store.create_post(
-            author=author,
-            content=content,
-            reply_to=reply_to,
-            feed_id=feed_id,
-        )
+        payload: dict[str, Any] = {
+            "content": content,
+            "author": author,
+        }
+        if reply_to is not None:
+            payload["reply_to"] = reply_to
+        if feed_name:
+            payload["feed"] = feed_name
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(f"{base_url}/feed/posts", json=payload)
+        data = resp.json()
+
+        if "error" in data:
+            return f"Error: {data['error']}"
+
+        post = data.get("post", data)
+        post_id = post.get("id", "?")
         suffix = f" in #{feed_name}" if feed_name else ""
-        return f"Posted to feed{suffix} (id={post['id']})."
+        return f"Posted to feed{suffix} (id={post_id})."
 
     return post_to_feed
 
 
-def _make_manage_feeds(feed_store: FeedStore):
-    """Factory: returns an async handler for feed management."""
+def _make_manage_feeds(base_url: str):
+    """Factory: returns an async handler for feed management via HTTP."""
 
     async def manage_feeds(params: dict[str, Any]) -> str:
         action = params.get("action")
         name = params.get("name")
 
-        if action == "list":
-            feeds = feed_store.list_feeds()
-            if not feeds:
-                return "No feeds yet. Use action='create' to make one."
-            lines = []
-            for f in feeds:
-                lines.append(f"#{f['name']} — {f['description']} ({f['post_count']} posts)")
-            return "\n".join(lines)
+        async with httpx.AsyncClient(timeout=30) as client:
+            if action == "list":
+                resp = await client.get(f"{base_url}/feed/channels")
+                data = resp.json()
+                feeds = data.get("feeds", [])
+                if not feeds:
+                    return "No feeds yet. Use action='create' to make one."
+                lines = []
+                for f in feeds:
+                    lines.append(f"#{f['name']} — {f['description']} ({f['post_count']} posts)")
+                return "\n".join(lines)
 
-        if action == "create":
-            if not name:
-                return "Error: 'name' is required to create a feed."
-            desc = params.get("description", "")
-            if not desc:
-                return "Error: 'description' is required to create a feed."
-            author = current_agent_name.get("assistant")
-            try:
-                feed = feed_store.create_feed(name, desc, created_by=author)
-            except ValueError as e:
-                return f"Error: {e}"
-            return f"Created feed #{feed['name']} (id={feed['id']})."
+            if action == "create":
+                if not name:
+                    return "Error: 'name' is required to create a feed."
+                desc = params.get("description", "")
+                if not desc:
+                    return "Error: 'description' is required to create a feed."
+                author = current_agent_name.get("assistant")
+                resp = await client.post(
+                    f"{base_url}/feed/channels",
+                    json={"name": name, "description": desc, "created_by": author},
+                )
+                data = resp.json()
+                if "error" in data:
+                    return f"Error: {data['error']}"
+                return f"Created feed #{data['name']} (id={data['id']})."
 
-        if action == "read":
-            if not name:
-                return "Error: 'name' is required to read a feed."
-            feed = feed_store.get_feed(name)
-            if feed is None:
-                return f"Error: feed '{name}' not found."
-            limit = params.get("limit", 20)
-            posts = feed_store.get_feed_posts(feed["id"], limit=limit)
-            if not posts:
-                return f"#{name} has no posts yet."
-            lines = [f"#{name}: {feed['description']}", ""]
-            for p in posts:
-                lines.append(f"[@{p['author']}] {p['content'][:200]}")
-            return "\n".join(lines)
+            if action == "read":
+                if not name:
+                    return "Error: 'name' is required to read a feed."
+                limit = params.get("limit", 20)
+                resp = await client.get(
+                    f"{base_url}/feed/channels/{name}",
+                    params={"limit": limit},
+                )
+                data = resp.json()
+                if "error" in data:
+                    return f"Error: {data['error']}"
+                feed = data.get("feed", {})
+                posts = data.get("posts", [])
+                if not posts:
+                    return f"#{name} has no posts yet."
+                lines = [f"#{name}: {feed.get('description', '')}", ""]
+                for p in posts:
+                    lines.append(f"[@{p['author']}] {p['content'][:200]}")
+                return "\n".join(lines)
 
-        if action == "delete":
-            if not name:
-                return "Error: 'name' is required to delete a feed."
-            deleted = feed_store.delete_feed(name)
-            if not deleted:
-                return f"Error: feed '{name}' not found."
-            return f"Deleted feed #{name}. Posts moved to global timeline."
+            if action == "delete":
+                if not name:
+                    return "Error: 'name' is required to delete a feed."
+                resp = await client.delete(f"{base_url}/feed/channels/{name}")
+                data = resp.json()
+                if "error" in data:
+                    return f"Error: {data['error']}"
+                return f"Deleted feed #{name}. Posts moved to global timeline."
 
         return f"Error: unknown action '{action}'."
 

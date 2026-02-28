@@ -214,6 +214,9 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 .liked-item .liked-text{flex:1;font-size:12px;color:var(--text-secondary);
   white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.4}
 .liked-item .liked-author{font-weight:600;color:var(--text-primary);font-size:12px;white-space:nowrap}
+.liked-header{display:flex;justify-content:space-between;align-items:center}
+.liked-see-all{font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;transition:opacity .15s}
+.liked-see-all:hover{opacity:.8}
 
 /* Compose card */
 .compose{padding:16px;display:flex;gap:12px;flex-direction:column}
@@ -427,8 +430,11 @@ a{color:var(--accent);text-decoration:none}
     </div>
   </div>
   <div class="liked-card glass" id="liked-card" style="display:none">
-    <div class="right-section">Liked</div>
-    <div class="liked-list" id="liked-list"></div>
+    <div class="liked-header">
+      <div class="right-section" style="margin-bottom:0">Liked</div>
+      <span class="liked-see-all" id="liked-see-all" onclick="openLikedOverlay()">See all</span>
+    </div>
+    <div class="liked-list" id="liked-list" style="margin-top:8px"></div>
   </div>
   <div class="palette-card glass">
     <div class="right-section">Palette</div>
@@ -490,6 +496,23 @@ a{color:var(--accent);text-decoration:none}
       <button class="cancel-btn" onclick="closeEditPost()">Cancel</button>
       <button class="btn btn-sm" onclick="submitEditPost()">Save</button>
     </div>
+  </div>
+</div>
+<div class="thread-overlay" id="liked-overlay" onclick="if(event.target===this)closeLikedOverlay()">
+  <div class="thread-panel" style="max-width:560px">
+    <div class="thread-header">
+      <h3>Liked Posts</h3>
+      <button class="close" onclick="closeLikedOverlay()">&times;</button>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:8px;border-bottom:1px solid var(--border)">
+      <select id="liked-filter-author" onchange="renderLikedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All people</option>
+      </select>
+      <select id="liked-filter-feed" onchange="renderLikedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All feeds</option>
+      </select>
+    </div>
+    <div id="liked-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
   </div>
 </div>
 <script>
@@ -606,6 +629,7 @@ applyTheme(getPreferredTheme());
 let currentFeed='';
 let currentAuthor='';
 let feedsCache=[];
+let timelinePosts=[];
 let polling;
 
 function displayName(author){
@@ -704,7 +728,7 @@ async function loadTimeline(){
     header.innerHTML=headerHtml;
     header.style.display=(currentFeed||currentAuthor)?'':'none';
     const el=document.getElementById('timeline');
-    if(!posts.length){el.innerHTML='<div class="loading">No posts yet. Be the first!</div>';updateLikedCard([]);return}
+    if(!posts.length){el.innerHTML='<div class="loading">No posts yet. Be the first!</div>';timelinePosts=[];updateLikedCard();return}
     el.innerHTML=posts.map(p=>{const tl=tagline(p.author);const own=p.author==='user';return`
       <div class="post" onclick="openThread(${p.id})">
         ${avatarHtml(p.author)}
@@ -731,7 +755,8 @@ async function loadTimeline(){
           </div>
         </div>
       </div>`}).join('');
-    updateLikedCard(posts);
+    timelinePosts=posts;
+    updateLikedCard();
   }catch(e){console.error(e)}
 }
 
@@ -879,18 +904,28 @@ async function deletePost(id){
 async function toggleLike(id,el){
   const isLiked=el.classList.contains('liked');
   el.classList.toggle('liked');
+  const p=timelinePosts.find(x=>x.id===id);
+  if(p) p.liked=!isLiked;
+  updateLikedCard();
   try{
     await fetch(API+'/posts/'+id+'/like',{method:isLiked?'DELETE':'POST'});
-  }catch(e){el.classList.toggle('liked')}
+  }catch(e){
+    el.classList.toggle('liked');
+    if(p) p.liked=isLiked;
+    updateLikedCard();
+  }
 }
 
-function updateLikedCard(posts){
-  const liked=posts.filter(p=>p.liked);
+function updateLikedCard(){
+  const liked=timelinePosts.filter(p=>p.liked);
   const card=document.getElementById('liked-card');
   const list=document.getElementById('liked-list');
+  const seeAll=document.getElementById('liked-see-all');
   if(!liked.length){card.style.display='none';return}
   card.style.display='';
-  list.innerHTML=liked.map(p=>`
+  const shown=liked.slice(0,10);
+  seeAll.style.display='';
+  list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
       ${avatarHtml(p.author,true)}
       <div style="min-width:0;flex:1">
@@ -898,6 +933,52 @@ function updateLikedCard(posts){
         <div class="liked-text">${esc(p.content)}</div>
       </div>
     </div>`).join('');
+}
+
+function likedItemHtml(p){
+  const tl=tagline(p.author);
+  return `<div style="display:flex;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''" onclick="closeLikedOverlay();openThread(${p.id})">
+    ${avatarHtml(p.author,true)}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span style="font-weight:700;font-size:13px;color:var(--text-primary)">${esc(displayName(p.author))}</span>
+        ${tl?`<span style="color:var(--text-tertiary);font-size:11px">${esc(tl)}</span>`:''}
+        ${p.feed_name?`<span style="color:var(--accent);font-size:11px;font-weight:600;margin-left:auto">#${esc(p.feed_name)}</span>`:''}
+      </div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.content)}</div>
+    </div>
+  </div>`;
+}
+
+function openLikedOverlay(){
+  const liked=timelinePosts.filter(p=>p.liked);
+  // Populate author filter
+  const authorSel=document.getElementById('liked-filter-author');
+  const authors=[...new Set(liked.map(p=>p.author))];
+  authorSel.innerHTML='<option value="">All people</option>'+
+    authors.map(a=>`<option value="${esc(a)}">${esc(displayName(a))}</option>`).join('');
+  // Populate feed filter
+  const feedSel=document.getElementById('liked-filter-feed');
+  const feeds=[...new Set(liked.map(p=>p.feed_name).filter(Boolean))];
+  feedSel.innerHTML='<option value="">All feeds</option>'+
+    feeds.map(f=>`<option value="${esc(f)}">#${esc(f)}</option>`).join('');
+  renderLikedOverlay();
+  document.getElementById('liked-overlay').classList.add('open');
+}
+
+function renderLikedOverlay(){
+  const authorVal=document.getElementById('liked-filter-author').value;
+  const feedVal=document.getElementById('liked-filter-feed').value;
+  let liked=timelinePosts.filter(p=>p.liked);
+  if(authorVal) liked=liked.filter(p=>p.author===authorVal);
+  if(feedVal) liked=liked.filter(p=>p.feed_name===feedVal);
+  const list=document.getElementById('liked-overlay-list');
+  if(!liked.length){list.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-tertiary);font-size:14px">No liked posts match these filters.</div>';return}
+  list.innerHTML=liked.map(p=>likedItemHtml(p)).join('');
+}
+
+function closeLikedOverlay(){
+  document.getElementById('liked-overlay').classList.remove('open');
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}

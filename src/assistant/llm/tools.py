@@ -78,7 +78,7 @@ def create_tool_registry(
     settings: Settings | None = None,
     memory: Any | None = None,
     dispatcher: Any | None = None,
-    feed_store: Any | None = None,
+    townsquare_url: str | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     output_cap = settings.tool_output_cap if settings else 15_000
@@ -202,19 +202,19 @@ def create_tool_registry(
             _make_send_notification(dispatcher),
         )
 
-    # Register feed tools if feed store is available
-    if feed_store is not None:
+    # Register feed tools if Town Square URL is configured
+    if townsquare_url:
         registry.register(
             POST_TO_FEED_DEF["name"],
             POST_TO_FEED_DEF["description"],
             POST_TO_FEED_DEF["input_schema"],
-            _make_post_to_feed(feed_store),
+            _make_post_to_feed(townsquare_url),
         )
         registry.register(
             MANAGE_FEEDS_DEF["name"],
             MANAGE_FEEDS_DEF["description"],
             MANAGE_FEEDS_DEF["input_schema"],
-            _make_manage_feeds(feed_store),
+            _make_manage_feeds(townsquare_url),
         )
 
     # Register YouTube tool if enabled

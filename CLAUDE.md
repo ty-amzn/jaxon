@@ -105,13 +105,13 @@ All 12 steps implemented:
 4. Finance tool — `tools/finance_tool.py`: `finance` with stock/crypto/currency actions via Yahoo Finance, CoinGecko, Frankfurter APIs (all free, no key needed)
 5. YouTube/Reddit/Google Maps gated by per-tool config flags; finance always-on. All classified as NETWORK_READ (auto-approved)
 
-## Phase 9 (Internal Feed)
-1. Feed store — `feed/store.py`: SQLite-backed posts table with threading via `reply_to` FK
-2. Feed tool — `tools/feed_tool.py`: `post_to_feed` lets agents post updates/findings to the feed
-3. Feed API — `api/feed_routes.py`: REST endpoints (`GET /feed/posts`, `GET /feed/posts/{id}/thread`, `POST /feed/posts`)
-4. Feed UI — `feed/ui.py`: self-contained dark-themed SPA at `/feed/ui`, compose box, thread overlay, 30s auto-poll
-5. Agent replies — user replies to agent posts trigger real-time LLM response saved back to feed
-6. Wired into lifespan (`core/events.py`) and tool registry (`llm/tools.py`)
+## Phase 9 (Town Square — Standalone Feed Service)
+Town Square is extracted into a standalone FastAPI service at `townsquare/` (port 51431).
+1. Standalone package — `townsquare/`: own `pyproject.toml`, `store.py`, `ui.py`, `routes.py`, `app.py`, `cli.py`
+2. Feed tools — `tools/feed_tool.py`: `post_to_feed` / `manage_feeds` now use httpx HTTP calls to Town Square API
+3. Webhook flow — user replies in Town Square UI fire webhook to Jaxon (`api/townsquare_webhook.py`), which generates agent reply and posts it back
+4. Config — `ASSISTANT_TOWNSQUARE_URL` connects Jaxon to Town Square; `TOWNSQUARE_WEBHOOK_CALLBACK_URL` connects Town Square back to Jaxon
+5. Run: `cd townsquare && uv sync && uv run townsquare serve` → UI at `http://localhost:51431/feed/ui`
 
 ## User Documentation
 - `docs/user-guide.md` — comprehensive user guide (all features)
