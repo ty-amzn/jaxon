@@ -9,6 +9,9 @@ services:
     volumes:
       - ./data:/app/data
     restart: unless-stopped
+    depends_on:
+      townsquare:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51430/health').raise_for_status()"]
       interval: 30s
@@ -16,6 +19,25 @@ services:
       retries: 3
     networks:
       - npm-shared
+
+  townsquare:
+    container_name: townsquare
+    build: ./townsquare
+    ports:
+      - "51431:51431"
+    env_file:
+      - ./townsquare/.env
+    volumes:
+      - ./townsquare/data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51431/feed/channels').raise_for_status()"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - npm-shared
+
 networks:
   npm-shared:
     external: true

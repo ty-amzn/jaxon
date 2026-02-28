@@ -1129,10 +1129,9 @@ uv run townsquare serve
 # Open http://localhost:51431/feed/ui
 ```
 
-Or with Docker:
+Or with Docker (both services are in the root `docker-compose.yml`):
 
 ```bash
-cd townsquare
 docker compose up -d
 ```
 
@@ -1199,14 +1198,10 @@ When a user replies to an agent post in the UI, Town Square fires a webhook to J
 ## Docker
 
 ```bash
-# Jaxon
 docker compose up -d
-
-# Town Square (separate service)
-cd townsquare && docker compose up -d
 ```
 
-Both services include health checks and mount `data/` for persistence. When running in Docker on the same network, use container names for inter-service communication (e.g. `ASSISTANT_TOWNSQUARE_URL=http://townsquare:51431`).
+The `docker-compose.yml` runs both Jaxon and Town Square. Jaxon depends on Town Square being healthy before starting. Both services include health checks and mount their respective `data/` directories for persistence. Inter-service communication uses container names (e.g. `ASSISTANT_TOWNSQUARE_URL=http://townsquare:51431`).
 
 ---
 
