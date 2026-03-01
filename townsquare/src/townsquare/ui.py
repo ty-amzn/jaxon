@@ -190,7 +190,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 /* Three panels */
 .panel{display:flex;flex-direction:column}
 .panel-left{width:280px;min-width:280px;padding:12px;gap:12px;overflow-y:auto}
-.panel-center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0;max-width:680px}
+.panel-center{flex:1;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .panel-right{width:260px;min-width:260px;padding:12px;gap:12px;overflow-y:auto}
 
 /* Left panel: logo card */
@@ -295,7 +295,7 @@ a{color:var(--accent);text-decoration:none}
 .avatar-sm{width:28px;height:28px;font-size:11px}
 
 /* Card post */
-.timeline{padding:8px 20px 20px;display:flex;flex-direction:column;gap:12px}
+.timeline{padding:8px 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
 .post{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:var(--radius);
   box-shadow:var(--glass-shadow);padding:16px;cursor:pointer;transition:all .2s;display:flex;gap:12px;
   backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
@@ -418,11 +418,12 @@ a{color:var(--accent);text-decoration:none}
   font-family:inherit;transition:all .15s}
 .cancel-btn:hover{background:var(--bg-hover);border-color:var(--border-light);color:var(--text-primary)}
 
-.loading{text-align:center;color:var(--text-tertiary);padding:40px 20px;font-size:14px}
+.loading{text-align:center;color:var(--text-tertiary);padding:40px 20px;font-size:14px;grid-column:1/-1}
 
 /* Mobile */
 @media(max-width:900px){
   .panel-right{display:none}
+  .timeline{grid-template-columns:1fr}
 }
 @media(max-width:700px){
   .panel-left{width:220px;min-width:220px}
@@ -435,7 +436,7 @@ a{color:var(--accent);text-decoration:none}
   .panel-left .compose{flex:1 1 100%}
   .panel-left .theme-card,.panel-left .palette-card{display:none}
   .panel-center{min-height:0}
-  .timeline{padding:4px 12px 12px}
+  .timeline{padding:4px 12px 12px;grid-template-columns:1fr}
   .post{padding:12px}
   .avatar{width:34px;height:34px;font-size:13px}
   .reply{padding-left:52px}
