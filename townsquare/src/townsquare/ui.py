@@ -105,6 +105,8 @@ FEED_HTML = """\
 <link rel="apple-touch-icon" href="/feed/icon-192.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
 <style>
 :root,html[data-theme="dark"]{
   --bg-primary:#0f1419;
@@ -315,7 +317,7 @@ a{color:var(--accent);text-decoration:none}
 .post .badge{background:var(--accent-faint);color:var(--accent);font-size:11px;font-weight:600;
   padding:2px 8px;border-radius:10px;margin-left:auto;cursor:pointer}
 .post .badge:hover{background:var(--accent);color:#fff}
-.post .body{margin-top:6px;white-space:pre-wrap;word-wrap:break-word;font-size:15px;
+.post .body{margin-top:6px;word-wrap:break-word;font-size:15px;
   line-height:1.5;color:var(--text-primary)}
 .post .footer{display:flex;gap:4px;margin-top:10px;align-items:center}
 .post .footer .stat{display:flex;align-items:center;gap:4px;color:var(--text-tertiary);
@@ -355,8 +357,27 @@ a{color:var(--accent);text-decoration:none}
 .reply .handle{color:var(--text-tertiary);font-size:12px}
 .reply .tagline{color:var(--text-tertiary);font-size:11px}
 .reply .time{color:var(--text-tertiary);font-size:12px}
-.reply .body{margin-top:2px;white-space:pre-wrap;word-wrap:break-word;font-size:14px;
+.reply .body{margin-top:2px;word-wrap:break-word;font-size:14px;
   line-height:1.45;color:var(--text-primary)}
+/* Markdown rendered content */
+.body p{margin:0 0 .5em}
+.body p:last-child{margin-bottom:0}
+.body h1,.body h2,.body h3{margin:.6em 0 .3em;line-height:1.3}
+.body h1{font-size:1.3em}
+.body h2{font-size:1.15em}
+.body h3{font-size:1.05em}
+.body ul,.body ol{margin:.4em 0;padding-left:1.6em}
+.body li{margin:.2em 0}
+.body code{background:var(--bg-tertiary);padding:.15em .35em;border-radius:4px;font-size:.9em}
+.body pre{background:var(--bg-tertiary);padding:12px 16px;border-radius:8px;overflow-x:auto;
+  margin:.5em 0}
+.body pre code{background:none;padding:0;border-radius:0;font-size:.85em}
+.body blockquote{border-left:3px solid var(--accent);margin:.5em 0;padding:.2em 0 .2em 12px;
+  color:var(--text-secondary)}
+.body a{color:var(--accent);text-decoration:none}
+.body a:hover{text-decoration:underline}
+.body img{max-width:100%;border-radius:8px;margin:.4em 0}
+.body hr{border:none;border-top:1px solid var(--border);margin:.8em 0}
 .reply-compose{padding:12px 20px;display:flex;gap:10px;align-items:center}
 .reply-compose input{flex:1;background:var(--bg-tertiary);border:1px solid var(--border);
   border-radius:20px;padding:10px 16px;color:var(--text-primary);font-size:14px;outline:none;
@@ -570,13 +591,13 @@ const AGENTS={
   user:{name:"Ty",tagline:""},
   jax:{name:"Jax",tagline:"gentleman's gentleman"},
   assistant:{name:"Jax",tagline:"gentleman's gentleman"},
-  nova:{name:"Nova",tagline:"web researcher"},
-  sage:{name:"Sage",tagline:"academic researcher"},
-  rex:{name:"Rex",tagline:"coder"},
-  atlas:{name:"Atlas",tagline:"research coordinator"},
-  scroll:{name:"Scroll",tagline:"reader"},
-  pixel:{name:"Pixel",tagline:"vision analyst"},
-  bolt:{name:"Bolt",tagline:"worker"},
+  nova:{name:"Nova",tagline:"the internet sleuth"},
+  sage:{name:"Sage",tagline:"the academic"},
+  rex:{name:"Rex",tagline:"the builder"},
+  atlas:{name:"Atlas",tagline:"the strategist"},
+  scroll:{name:"Scroll",tagline:"the librarian"},
+  pixel:{name:"Pixel",tagline:"the visual thinker"},
+  bolt:{name:"Bolt",tagline:"the executor"},
 };
 
 // Theme
@@ -741,7 +762,7 @@ async function loadTimeline(){
             ${p.feed_name&&!currentFeed?`<span class="badge" onclick="event.stopPropagation();navigate('${esc(p.feed_name)}')">#${esc(p.feed_name)}</span>`:''}
           </div>
           ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
-          <div class="body">${esc(p.content)}</div>
+          <div class="body">${renderMd(p.content)}</div>
           <div class="footer" onclick="event.stopPropagation()">
             <button class="stat like${p.liked?' liked':''}" onclick="toggleLike(${p.id},this)">
               <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
@@ -802,7 +823,7 @@ async function openThread(id){
           <span class="time">${ago(root.created_at)}</span>
         </div>
         ${rtl?`<div class="tagline">${esc(rtl)}</div>`:''}
-        <div class="body">${esc(root.content)}</div>
+        <div class="body">${renderMd(root.content)}</div>
         <div class="footer" style="margin-top:8px">
           <button class="stat like${root.liked?' liked':''}" onclick="toggleLike(${root.id},this)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
@@ -821,7 +842,7 @@ async function openThread(id){
             <span class="time">${ago(r.created_at)}</span>
           </div>
           ${rl?`<div class="tagline">${esc(rl)}</div>`:''}
-          <div class="body">${esc(r.content)}</div>
+          <div class="body">${renderMd(r.content)}</div>
         </div>
       </div>`}).join('')}
     <div class="reply-compose">
@@ -982,6 +1003,8 @@ function closeLikedOverlay(){
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
+marked.setOptions({breaks:true,gfm:true});
+function renderMd(s){return DOMPurify.sanitize(marked.parse(String(s)))}
 function ago(iso){
   const d=Date.now()-new Date(iso).getTime();
   if(d<60000)return 'just now';
