@@ -335,9 +335,9 @@ a{color:var(--accent);text-decoration:none}
   display:none;justify-content:center;align-items:flex-start;padding:40px 16px;z-index:10;
   overflow-y:auto;backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
 .thread-overlay.open{display:flex}
-.thread-panel{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:var(--radius);
+.thread-panel{background:var(--bg-secondary);border:1px solid var(--glass-border);border-radius:var(--radius);
   box-shadow:0 8px 30px rgba(0,0,0,.3);width:100%;max-width:600px;overflow:hidden;
-  animation:slideUp .2s ease-out;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  animation:slideUp .2s ease-out}
 @keyframes slideUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
 .thread-panel .thread-header{display:flex;justify-content:space-between;align-items:center;
   padding:16px 20px;border-bottom:1px solid var(--border)}
@@ -346,10 +346,29 @@ a{color:var(--accent);text-decoration:none}
   cursor:pointer;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;transition:all .15s}
 .thread-panel .close:hover{background:var(--bg-hover);color:var(--text-primary)}
-.thread-root{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;gap:12px}
+.thread-root{padding:20px;display:flex;gap:12px}
 .thread-root .post-content{flex:1}
-.reply{padding:12px 20px 12px 72px;border-bottom:1px solid var(--border);display:flex;gap:10px;
-  position:relative}
+.thread-root .meta{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.thread-root .author{font-weight:700;font-size:15px;color:var(--text-primary)}
+.thread-root .handle{color:var(--text-tertiary);font-size:13px}
+.thread-root .sep{color:var(--text-tertiary);font-size:13px}
+.thread-root .time{color:var(--text-tertiary);font-size:13px}
+.thread-root .tagline{color:var(--text-tertiary);font-size:12px;margin-top:1px}
+.thread-root .body{margin-top:6px;word-wrap:break-word;font-size:15px;
+  line-height:1.5;color:var(--text-primary)}
+.thread-root .footer{display:flex;gap:4px;margin-top:10px;align-items:center}
+.thread-root .footer .stat{display:flex;align-items:center;gap:4px;color:var(--text-tertiary);
+  font-size:12px;padding:4px 8px;border-radius:16px;transition:all .15s;cursor:pointer;
+  background:none;border:none;font-family:inherit}
+.thread-root .footer .stat:hover{background:var(--accent-faint);color:var(--accent)}
+.thread-root .footer .stat.like.liked{color:#f91880;background:rgba(249,24,128,.1)}
+.thread-root .footer .stat.like.liked svg{fill:#f91880;stroke:#f91880}
+.thread-root .footer .stat.like:hover{color:#f91880;background:rgba(249,24,128,.1)}
+.thread-replies{border-top:1px solid var(--border)}
+.reply{padding:14px 20px 14px 72px;border-bottom:1px solid var(--border);display:flex;gap:10px;
+  position:relative;transition:background .15s}
+.reply:last-of-type{border-bottom:none}
+.reply:hover{background:var(--bg-hover)}
 .reply::before{content:'';position:absolute;left:39px;top:0;bottom:0;width:2px;background:var(--border)}
 .reply .reply-avatar{z-index:1}
 .reply .reply-content{flex:1;min-width:0}
@@ -357,7 +376,7 @@ a{color:var(--accent);text-decoration:none}
 .reply .handle{color:var(--text-tertiary);font-size:12px}
 .reply .tagline{color:var(--text-tertiary);font-size:11px}
 .reply .time{color:var(--text-tertiary);font-size:12px}
-.reply .body{margin-top:2px;word-wrap:break-word;font-size:14px;
+.reply .body{margin-top:4px;word-wrap:break-word;font-size:14px;
   line-height:1.45;color:var(--text-primary)}
 /* Markdown rendered content */
 .body p{margin:0 0 .5em}
@@ -378,7 +397,8 @@ a{color:var(--accent);text-decoration:none}
 .body a:hover{text-decoration:underline}
 .body img{max-width:100%;border-radius:8px;margin:.4em 0}
 .body hr{border:none;border-top:1px solid var(--border);margin:.8em 0}
-.reply-compose{padding:12px 20px;display:flex;gap:10px;align-items:center}
+.reply-compose{padding:14px 20px;display:flex;gap:10px;align-items:center;
+  border-top:1px solid var(--border)}
 .reply-compose input{flex:1;background:var(--bg-tertiary);border:1px solid var(--border);
   border-radius:20px;padding:10px 16px;color:var(--text-primary);font-size:14px;outline:none;
   font-family:inherit;transition:border-color .15s}
@@ -824,13 +844,14 @@ async function openThread(id){
         </div>
         ${rtl?`<div class="tagline">${esc(rtl)}</div>`:''}
         <div class="body">${renderMd(root.content)}</div>
-        <div class="footer" style="margin-top:8px">
+        <div class="footer">
           <button class="stat like${root.liked?' liked':''}" onclick="toggleLike(${root.id},this)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
           </button>
         </div>
       </div>
     </div>
+    <div class="thread-replies">
     ${replies.map(r=>{const rl=tagline(r.author);return`
       <div class="reply">
         <div class="reply-avatar">${avatarHtml(r.author,true)}</div>
@@ -845,6 +866,7 @@ async function openThread(id){
           <div class="body">${renderMd(r.content)}</div>
         </div>
       </div>`}).join('')}
+    </div>
     <div class="reply-compose">
       ${avatarHtml('user',true)}
       <input id="reply-input" placeholder="Post your reply..." onkeydown="if(event.key==='Enter')sendReply(${root.id})">
