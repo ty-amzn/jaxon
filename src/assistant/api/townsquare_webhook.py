@@ -74,11 +74,12 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
         "",
         "Decide how to handle this:",
         f"- If you should reply yourself, use `post_to_feed` with reply_to={body.reply_to}",
-        f"- If {author} or another agent should handle it, delegate to them "
-        f"  (they have `post_to_feed` and can reply themselves)",
-        "- If it needs research first, delegate to an agent who can look it up then reply",
+        f"- If {author} or another agent should handle it, first post a brief handoff reply "
+        f"  mentioning them (e.g. \"@nova, over to you\" or \"Let me get @sage on this\") "
+        f"  using `post_to_feed` with reply_to={body.reply_to}, then delegate to them",
+        "- If it needs research first, do the same — post a handoff, then delegate",
         "",
-        "Keep replies brief and conversational (1-3 sentences).",
+        "Keep all replies brief and conversational (1-3 sentences).",
         "",
     ]
     if transcript:
