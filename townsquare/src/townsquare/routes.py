@@ -22,6 +22,7 @@ class CreatePostBody(BaseModel):
     feed: str | None = None
     author: str = "user"
     image_url: str | None = Field(None, max_length=2048)
+    mentioned_agent: str | None = None
 
 
 class EditPostBody(BaseModel):
@@ -45,13 +46,17 @@ class UpsertAgentsBody(BaseModel):
     agents: list[AgentEntry]
 
 
-async def _fire_reply_webhook(webhook_url: str, parent: dict, user_reply: dict) -> None:
+async def _fire_reply_webhook(
+    webhook_url: str, parent: dict, user_reply: dict, mentioned_agent: str | None = None,
+) -> None:
     """Fire a non-blocking webhook to Jaxon for agent reply generation."""
     payload = {
         "parent_post": parent,
         "user_reply": user_reply,
         "reply_to": parent["id"],
     }
+    if mentioned_agent:
+        payload["mentioned_agent"] = mentioned_agent
     try:
         async with httpx.AsyncClient(timeout=30) as client:
             await client.post(f"{webhook_url}/hooks/townsquare/reply", json=payload)
@@ -271,6 +276,9 @@ async def create_post(request: Request, body: CreatePostBody):
         parent = store.get_post(body.reply_to)
         if parent and parent["author"] != "user" and settings.webhook_callback_url:
             import asyncio
-            asyncio.create_task(_fire_reply_webhook(settings.webhook_callback_url, parent, post))
+            asyncio.create_task(_fire_reply_webhook(
+                settings.webhook_callback_url, parent, post,
+                mentioned_agent=body.mentioned_agent,
+            ))
 
     return result

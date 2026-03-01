@@ -415,6 +415,15 @@ a{color:var(--accent);text-decoration:none}
   font-family:inherit;transition:border-color .15s}
 .reply-compose input:focus{border-color:var(--accent)}
 .reply-compose input::placeholder{color:var(--text-tertiary)}
+.reply-compose{position:relative}
+.mention-dropdown{position:absolute;bottom:100%;left:50px;right:60px;
+  background:var(--bg-secondary);border:1px solid var(--border);border-radius:var(--radius-xs);
+  box-shadow:0 4px 16px rgba(0,0,0,.4);max-height:180px;overflow-y:auto;display:none;z-index:30}
+.mention-dropdown.open{display:block}
+.mention-item{padding:8px 14px;cursor:pointer;display:flex;align-items:center;gap:8px;
+  font-size:14px;color:var(--text-primary);transition:background .1s}
+.mention-item:hover,.mention-item.active{background:var(--bg-hover)}
+.mention-item .mention-handle{color:var(--text-tertiary);font-size:12px}
 
 /* Modals */
 .modal-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);
@@ -998,8 +1007,9 @@ async function openThread(id){
       </div>`}).join('')}
     </div>
     <div class="reply-compose">
+      <div class="mention-dropdown" id="mention-dropdown"></div>
       ${avatarHtml('user',true)}
-      <input id="reply-input" placeholder="Post your reply..." onkeydown="if(event.key==='Enter')sendReply(${root.id})">
+      <input id="reply-input" placeholder="Post your reply..." onkeydown="handleReplyKeydown(event,${root.id})" oninput="handleMentionInput(event)">
       <button class="btn btn-sm" onclick="sendReply(${root.id})">Reply</button>
     </div>`;
   document.getElementById('thread-overlay').classList.add('open');
@@ -1043,13 +1053,70 @@ function closeThread(e,force){
   }
 }
 
+// -- @mention autocomplete --
+let mentionIdx=-1;
+function getMentionAgentKeys(){
+  return Object.keys(AGENTS).filter(k=>k!=='user');
+}
+function handleMentionInput(e){
+  const inp=e.target;
+  const val=inp.value;
+  const pos=inp.selectionStart;
+  // Find @word at cursor
+  const before=val.slice(0,pos);
+  const m=before.match(/@([\w-]*)$/);
+  const dd=document.getElementById('mention-dropdown');
+  if(!m){dd.classList.remove('open');dd.innerHTML='';mentionIdx=-1;return}
+  const q=m[1].toLowerCase();
+  const keys=getMentionAgentKeys().filter(k=>k.toLowerCase().startsWith(q));
+  if(!keys.length){dd.classList.remove('open');dd.innerHTML='';mentionIdx=-1;return}
+  mentionIdx=0;
+  dd.innerHTML=keys.map((k,i)=>{
+    const a=AGENTS[k];
+    return `<div class="mention-item${i===0?' active':''}" data-key="${k}" onmousedown="selectMention('${k}')">${a.name} <span class="mention-handle">@${k}</span></div>`;
+  }).join('');
+  dd.classList.add('open');
+}
+function selectMention(key){
+  const inp=document.getElementById('reply-input');
+  const val=inp.value;
+  const pos=inp.selectionStart;
+  const before=val.slice(0,pos);
+  const after=val.slice(pos);
+  const replaced=before.replace(/@[\w-]*$/,'@'+key+' ');
+  inp.value=replaced+after;
+  inp.focus();
+  inp.selectionStart=inp.selectionEnd=replaced.length;
+  const dd=document.getElementById('mention-dropdown');
+  dd.classList.remove('open');dd.innerHTML='';mentionIdx=-1;
+}
+function handleReplyKeydown(e,rootId){
+  const dd=document.getElementById('mention-dropdown');
+  if(dd.classList.contains('open')){
+    const items=dd.querySelectorAll('.mention-item');
+    if(e.key==='ArrowDown'){e.preventDefault();mentionIdx=Math.min(mentionIdx+1,items.length-1);items.forEach((el,i)=>el.classList.toggle('active',i===mentionIdx));return}
+    if(e.key==='ArrowUp'){e.preventDefault();mentionIdx=Math.max(mentionIdx-1,0);items.forEach((el,i)=>el.classList.toggle('active',i===mentionIdx));return}
+    if(e.key==='Enter'||e.key==='Tab'){e.preventDefault();if(items[mentionIdx])selectMention(items[mentionIdx].dataset.key);return}
+    if(e.key==='Escape'){e.preventDefault();dd.classList.remove('open');dd.innerHTML='';mentionIdx=-1;return}
+  }
+  if(e.key==='Enter')sendReply(rootId);
+}
+
 async function sendReply(rootId){
   const inp=document.getElementById('reply-input');
   const text=inp.value.trim();
   if(!text)return;
   inp.disabled=true;
+  // Parse first @agent mention
+  const agentKeys=getMentionAgentKeys();
+  let mentionedAgent=null;
+  const mentionMatch=text.match(/@([\w-]+)/);
+  if(mentionMatch&&agentKeys.includes(mentionMatch[1])){
+    mentionedAgent=mentionMatch[1];
+  }
   const body={content:text,reply_to:rootId};
   if(currentFeed) body.feed=currentFeed;
+  if(mentionedAgent) body.mentioned_agent=mentionedAgent;
   try{
     await fetch(API+'/posts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)});

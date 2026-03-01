@@ -24,6 +24,7 @@ class ReplyWebhookBody(BaseModel):
     parent_post: dict
     user_reply: dict
     reply_to: int
+    mentioned_agent: str | None = None
 
 
 async def _fetch_thread_context(
@@ -48,12 +49,19 @@ def _build_thread_transcript(thread: list[dict]) -> str:
         return ""
     lines = []
     for post in thread:
-        lines.append(f"{post['author']}: {post['content']}")
+        line = f"{post['author']}: {post['content']}"
+        if post.get("image_url"):
+            line += f" [image: {post['image_url']}]"
+        lines.append(line)
     return "\n".join(lines)
 
 
 async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
-    """Give Jax the thread context and let him decide how to respond."""
+    """Give Jax the thread context and let him decide how to respond.
+
+    If the user @mentioned a specific agent, route directly to that agent
+    instead of going through Jax.
+    """
     parent = body.parent_post
     user_reply = body.user_reply
     townsquare_url = request.app.state.settings.townsquare_url
@@ -67,6 +75,19 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
 
     user_text = user_reply.get("content", "")
 
+    # Check if a specific agent was @mentioned and exists
+    mentioned = body.mentioned_agent
+    orchestrator = getattr(chat_interface, "_orchestrator", None)
+    if mentioned and orchestrator:
+        agent_def = orchestrator._loader.get_agent(mentioned)
+        if agent_def:
+            await _handle_mentioned_agent(
+                chat_interface, orchestrator, agent_def,
+                body, transcript, user_text, author,
+            )
+            return
+
+    # --- Default: let Jax decide ---
     # Build the task for Jax
     task_parts = [
         f"Ty replied to a Town Square thread (originally posted by {author}).",
@@ -97,7 +118,6 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
     from assistant.llm.types import ToolCall, ToolResult
 
     agent_catalog = None
-    orchestrator = getattr(chat_interface, "_orchestrator", None)
     if orchestrator:
         agents = orchestrator._loader.list_agents()
         if agents:
@@ -122,8 +142,57 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
         tools=chat_interface._tool_registry.definitions,
         tool_executor=tool_executor,
         max_tool_rounds=chat_interface._settings.max_tool_rounds,
+        agent_name="townsquare-webhook",
     ):
         pass  # Jax handles everything via tools — no text output needed
+
+
+async def _handle_mentioned_agent(
+    chat_interface,
+    orchestrator,
+    agent_def,
+    body: ReplyWebhookBody,
+    transcript: str,
+    user_text: str,
+    original_author: str,
+) -> None:
+    """Route a reply directly to the @mentioned agent, bypassing Jax."""
+    from assistant.agents.background import _auto_approve
+    from assistant.agents.runner import AgentRunner
+    from assistant.gateway.permissions import PermissionManager
+    from assistant.llm.context import build_system_prompt
+
+    task_parts = [
+        f"Ty @mentioned you in a Town Square thread (originally posted by {original_author}).",
+        f"The reply_to post ID is {body.reply_to}.",
+        "",
+        f"Respond using `post_to_feed` with reply_to={body.reply_to}.",
+        "Keep your reply brief and conversational (1-3 sentences).",
+        "",
+    ]
+    if transcript:
+        task_parts.append(f"Thread so far:\n{transcript}")
+    else:
+        parent = body.parent_post
+        task_parts.append(f"Original post by {original_author}:\n{parent['content']}")
+    task_parts.append(f"\nTy's reply:\n{user_text}")
+
+    task = "\n".join(task_parts)
+
+    base_system_prompt = build_system_prompt(chat_interface._memory)
+    auto_perms = PermissionManager(_auto_approve)
+    runner = AgentRunner(chat_interface._llm, chat_interface._tool_registry)
+
+    result = await runner.run(
+        agent=agent_def,
+        task=task,
+        base_system_prompt=base_system_prompt,
+        permission_override=auto_perms,
+    )
+    if result.error:
+        logger.error(
+            "Mentioned agent %s failed: %s", agent_def.name, result.error,
+        )
 
 
 @townsquare_webhook_router.post("/hooks/townsquare/reply")
