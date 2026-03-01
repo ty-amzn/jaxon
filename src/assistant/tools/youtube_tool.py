@@ -53,7 +53,7 @@ async def _search(query: str, num_results: int) -> str:
     """Search YouTube and return top results."""
     rc, stdout, stderr = await _run_ytdlp(
         f"ytsearch{num_results}:{query}",
-        "--flat-list", "--dump-json",
+        "--flat-playlist", "--dump-json",
         "--no-warnings",
         timeout=30.0,
     )
