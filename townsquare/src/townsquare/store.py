@@ -31,6 +31,7 @@ class FeedStore:
                     "reply_to": int,
                     "created_at": str,
                     "feed_id": int,
+                    "image_url": str,
                 },
                 pk="id",
                 not_null={"author", "content", "created_at"},
@@ -40,6 +41,8 @@ class FeedStore:
             cols = {c.name for c in self._db["posts"].columns}
             if "feed_id" not in cols:
                 self._db.execute("ALTER TABLE posts ADD COLUMN feed_id INTEGER")
+            if "image_url" not in cols:
+                self._db.execute("ALTER TABLE posts ADD COLUMN image_url TEXT")
 
         # Likes table
         if "likes" not in self._db.table_names():
@@ -184,6 +187,7 @@ class FeedStore:
         feed_id: int,
         limit: int = 50,
         before_id: int | None = None,
+        since: str | None = None,
     ) -> list[dict]:
         """Return top-level posts for a specific feed, newest first."""
         sql = "SELECT * FROM posts WHERE reply_to IS NULL AND feed_id = ?"
@@ -191,6 +195,9 @@ class FeedStore:
         if before_id is not None:
             sql += " AND id < ?"
             params.append(before_id)
+        if since is not None:
+            sql += " AND created_at >= ?"
+            params.append(since)
         sql += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
@@ -205,6 +212,7 @@ class FeedStore:
         content: str,
         reply_to: int | None = None,
         feed_id: int | None = None,
+        image_url: str | None = None,
     ) -> dict:
         """Insert a new post and return it as a dict."""
         row = {
@@ -213,6 +221,7 @@ class FeedStore:
             "reply_to": reply_to,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "feed_id": feed_id,
+            "image_url": image_url,
         }
         result = self._db["posts"].insert(row)
         row["id"] = result.last_pk
@@ -222,10 +231,30 @@ class FeedStore:
         self,
         limit: int = 50,
         before_id: int | None = None,
+        since: str | None = None,
     ) -> list[dict]:
         """Return top-level posts (reply_to IS NULL), newest first."""
         sql = "SELECT * FROM posts WHERE reply_to IS NULL"
         params: list = []
+        if before_id is not None:
+            sql += " AND id < ?"
+            params.append(before_id)
+        if since is not None:
+            sql += " AND created_at >= ?"
+            params.append(since)
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        return _rows_to_dicts(self._db.execute(sql, params))
+
+    def search_posts(
+        self,
+        query: str,
+        limit: int = 50,
+        before_id: int | None = None,
+    ) -> list[dict]:
+        """Search posts by content (LIKE), newest first."""
+        sql = "SELECT * FROM posts WHERE reply_to IS NULL AND content LIKE ?"
+        params: list = [f"%{query}%"]
         if before_id is not None:
             sql += " AND id < ?"
             params.append(before_id)
@@ -269,13 +298,18 @@ class FeedStore:
         except Exception:
             return None
 
-    def edit_post(self, post_id: int, content: str) -> dict | None:
-        """Update a post's content. Returns updated post or None if not found."""
+    def edit_post(self, post_id: int, content: str, image_url: str | None = None) -> dict | None:
+        """Update a post's content and optional image. Returns updated post or None if not found."""
         post = self.get_post(post_id)
         if post is None:
             return None
-        self._db["posts"].update(post_id, {"content": content})
+        updates: dict = {"content": content}
+        if image_url is not None:
+            updates["image_url"] = image_url or None  # empty string → NULL
+        self._db["posts"].update(post_id, updates)
         post["content"] = content
+        if image_url is not None:
+            post["image_url"] = image_url or None
         return post
 
     def delete_post(self, post_id: int) -> bool:

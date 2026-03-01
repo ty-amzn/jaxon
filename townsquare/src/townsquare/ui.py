@@ -29,7 +29,7 @@ MANIFEST_JSON = json.dumps(
 )
 
 SERVICE_WORKER_JS = """\
-const CACHE='town-square-v1';
+const CACHE='town-square-v2';
 const SHELL=['/feed/ui','/feed/icon-192.svg'];
 const FONT_RE=/fonts\\.googleapis\\.com|fonts\\.gstatic\\.com/;
 const API_RE=/\\/feed\\/(posts|channels)/;
@@ -277,6 +277,22 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 .center-scroll{flex:1;overflow-y:auto;padding:0}
 a{color:var(--accent);text-decoration:none}
 
+/* Toolbar (search + period) */
+.toolbar{display:flex;gap:8px;padding:8px 20px;border-bottom:1px solid var(--glass-border);
+  background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);align-items:center}
+.search-box{display:flex;align-items:center;gap:6px;flex:1;background:var(--bg-tertiary);
+  border:1px solid var(--border);border-radius:20px;padding:6px 12px;color:var(--text-secondary)}
+.search-box input{flex:1;background:none;border:none;outline:none;color:var(--text-primary);
+  font-size:13px;font-family:inherit}
+.search-box input::placeholder{color:var(--text-tertiary)}
+.search-clear{cursor:pointer;color:var(--text-tertiary);font-size:16px;line-height:1;padding:0 2px}
+.search-clear:hover{color:var(--text-primary)}
+.period-filter{background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;
+  padding:6px 12px;color:var(--text-primary);font-size:13px;font-family:inherit;cursor:pointer;outline:none}
+.load-more-btn{display:block;width:100%;padding:16px;background:transparent;border:none;
+  color:var(--accent);cursor:pointer;font-size:14px;font-family:inherit}
+.load-more-btn:hover{background:var(--bg-tertiary)}
+
 /* Feed header (visible only when filtering) */
 .feed-header{padding:12px 20px;position:sticky;top:0;
   background:var(--glass-bg);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);z-index:5;
@@ -390,6 +406,7 @@ a{color:var(--accent);text-decoration:none}
 .body a{color:var(--accent);text-decoration:none}
 .body a:hover{text-decoration:underline}
 .body img{max-width:100%;border-radius:8px;margin:.4em 0}
+.post-img{max-width:100%;border-radius:12px;margin:.5em 0;display:block}
 .body hr{border:none;border-top:1px solid var(--border);margin:.8em 0}
 .reply-compose{padding:14px 20px;display:flex;gap:10px;align-items:center;
   border-top:1px solid var(--border)}
@@ -461,6 +478,7 @@ a{color:var(--accent);text-decoration:none}
     </div>
     <div class="bar">
       <select id="compose-feed"><option value="">Global</option></select>
+      <input id="compose-image" type="url" placeholder="Image URL (optional)" style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:6px 12px;color:var(--text-primary);font-size:12px;outline:none;font-family:inherit;min-width:0">
       <button class="btn btn-sm" id="compose-btn" onclick="createPost()">Post</button>
     </div>
   </div>
@@ -478,24 +496,26 @@ a{color:var(--accent);text-decoration:none}
     </div>
     <div class="liked-list" id="replied-list" style="margin-top:8px"></div>
   </div>
-  <div class="palette-card glass">
-    <div class="right-section">Palette</div>
-    <div class="palette-row" id="palette-row"></div>
-  </div>
-  <div class="theme-card glass">
-    <button class="theme-toggle" onclick="toggleTheme()">
-      <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
-      </svg>
-      <span id="theme-label">Light mode</span>
-    </button>
-  </div>
 </div>
 <!-- Center panel: feed header + timeline -->
 <div class="panel panel-center">
   <div class="feed-header" id="feed-header"><h1>All Posts</h1></div>
-  <div class="center-scroll">
+  <div class="toolbar">
+    <div class="search-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search-input" type="text" placeholder="Search posts..." autocomplete="off">
+      <span id="search-clear" class="search-clear" onclick="clearSearch()" style="display:none">&times;</span>
+    </div>
+    <select id="period-filter" class="period-filter" onchange="changePeriod(this.value)">
+      <option value="7" selected>1 week</option>
+      <option value="30">1 month</option>
+      <option value="180">6 months</option>
+      <option value="all">All time</option>
+    </select>
+  </div>
+  <div class="center-scroll" id="center-scroll">
     <div class="timeline" id="timeline"></div>
+    <button class="load-more-btn" id="load-more-btn" onclick="loadMore()" style="display:none">Load more</button>
   </div>
 </div>
 <!-- Right panel: feeds card + people card -->
@@ -513,6 +533,18 @@ a{color:var(--accent);text-decoration:none}
     <div class="right-section">People</div>
     <div class="author-nav" id="author-list"></div>
   </div>
+  <div class="palette-card glass">
+    <div class="right-section">Palette</div>
+    <div class="palette-row" id="palette-row"></div>
+  </div>
+  <div class="theme-card glass">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
+      </svg>
+      <span id="theme-label">Light mode</span>
+    </button>
+  </div>
 </div>
 <div class="thread-overlay" id="thread-overlay" onclick="closeThread(event)">
   <div class="thread-panel" id="thread-panel"></div>
@@ -521,6 +553,7 @@ a{color:var(--accent);text-decoration:none}
   <div class="modal">
     <h3>Edit Post</h3>
     <textarea id="edit-post-text" rows="4"></textarea>
+    <input id="edit-post-image" type="url" placeholder="Image URL (optional)">
     <input type="hidden" id="edit-post-id">
     <div class="modal-actions">
       <button class="cancel-btn" onclick="closeEditPost()">Cancel</button>
@@ -676,8 +709,12 @@ applyTheme(getPreferredTheme());
 
 let currentFeed='';
 let currentAuthor='';
+let currentPeriod='7';  // days: 7, 30, 180, 'all'
+let currentSearch='';
 let feedsCache=[];
 let timelinePosts=[];
+let lastPostId=null;
+let loadingMore=false;
 let polling;
 
 function displayName(author){
@@ -698,6 +735,9 @@ function avatarHtml(author,sm){
 
 function navigate(feedName){
   currentFeed=feedName;
+  currentSearch='';
+  document.getElementById('search-input').value='';
+  document.getElementById('search-clear').style.display='none';
   location.hash=feedName?'feed/'+feedName:currentAuthor?'author/'+currentAuthor:'';
   loadSidebar();
   loadTimeline();
@@ -751,11 +791,56 @@ async function loadSidebar(){
   }catch(e){console.error(e)}
 }
 
+function getSinceParam(){
+  if(currentSearch) return '';  // search ignores period
+  if(currentPeriod==='all') return '';
+  const d=new Date();
+  d.setDate(d.getDate()-parseInt(currentPeriod));
+  return '&since='+encodeURIComponent(d.toISOString());
+}
+
+function buildPostUrl(beforeId){
+  let url=API+'/posts?limit=50';
+  if(currentSearch) url+='&q='+encodeURIComponent(currentSearch);
+  else if(currentFeed) url+='&feed='+encodeURIComponent(currentFeed);
+  url+=getSinceParam();
+  if(beforeId) url+='&before_id='+beforeId;
+  return url;
+}
+
+function renderPostHtml(p){
+  const tl=tagline(p.author);const own=p.author==='user';
+  return `<div class="post" onclick="openThread(${p.id})">
+    ${avatarHtml(p.author)}
+    <div class="post-content">
+      <div class="meta">
+        <span class="author" onclick="event.stopPropagation();filterByAuthor('${esc(p.author)}')">${esc(displayName(p.author))}</span>
+        ${tl?`<span class="handle">@${esc(p.author)}</span>`:''}
+        <span class="sep">&middot;</span>
+        <span class="time">${ago(p.created_at)}</span>
+        ${p.feed_name&&!currentFeed?`<span class="badge" onclick="event.stopPropagation();navigate('${esc(p.feed_name)}')">#${esc(p.feed_name)}</span>`:''}
+      </div>
+      ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
+      <div class="body">${renderMd(p.content)}</div>
+      ${imgHtml(p.image_url)}
+      <div class="footer" onclick="event.stopPropagation()">
+        <button class="stat like${p.liked?' liked':''}" onclick="toggleLike(${p.id},this)">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+        </button>
+        ${p.reply_count?`<span class="stat" onclick="openThread(${p.id})">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+          ${p.reply_count}</span>`:''}
+        <span class="spacer"></span>
+        ${own?`<button class="stat" onclick="openEditPost(${p.id})">edit</button>`:''}
+        <button class="stat delete" onclick="deletePost(${p.id})">delete</button>
+      </div>
+    </div>
+  </div>`;
+}
+
 async function loadTimeline(){
   try{
-    let url=API+'/posts?limit=50';
-    if(currentFeed) url+='&feed='+encodeURIComponent(currentFeed);
-    const r=await fetch(url);
+    const r=await fetch(buildPostUrl());
     let posts=await r.json();
     // Client-side author filter (jax/assistant are the same persona)
     if(currentAuthor) posts=posts.filter(p=>p.author===currentAuthor
@@ -766,6 +851,12 @@ async function loadTimeline(){
       const f=feedsCache.find(x=>x.name===currentFeed);
       headerHtml=`<h1>#${esc(currentFeed)}</h1>${f?`<div class="feed-desc">${esc(f.description)}</div>`:''}`;
     }
+    if(currentSearch){
+      headerHtml+=`<span class="filter-tag">
+        Search: "${esc(currentSearch)}"
+        <span class="clear" onclick="clearSearch()">&times;</span>
+      </span>`;
+    }
     if(currentAuthor){
       headerHtml+=`<span class="filter-tag">
         <span class="author-dot" style="background:${avatarColor(currentAuthor)};width:8px;height:8px;border-radius:50%;display:inline-block"></span>
@@ -774,38 +865,65 @@ async function loadTimeline(){
       </span>`;
     }
     header.innerHTML=headerHtml;
-    header.style.display=(currentFeed||currentAuthor)?'':'none';
+    header.style.display=(currentFeed||currentAuthor||currentSearch)?'':'none';
     const el=document.getElementById('timeline');
-    if(!posts.length){el.innerHTML='<div class="loading">No posts yet. Be the first!</div>';timelinePosts=[];updateLikedCard();return}
-    el.innerHTML=posts.map(p=>{const tl=tagline(p.author);const own=p.author==='user';return`
-      <div class="post" onclick="openThread(${p.id})">
-        ${avatarHtml(p.author)}
-        <div class="post-content">
-          <div class="meta">
-            <span class="author" onclick="event.stopPropagation();filterByAuthor('${esc(p.author)}')">${esc(displayName(p.author))}</span>
-            ${tl?`<span class="handle">@${esc(p.author)}</span>`:''}
-            <span class="sep">&middot;</span>
-            <span class="time">${ago(p.created_at)}</span>
-            ${p.feed_name&&!currentFeed?`<span class="badge" onclick="event.stopPropagation();navigate('${esc(p.feed_name)}')">#${esc(p.feed_name)}</span>`:''}
-          </div>
-          ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
-          <div class="body">${renderMd(p.content)}</div>
-          <div class="footer" onclick="event.stopPropagation()">
-            <button class="stat like${p.liked?' liked':''}" onclick="toggleLike(${p.id},this)">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-            </button>
-            ${p.reply_count?`<span class="stat" onclick="openThread(${p.id})">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-              ${p.reply_count}</span>`:''}
-            <span class="spacer"></span>
-            ${own?`<button class="stat" onclick="openEditPost(${p.id})">edit</button>`:''}
-            <button class="stat delete" onclick="deletePost(${p.id})">delete</button>
-          </div>
-        </div>
-      </div>`}).join('');
+    const emptyMsg=currentSearch?'No posts match your search.':'No posts yet. Be the first!';
+    if(!posts.length){el.innerHTML=`<div class="loading">${emptyMsg}</div>`;timelinePosts=[];lastPostId=null;updateLikedCard();toggleLoadMore(false);return}
+    el.innerHTML=posts.map(renderPostHtml).join('');
     timelinePosts=posts;
+    lastPostId=posts[posts.length-1].id;
     updateLikedCard();
+    // Show "Load more" if we got a full page (more may exist)
+    toggleLoadMore(posts.length>=50);
   }catch(e){console.error(e)}
+}
+
+async function loadMore(){
+  if(loadingMore||!lastPostId) return;
+  loadingMore=true;
+  const btn=document.getElementById('load-more-btn');
+  btn.textContent='Loading...';
+  try{
+    const r=await fetch(buildPostUrl(lastPostId));
+    let posts=await r.json();
+    if(currentAuthor) posts=posts.filter(p=>p.author===currentAuthor
+      ||(currentAuthor==='jax'&&p.author==='assistant'));
+    if(posts.length){
+      const el=document.getElementById('timeline');
+      el.insertAdjacentHTML('beforeend',posts.map(renderPostHtml).join(''));
+      timelinePosts=timelinePosts.concat(posts);
+      lastPostId=posts[posts.length-1].id;
+    }
+    toggleLoadMore(posts.length>=50);
+  }catch(e){console.error(e)}
+  btn.textContent='Load more';
+  loadingMore=false;
+}
+
+function toggleLoadMore(show){
+  document.getElementById('load-more-btn').style.display=show?'block':'none';
+}
+
+function changePeriod(val){
+  currentPeriod=val;
+  loadTimeline();
+}
+
+let searchTimeout;
+function onSearchInput(e){
+  const val=e.target.value.trim();
+  document.getElementById('search-clear').style.display=val?'inline':'none';
+  clearTimeout(searchTimeout);
+  searchTimeout=setTimeout(()=>{
+    currentSearch=val;
+    loadTimeline();
+  },300);
+}
+function clearSearch(){
+  currentSearch='';
+  document.getElementById('search-input').value='';
+  document.getElementById('search-clear').style.display='none';
+  loadTimeline();
 }
 
 async function createPost(){
@@ -815,13 +933,16 @@ async function createPost(){
   const btn=document.getElementById('compose-btn');
   btn.disabled=true;
   const feedSel=document.getElementById('compose-feed');
+  const imgInput=document.getElementById('compose-image');
   const body={content:text};
   if(feedSel.value) body.feed=feedSel.value;
+  if(imgInput.value.trim()) body.image_url=imgInput.value.trim();
   try{
     await fetch(API+'/posts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)});
     ta.value='';
     ta.style.height='auto';
+    imgInput.value='';
     await loadTimeline();
     await loadSidebar();
   }finally{btn.disabled=false}
@@ -851,6 +972,7 @@ async function openThread(id){
         </div>
         ${rtl?`<div class="tagline">${esc(rtl)}</div>`:''}
         <div class="body">${renderMd(root.content)}</div>
+        ${imgHtml(root.image_url)}
         <div class="footer">
           <button class="stat like${root.liked?' liked':''}" onclick="toggleLike(${root.id},this)">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
@@ -871,6 +993,7 @@ async function openThread(id){
           </div>
           ${rl?`<div class="tagline">${esc(rl)}</div>`:''}
           <div class="body">${renderMd(r.content)}</div>
+          ${imgHtml(r.image_url)}
         </div>
       </div>`}).join('')}
     </div>
@@ -907,6 +1030,7 @@ async function refreshThread(id){
         </div>
         ${rl?`<div class="tagline">${esc(rl)}</div>`:''}
         <div class="body">${renderMd(r.content)}</div>
+        ${imgHtml(r.image_url)}
       </div>
     </div>`}).join('');
 }
@@ -940,6 +1064,7 @@ async function openEditPost(id){
   if(!posts.length)return;
   document.getElementById('edit-post-id').value=id;
   document.getElementById('edit-post-text').value=posts[0].content;
+  document.getElementById('edit-post-image').value=posts[0].image_url||'';
   document.getElementById('edit-post-modal').classList.add('open');
   document.getElementById('edit-post-text').focus();
 }
@@ -950,8 +1075,9 @@ async function submitEditPost(){
   const id=document.getElementById('edit-post-id').value;
   const content=document.getElementById('edit-post-text').value.trim();
   if(!content)return;
+  const imageUrl=document.getElementById('edit-post-image').value.trim();
   await fetch(API+'/posts/'+id,{method:'PATCH',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({content})});
+    body:JSON.stringify({content,image_url:imageUrl||null})});
   closeEditPost();
   await loadTimeline();
 }
@@ -984,7 +1110,7 @@ function updateLikedCard(){
   const seeAll=document.getElementById('liked-see-all');
   if(!liked.length){card.style.display='none';return}
   card.style.display='';
-  const shown=liked.slice(0,10);
+  const shown=liked.slice(0,5);
   seeAll.style.display='';
   list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
@@ -1063,7 +1189,7 @@ function updateRepliedCard(){
   const seeAll=document.getElementById('replied-see-all');
   if(!repliedPosts.length){card.style.display='none';return}
   card.style.display='';
-  const shown=repliedPosts.slice(0,10);
+  const shown=repliedPosts.slice(0,5);
   seeAll.style.display='';
   list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
@@ -1120,8 +1246,27 @@ function renderMd(s){
   if(typeof marked==='undefined'||typeof DOMPurify==='undefined')return esc(s);
   const html=DOMPurify.sanitize(marked.parse(String(s)),{ADD_ATTR:['target']});
   const div=document.createElement('div');div.innerHTML=html;
-  div.querySelectorAll('a').forEach(a=>{a.setAttribute('target','_blank');a.setAttribute('rel','noopener noreferrer')});
+  div.querySelectorAll('a').forEach(a=>{
+    a.setAttribute('target','_blank');
+    a.setAttribute('rel','noopener noreferrer');
+    const href=a.getAttribute('href')||'';
+    const text=a.textContent||'';
+    if(text===href&&href.length>50){
+      try{
+        const u=new URL(href);
+        const path=u.pathname+u.search+u.hash;
+        const short=u.hostname+(path.length>20?path.slice(0,20)+'\u2026':path);
+        a.textContent=short;
+        a.title=href;
+      }catch(e){}
+    }
+  });
   return div.innerHTML;
+}
+function imgHtml(url){
+  if(!url)return '';
+  const u=esc(url);
+  return `<a href="${u}" target="_blank" rel="noopener noreferrer"><img class="post-img" src="${u}" onerror="this.parentElement.style.display='none'" loading="lazy"></a>`;
 }
 function ago(iso){
   const d=Date.now()-new Date(iso).getTime();
@@ -1132,6 +1277,12 @@ function ago(iso){
 }
 
 // Init
+document.getElementById('search-input').addEventListener('input',onSearchInput);
+document.getElementById('center-scroll').addEventListener('scroll',function(){
+  if(currentPeriod!=='all'&&!currentSearch) return;
+  const s=this;
+  if(s.scrollTop+s.clientHeight>=s.scrollHeight-200) loadMore();
+});
 readHash();
 loadAgents().then(()=>{loadSidebar();loadTimeline();loadRepliedPosts()});
 window.addEventListener('hashchange',()=>{readHash();loadSidebar();loadTimeline()});

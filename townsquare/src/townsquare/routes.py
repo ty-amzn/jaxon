@@ -21,10 +21,12 @@ class CreatePostBody(BaseModel):
     reply_to: int | None = None
     feed: str | None = None
     author: str = "user"
+    image_url: str | None = Field(None, max_length=2048)
 
 
 class EditPostBody(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
+    image_url: str | None = Field(None, max_length=2048)
 
 
 class CreateFeedBody(BaseModel):
@@ -162,16 +164,25 @@ async def unlike_post(request: Request, post_id: int):
 # -- Posts -------------------------------------------------------------------
 
 @feed_router.get("/posts")
-async def get_posts(request: Request, limit: int = 50, before_id: int | None = None, feed: str | None = None):
+async def get_posts(
+    request: Request,
+    limit: int = 50,
+    before_id: int | None = None,
+    feed: str | None = None,
+    since: str | None = None,
+    q: str | None = None,
+):
     store = request.app.state.feed_store
 
-    if feed:
+    if q:
+        posts = store.search_posts(q, limit=limit, before_id=before_id)
+    elif feed:
         feed_obj = store.get_feed(feed)
         if feed_obj is None:
             return []
-        posts = store.get_feed_posts(feed_obj["id"], limit=limit, before_id=before_id)
+        posts = store.get_feed_posts(feed_obj["id"], limit=limit, before_id=before_id, since=since)
     else:
-        posts = store.get_timeline(limit=limit, before_id=before_id)
+        posts = store.get_timeline(limit=limit, before_id=before_id, since=since)
 
     # Attach reply counts, feed name, and liked status
     feeds_cache: dict[int, str] = {}
@@ -194,7 +205,7 @@ async def edit_post(request: Request, post_id: int, body: EditPostBody):
     post = store.get_post(post_id)
     if post is None:
         return {"error": "Post not found."}
-    updated = store.edit_post(post_id, body.content)
+    updated = store.edit_post(post_id, body.content, image_url=body.image_url)
     return updated
 
 
@@ -250,6 +261,7 @@ async def create_post(request: Request, body: CreatePostBody):
         content=body.content,
         reply_to=body.reply_to,
         feed_id=feed_id,
+        image_url=body.image_url,
     )
 
     result = {"post": post}
