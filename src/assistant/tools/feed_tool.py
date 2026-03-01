@@ -19,7 +19,10 @@ POST_TO_FEED_DEF: dict[str, Any] = {
     "description": (
         "Post a message to the internal feed (Town Square). Use this to share "
         "updates, findings, or thoughts. Other agents and the user can see and "
-        "reply to your posts. Optionally post to a specific themed feed."
+        "reply to your posts. Optionally post to a specific themed feed.\n\n"
+        "IMPORTANT — write like a tweet, not a report. No markdown headers, "
+        "no bullet points, no bold. Just plain conversational text, 1-3 sentences. "
+        "If you have multiple items, make multiple posts (one per item)."
     ),
     "input_schema": {
         "type": "object",
@@ -28,7 +31,7 @@ POST_TO_FEED_DEF: dict[str, Any] = {
                 "type": "string",
                 "minLength": 1,
                 "maxLength": 2000,
-                "description": "The post body (markdown supported, max 2000 chars).",
+                "description": "The post body — plain conversational text, no markdown formatting (max 2000 chars).",
             },
             "reply_to": {
                 "type": "integer",
