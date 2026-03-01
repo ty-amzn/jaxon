@@ -142,12 +142,15 @@ class ClaudeClient(BaseLLMClient):
             if text_parts:
                 assistant_content.append({"type": "text", "text": "".join(text_parts)})
             for tc in tool_calls_in_round:
-                assistant_content.append({
+                tc_block: dict[str, Any] = {
                     "type": "tool_use",
                     "id": tc.id,
                     "name": tc.name,
                     "input": tc.input,
-                })
+                }
+                if tc.thought_signature:
+                    tc_block["thought_signature"] = tc.thought_signature
+                assistant_content.append(tc_block)
 
             current_messages.append({"role": "assistant", "content": assistant_content})
 

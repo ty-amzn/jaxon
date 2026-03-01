@@ -34,6 +34,7 @@ class ToolCall:
     id: str
     name: str
     input: dict[str, Any]
+    thought_signature: str = ""  # Gemini 3 requires this echoed back
 
 
 @dataclass

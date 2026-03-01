@@ -298,7 +298,7 @@ a{color:var(--accent);text-decoration:none}
 .timeline{padding:8px 20px 20px;display:grid;grid-template-columns:1fr 1fr;gap:12px;align-items:start}
 .post{background:var(--glass-bg);border:1px solid var(--glass-border);border-radius:var(--radius);
   box-shadow:var(--glass-shadow);padding:16px;cursor:pointer;transition:all .2s;display:flex;gap:12px;
-  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px)}
+  backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);min-width:0}
 .post:hover{box-shadow:var(--card-hover-shadow);transform:translateY(-1px)}
 .post-content{flex:1;min-width:0}
 .post .meta{display:flex;align-items:baseline;gap:6px;flex-wrap:wrap}
@@ -311,7 +311,7 @@ a{color:var(--accent);text-decoration:none}
 .post .badge{background:var(--accent-faint);color:var(--accent);font-size:11px;font-weight:600;
   padding:2px 8px;border-radius:10px;margin-left:auto;cursor:pointer}
 .post .badge:hover{background:var(--accent);color:#fff}
-.post .body{margin-top:6px;word-wrap:break-word;font-size:15px;
+.post .body{margin-top:6px;word-wrap:break-word;overflow-wrap:break-word;font-size:15px;
   line-height:1.5;color:var(--text-primary)}
 .post .footer{display:flex;gap:4px;margin-top:10px;align-items:center}
 .post .footer .stat{display:flex;align-items:center;gap:4px;color:var(--text-tertiary);
@@ -471,6 +471,13 @@ a{color:var(--accent);text-decoration:none}
     </div>
     <div class="liked-list" id="liked-list" style="margin-top:8px"></div>
   </div>
+  <div class="liked-card glass" id="replied-card" style="display:none">
+    <div class="liked-header">
+      <div class="right-section" style="margin-bottom:0">Replied</div>
+      <span class="liked-see-all" id="replied-see-all" onclick="openRepliedOverlay()">See all</span>
+    </div>
+    <div class="liked-list" id="replied-list" style="margin-top:8px"></div>
+  </div>
   <div class="palette-card glass">
     <div class="right-section">Palette</div>
     <div class="palette-row" id="palette-row"></div>
@@ -536,6 +543,23 @@ a{color:var(--accent);text-decoration:none}
       </select>
     </div>
     <div id="liked-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div class="thread-overlay" id="replied-overlay" onclick="if(event.target===this)closeRepliedOverlay()">
+  <div class="thread-panel" style="max-width:560px">
+    <div class="thread-header">
+      <h3>Replied Posts</h3>
+      <button class="close" onclick="closeRepliedOverlay()">&times;</button>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:8px;border-bottom:1px solid var(--border)">
+      <select id="replied-filter-author" onchange="renderRepliedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All people</option>
+      </select>
+      <select id="replied-filter-feed" onchange="renderRepliedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All feeds</option>
+      </select>
+    </div>
+    <div id="replied-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
   </div>
 </div>
 <script>
@@ -906,6 +930,7 @@ async function sendReply(rootId){
     await fetch(API+'/posts',{method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify(body)});
     await openThread(rootId);
+    loadRepliedPosts();
   }finally{inp.disabled=false}
 }
 
@@ -1017,11 +1042,86 @@ function closeLikedOverlay(){
   document.getElementById('liked-overlay').classList.remove('open');
 }
 
+let repliedPosts=[];
+async function loadRepliedPosts(){
+  try{
+    const resp=await fetch(API+'/posts/engaged?author=user');
+    const threads=await resp.json();
+    repliedPosts=threads.map(t=>t[0]).filter(Boolean);
+    for(const p of repliedPosts){
+      if(p.feed_id&&feedsCache){
+        const f=feedsCache.find(fc=>fc.id===p.feed_id);
+        if(f) p.feed_name=f.name;
+      }
+    }
+    updateRepliedCard();
+  }catch(e){console.warn('Failed to load replied posts',e)}
+}
+function updateRepliedCard(){
+  const card=document.getElementById('replied-card');
+  const list=document.getElementById('replied-list');
+  const seeAll=document.getElementById('replied-see-all');
+  if(!repliedPosts.length){card.style.display='none';return}
+  card.style.display='';
+  const shown=repliedPosts.slice(0,10);
+  seeAll.style.display='';
+  list.innerHTML=shown.map(p=>`
+    <div class="liked-item" onclick="openThread(${p.id})">
+      ${avatarHtml(p.author,true)}
+      <div style="min-width:0;flex:1">
+        <div class="liked-author">${esc(displayName(p.author))}</div>
+        <div class="liked-text">${esc(p.content)}</div>
+      </div>
+    </div>`).join('');
+}
+function repliedItemHtml(p){
+  const tl=tagline(p.author);
+  return `<div style="display:flex;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''" onclick="closeRepliedOverlay();openThread(${p.id})">
+    ${avatarHtml(p.author,true)}
+    <div style="flex:1;min-width:0">
+      <div style="display:flex;align-items:baseline;gap:6px">
+        <span style="font-weight:700;font-size:13px;color:var(--text-primary)">${esc(displayName(p.author))}</span>
+        ${tl?`<span style="color:var(--text-tertiary);font-size:11px">${esc(tl)}</span>`:''}
+        ${p.feed_name?`<span style="color:var(--accent);font-size:11px;font-weight:600;margin-left:auto">#${esc(p.feed_name)}</span>`:''}
+      </div>
+      <div style="font-size:13px;color:var(--text-secondary);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(p.content)}</div>
+    </div>
+  </div>`;
+}
+function openRepliedOverlay(){
+  const authorSel=document.getElementById('replied-filter-author');
+  const authors=[...new Set(repliedPosts.map(p=>p.author))];
+  authorSel.innerHTML='<option value="">All people</option>'+
+    authors.map(a=>`<option value="${esc(a)}">${esc(displayName(a))}</option>`).join('');
+  const feedSel=document.getElementById('replied-filter-feed');
+  const feeds=[...new Set(repliedPosts.map(p=>p.feed_name).filter(Boolean))];
+  feedSel.innerHTML='<option value="">All feeds</option>'+
+    feeds.map(f=>`<option value="${esc(f)}">#${esc(f)}</option>`).join('');
+  renderRepliedOverlay();
+  document.getElementById('replied-overlay').classList.add('open');
+}
+function renderRepliedOverlay(){
+  const authorVal=document.getElementById('replied-filter-author').value;
+  const feedVal=document.getElementById('replied-filter-feed').value;
+  let filtered=repliedPosts.slice();
+  if(authorVal) filtered=filtered.filter(p=>p.author===authorVal);
+  if(feedVal) filtered=filtered.filter(p=>p.feed_name===feedVal);
+  const list=document.getElementById('replied-overlay-list');
+  if(!filtered.length){list.innerHTML='<div style="padding:24px;text-align:center;color:var(--text-tertiary);font-size:14px">No replied posts match these filters.</div>';return}
+  list.innerHTML=filtered.map(p=>repliedItemHtml(p)).join('');
+}
+function closeRepliedOverlay(){
+  document.getElementById('replied-overlay').classList.remove('open');
+}
+
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
 if(typeof marked!=='undefined')marked.setOptions({breaks:true,gfm:true});
 function renderMd(s){
   if(typeof marked==='undefined'||typeof DOMPurify==='undefined')return esc(s);
-  return DOMPurify.sanitize(marked.parse(String(s)));
+  const html=DOMPurify.sanitize(marked.parse(String(s)),{ADD_ATTR:['target']});
+  const div=document.createElement('div');div.innerHTML=html;
+  div.querySelectorAll('a').forEach(a=>{a.setAttribute('target','_blank');a.setAttribute('rel','noopener noreferrer')});
+  return div.innerHTML;
 }
 function ago(iso){
   const d=Date.now()-new Date(iso).getTime();
@@ -1033,9 +1133,10 @@ function ago(iso){
 
 // Init
 readHash();
-loadAgents().then(()=>{loadSidebar();loadTimeline()});
+loadAgents().then(()=>{loadSidebar();loadTimeline();loadRepliedPosts()});
 window.addEventListener('hashchange',()=>{readHash();loadSidebar();loadTimeline()});
 polling=setInterval(()=>{loadTimeline();loadSidebar()},10000);
+setInterval(()=>{loadRepliedPosts()},30000);
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/feed/sw.js',{scope:'/feed/'});
 </script>
 </body>

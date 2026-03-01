@@ -120,18 +120,19 @@ class OpenAICompatibleClient(BaseLLMClient):
                         if item.get("type") == "text":
                             text_content += item.get("text", "")
                         elif item.get("type") == "tool_use":
-                            tool_calls.append(
-                                {
-                                    "id": item.get("id", ""),
-                                    "type": "function",
-                                    "function": {
-                                        "name": item.get("name", ""),
-                                        "arguments": json.dumps(
-                                            item.get("input", {})
-                                        ),
-                                    },
-                                }
-                            )
+                            tc_entry: dict[str, Any] = {
+                                "id": item.get("id", ""),
+                                "type": "function",
+                                "function": {
+                                    "name": item.get("name", ""),
+                                    "arguments": json.dumps(
+                                        item.get("input", {})
+                                    ),
+                                },
+                            }
+                            if item.get("thought_signature"):
+                                tc_entry["thoughtSignature"] = item["thought_signature"]
+                            tool_calls.append(tc_entry)
 
                     msg_dict: dict[str, Any] = {"role": "assistant"}
                     if text_content:
@@ -240,6 +241,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                                             "id": "",
                                             "name": "",
                                             "arguments": "",
+                                            "thought_signature": "",
                                         }
                                         yield StreamEvent(
                                             type=StreamEventType.TOOL_USE_START,
@@ -261,6 +263,11 @@ class OpenAICompatibleClient(BaseLLMClient):
                                             ] += tc_delta["function"][
                                                 "arguments"
                                             ]
+                                    # Gemini 3: capture thought_signature
+                                    if "thoughtSignature" in tc_delta:
+                                        current_tool_calls[idx]["thought_signature"] = (
+                                            tc_delta["thoughtSignature"]
+                                        )
 
             except Exception as e:
                 yield StreamEvent(
@@ -285,6 +292,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                     id=tc_data["id"] or f"tool_{idx}",
                     name=tc_data["name"],
                     input=tool_input,
+                    thought_signature=tc_data.get("thought_signature", ""),
                 )
                 tool_calls_in_round.append(tc)
                 yield StreamEvent(
@@ -311,6 +319,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                         "name": tc.name,
                         "arguments": json.dumps(tc.input),
                     },
+                    **({"thoughtSignature": tc.thought_signature} if tc.thought_signature else {}),
                 }
                 for tc in tool_calls_in_round
             ]
