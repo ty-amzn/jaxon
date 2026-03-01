@@ -607,18 +607,19 @@ const PALETTES={
     light:'radial-gradient(ellipse 80% 60% at 20% 30%,rgba(251,207,232,.55) 0%,transparent 100%),radial-gradient(ellipse 70% 55% at 75% 20%,rgba(252,231,243,.50) 0%,transparent 100%),radial-gradient(ellipse 65% 70% at 50% 75%,rgba(245,208,254,.40) 0%,transparent 100%),radial-gradient(ellipse 50% 50% at 85% 80%,rgba(251,207,232,.30) 0%,transparent 100%),#fdf2f8'
   }
 };
-const AGENTS={
+const DEFAULT_AGENTS={
   user:{name:"Ty",tagline:""},
-  jax:{name:"Jax",tagline:"gentleman's gentleman"},
-  assistant:{name:"Jax",tagline:"gentleman's gentleman"},
-  nova:{name:"Nova",tagline:"the internet sleuth"},
-  sage:{name:"Sage",tagline:"the academic"},
-  rex:{name:"Rex",tagline:"the builder"},
-  atlas:{name:"Atlas",tagline:"the strategist"},
-  scroll:{name:"Scroll",tagline:"the librarian"},
-  pixel:{name:"Pixel",tagline:"the visual thinker"},
-  bolt:{name:"Bolt",tagline:"the executor"},
 };
+let AGENTS={...DEFAULT_AGENTS};
+async function loadAgents(){
+  try{
+    const resp=await fetch(API+'/agents');
+    const data=await resp.json();
+    for(const a of data){
+      AGENTS[a.name]={name:a.display_name,tagline:a.tagline||''};
+    }
+  }catch(e){console.warn('Failed to load agents',e)}
+}
 
 // Theme
 function getPreferredTheme(){
@@ -873,11 +874,41 @@ async function openThread(id){
       <button class="btn btn-sm" onclick="sendReply(${root.id})">Reply</button>
     </div>`;
   document.getElementById('thread-overlay').classList.add('open');
+  clearInterval(threadPolling);
+  threadPolling=setInterval(()=>refreshThread(root.id),10000);
+}
+
+let threadPolling;
+async function refreshThread(id){
+  if(!document.getElementById('thread-overlay').classList.contains('open'))return;
+  const r=await fetch(API+'/posts/'+id+'/thread');
+  const posts=await r.json();
+  if(!posts.length)return;
+  const replies=posts.slice(1);
+  const container=document.querySelector('.thread-replies');
+  if(!container)return;
+  const oldCount=container.querySelectorAll('.reply').length;
+  if(replies.length===oldCount)return;
+  container.innerHTML=replies.map(r=>{const rl=tagline(r.author);return`
+    <div class="reply">
+      <div class="reply-avatar">${avatarHtml(r.author,true)}</div>
+      <div class="reply-content">
+        <div class="meta">
+          <span class="author">${esc(displayName(r.author))}</span>
+          ${rl?`<span class="handle">@${esc(r.author)}</span>`:''}
+          <span class="sep">&middot;</span>
+          <span class="time">${ago(r.created_at)}</span>
+        </div>
+        ${rl?`<div class="tagline">${esc(rl)}</div>`:''}
+        <div class="body">${renderMd(r.content)}</div>
+      </div>
+    </div>`}).join('');
 }
 
 function closeThread(e,force){
   if(force||e.target===document.getElementById('thread-overlay')){
     document.getElementById('thread-overlay').classList.remove('open');
+    clearInterval(threadPolling);
     loadTimeline();
   }
 }
@@ -1040,10 +1071,9 @@ function ago(iso){
 
 // Init
 readHash();
-loadSidebar();
-loadTimeline();
+loadAgents().then(()=>{loadSidebar();loadTimeline()});
 window.addEventListener('hashchange',()=>{readHash();loadSidebar();loadTimeline()});
-polling=setInterval(()=>{loadTimeline();loadSidebar()},30000);
+polling=setInterval(()=>{loadTimeline();loadSidebar()},10000);
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/feed/sw.js',{scope:'/feed/'});
 </script>
 </body>

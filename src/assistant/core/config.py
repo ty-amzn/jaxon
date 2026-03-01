@@ -137,6 +137,9 @@ class Settings(BaseSettings):
     # Reddit
     reddit_enabled: bool = False
 
+    # Hacker News
+    hackernews_enabled: bool = False
+
     # Google Maps
     google_maps_enabled: bool = False
     google_maps_api_key: str = Field(default="", validation_alias="GOOGLE_MAPS_API_KEY")

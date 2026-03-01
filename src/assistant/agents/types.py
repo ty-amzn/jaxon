@@ -19,6 +19,8 @@ class AgentDef:
     max_tool_rounds: int = 5
     can_delegate: bool = False
     vision: bool | None = None  # None = auto-detect from model name
+    display_name: str = ""  # defaults to name.title() at render time
+    tagline: str = ""  # e.g. "the internet sleuth"
 
 
 @dataclass

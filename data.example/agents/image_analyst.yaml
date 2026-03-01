@@ -1,4 +1,6 @@
 name: image_analyst
+display_name: Pixel
+tagline: the visual thinker
 description: Vision agent — analyzes images using a multimodal model. Delegate with images param to forward visuals.
 model: ollama/qwen3.5:397b-cloud
 system_prompt: |

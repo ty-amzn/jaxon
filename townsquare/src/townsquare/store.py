@@ -66,6 +66,16 @@ class FeedStore:
             )
             self._db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_feeds_name ON feeds(name)")
 
+        # Agents table
+        if "agents" not in self._db.table_names():
+            self._db.execute(
+                "CREATE TABLE agents ("
+                "  name TEXT PRIMARY KEY,"
+                "  display_name TEXT NOT NULL,"
+                "  tagline TEXT NOT NULL DEFAULT ''"
+                ")"
+            )
+
         # Seed defaults if table is empty
         count = self._db.execute("SELECT COUNT(*) FROM feeds").fetchone()[0]
         if count == 0:
@@ -272,3 +282,23 @@ class FeedStore:
             "ORDER BY l.created_at DESC LIMIT ?"
         )
         return _rows_to_dicts(self._db.execute(sql, [limit]))
+
+    # ------------------------------------------------------------------
+    # Agents
+    # ------------------------------------------------------------------
+
+    def upsert_agent(self, name: str, display_name: str, tagline: str = "") -> None:
+        """Insert or replace an agent's display metadata."""
+        self._db.execute(
+            "INSERT OR REPLACE INTO agents (name, display_name, tagline) VALUES (?, ?, ?)",
+            [name, display_name, tagline],
+        )
+
+    def upsert_agents(self, agents: list[dict]) -> None:
+        """Bulk upsert agent display metadata."""
+        for a in agents:
+            self.upsert_agent(a["name"], a["display_name"], a.get("tagline", ""))
+
+    def list_agents(self) -> list[dict]:
+        """Return all registered agents."""
+        return _rows_to_dicts(self._db.execute("SELECT * FROM agents ORDER BY name"))

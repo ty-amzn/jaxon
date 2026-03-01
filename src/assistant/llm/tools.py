@@ -41,6 +41,7 @@ from assistant.tools.contacts_tool import CONTACTS_TOOL_DEF, contacts_tool
 from assistant.tools.reminders_tool import REMINDERS_TOOL_DEF, reminders_tool
 from assistant.tools.youtube_tool import YOUTUBE_SEARCH_TOOL_DEF, youtube_search
 from assistant.tools.reddit_tool import REDDIT_SEARCH_TOOL_DEF, reddit_search
+from assistant.tools.hackernews_tool import HACKERNEWS_TOOL_DEF, hackernews
 from assistant.tools.google_maps_tool import GOOGLE_MAPS_TOOL_DEF, google_maps
 from assistant.tools.read_page_tool import READ_OUTPUT_PAGE_DEF, read_output_page
 from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
@@ -233,6 +234,15 @@ def create_tool_registry(
             REDDIT_SEARCH_TOOL_DEF["description"],
             REDDIT_SEARCH_TOOL_DEF["input_schema"],
             reddit_search,
+        )
+
+    # Register Hacker News tool if enabled
+    if settings and settings.hackernews_enabled:
+        registry.register(
+            HACKERNEWS_TOOL_DEF["name"],
+            HACKERNEWS_TOOL_DEF["description"],
+            HACKERNEWS_TOOL_DEF["input_schema"],
+            hackernews,
         )
 
     # Register Google Maps tool if enabled

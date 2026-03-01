@@ -1,4 +1,6 @@
 name: web_researcher
+display_name: Nova
+tagline: the internet sleuth
 description: Web research agent — searches the web broadly and fetches top sources to extract findings.
 system_prompt: |
   You are a web research specialist. Your job is to thoroughly research a topic using web searches and source fetching.

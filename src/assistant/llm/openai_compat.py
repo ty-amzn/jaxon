@@ -50,6 +50,17 @@ class OpenAICompatibleClient(BaseLLMClient):
         """Return a label for error messages."""
         return self._config.provider.value.capitalize()
 
+    def _max_tokens_param(self) -> dict[str, int]:
+        """Return the correct max tokens parameter for the provider.
+
+        OpenAI newer models require 'max_completion_tokens' instead of 'max_tokens'.
+        """
+        from assistant.llm.types import Provider
+
+        if self._config.provider == Provider.OPENAI:
+            return {"max_completion_tokens": self._config.max_tokens}
+        return {"max_tokens": self._config.max_tokens}
+
     def _convert_tools_to_openai(self, tools: list[dict] | None) -> list[dict] | None:
         """Convert Anthropic tool format to OpenAI format."""
         if not tools:
@@ -174,7 +185,7 @@ class OpenAICompatibleClient(BaseLLMClient):
 
             request_body: dict[str, Any] = {
                 "model": self._config.model,
-                "max_tokens": self._config.max_tokens,
+                **self._max_tokens_param(),
                 "messages": current_messages,
                 "stream": True,
             }
@@ -336,7 +347,7 @@ class OpenAICompatibleClient(BaseLLMClient):
         summary_parts: list[str] = []
         request_body = {
             "model": self._config.model,
-            "max_tokens": self._config.max_tokens,
+            **self._max_tokens_param(),
             "messages": current_messages,
             "stream": True,
         }

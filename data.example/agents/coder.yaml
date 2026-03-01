@@ -1,4 +1,6 @@
 name: coder
+display_name: Rex
+tagline: the builder
 description: Coding agent — reads, writes, and executes code to complete programming tasks.
 system_prompt: |
   You are a coding assistant. Your job is to write, modify, and test code.

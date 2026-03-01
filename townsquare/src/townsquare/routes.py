@@ -33,6 +33,16 @@ class CreateFeedBody(BaseModel):
     created_by: str = "user"
 
 
+class AgentEntry(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    display_name: str = Field(..., min_length=1, max_length=100)
+    tagline: str = ""
+
+
+class UpsertAgentsBody(BaseModel):
+    agents: list[AgentEntry]
+
+
 async def _fire_reply_webhook(webhook_url: str, parent: dict, user_reply: dict) -> None:
     """Fire a non-blocking webhook to Jaxon for agent reply generation."""
     payload = {
@@ -76,6 +86,21 @@ async def feed_icon_192():
 @feed_router.get("/icon-512.svg")
 async def feed_icon_512():
     return Response(APP_ICON_SVG, media_type="image/svg+xml")
+
+
+# -- Agents ------------------------------------------------------------------
+
+@feed_router.put("/agents")
+async def upsert_agents(request: Request, body: UpsertAgentsBody):
+    store = request.app.state.feed_store
+    store.upsert_agents([a.model_dump() for a in body.agents])
+    return {"ok": True, "count": len(body.agents)}
+
+
+@feed_router.get("/agents")
+async def list_agents(request: Request):
+    store = request.app.state.feed_store
+    return store.list_agents()
 
 
 # -- Channels ----------------------------------------------------------------

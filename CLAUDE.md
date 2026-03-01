@@ -104,6 +104,8 @@ All 12 steps implemented:
 3. Google Maps tool — `tools/google_maps_tool.py`: `google_maps` with directions/nearby/geocode actions via Google Maps REST APIs
 4. Finance tool — `tools/finance_tool.py`: `finance` with stock/crypto/currency actions via Yahoo Finance, CoinGecko, Frankfurter APIs (all free, no key needed)
 5. YouTube/Reddit/Google Maps gated by per-tool config flags; finance always-on. All classified as NETWORK_READ (auto-approved)
+6. Hacker News tool — `tools/hackernews_tool.py`: `hackernews` with top/search/story actions via HN Firebase API + Algolia search. Gated by `hackernews_enabled` config flag.
+7. Journalist agent — `data.example/agents/journalist.yaml`: autonomous news monitor that researches HN/Reddit/web and posts digests to Town Square
 
 ## Phase 9 (Town Square — Standalone Feed Service)
 Town Square is extracted into a standalone FastAPI service at `townsquare/` (port 51431).

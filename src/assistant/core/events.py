@@ -95,14 +95,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from assistant.tools.feed_tool import (
             MANAGE_FEEDS_DEF,
             POST_TO_FEED_DEF,
+            build_feed_description,
             _make_manage_feeds,
             _make_post_to_feed,
         )
 
+        # Fetch channel list from Town Square to enrich the feed tool description
+        post_schema = POST_TO_FEED_DEF["input_schema"]
+        try:
+            import httpx
+
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.get(f"{settings.townsquare_url}/feed/channels")
+            channels = resp.json().get("feeds", [])
+            if channels:
+                post_schema = build_feed_description(channels)
+                logger.info("Loaded %d feed channels from Town Square", len(channels))
+        except Exception:
+            logger.warning("Failed to fetch Town Square channels; using default feed description")
+
         chat_interface._tool_registry.register(
             POST_TO_FEED_DEF["name"],
             POST_TO_FEED_DEF["description"],
-            POST_TO_FEED_DEF["input_schema"],
+            post_schema,
             _make_post_to_feed(settings.townsquare_url),
         )
         chat_interface._tool_registry.register(
@@ -117,6 +132,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
         app.state.settings = settings
         app.include_router(townsquare_webhook_router)
+
+        # Push agent display metadata to Town Square
+        if settings.agents_enabled:
+            agents_payload = [
+                {
+                    "name": a.name,
+                    "display_name": a.display_name or a.name.replace("_", " ").title(),
+                    "tagline": a.tagline,
+                }
+                for a in chat_interface._orchestrator._loader.list_agents()
+            ]
+            # Also register the main assistant
+            agents_payload.append({"name": "jax", "display_name": "Jax", "tagline": "gentleman's gentleman"})
+            agents_payload.append({"name": "assistant", "display_name": "Jax", "tagline": "gentleman's gentleman"})
+            try:
+                import httpx
+
+                async with httpx.AsyncClient(timeout=10) as client:
+                    await client.put(
+                        f"{settings.townsquare_url}/feed/agents",
+                        json={"agents": agents_payload},
+                    )
+                logger.info("Registered %d agents with Town Square", len(agents_payload))
+            except Exception:
+                logger.warning("Failed to register agents with Town Square")
 
     # Start scheduler if enabled
     scheduler_manager = None

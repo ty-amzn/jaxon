@@ -39,7 +39,7 @@ POST_TO_FEED_DEF: dict[str, Any] = {
             },
             "feed": {
                 "type": "string",
-                "description": "Optional feed name to post to (e.g. 'news', 'research'). Omit for global timeline.",
+                "description": "Optional feed name to post to. Omit for global timeline.",
             },
         },
         "required": ["content"],
@@ -49,24 +49,20 @@ POST_TO_FEED_DEF: dict[str, Any] = {
 MANAGE_FEEDS_DEF: dict[str, Any] = {
     "name": "manage_feeds",
     "description": (
-        "Manage themed feeds (channels) in the Town Square. "
-        "Create, list, read, or delete feeds."
+        "Browse feeds (channels) in the Town Square. "
+        "List available feeds or read recent posts from a specific feed."
     ),
     "input_schema": {
         "type": "object",
         "properties": {
             "action": {
                 "type": "string",
-                "enum": ["create", "list", "read", "delete"],
-                "description": "The action to perform.",
+                "enum": ["list", "read"],
+                "description": "The action to perform: 'list' all feeds or 'read' posts from one.",
             },
             "name": {
                 "type": "string",
-                "description": "Feed name (slug). Required for create, read, delete.",
-            },
-            "description": {
-                "type": "string",
-                "description": "Feed description. Required for create.",
+                "description": "Feed name (slug). Required for read.",
             },
             "limit": {
                 "type": "integer",
@@ -77,6 +73,24 @@ MANAGE_FEEDS_DEF: dict[str, Any] = {
         "required": ["action"],
     },
 }
+
+
+def build_feed_description(feeds: list[dict]) -> dict:
+    """Return a copy of POST_TO_FEED_DEF with feed guidance from Town Square channels."""
+    import copy
+
+    schema = copy.deepcopy(POST_TO_FEED_DEF["input_schema"])
+    if feeds:
+        lines = ["Optional feed name. Choose based on CONTENT type, not your current task:"]
+        for f in feeds:
+            lines.append(f"- '{f['name']}' — {f['description']}")
+        lines.append(
+            "Status updates like 'starting research...' or 'done, reporting back' "
+            "go to #worklog, NOT to the topic feed. Only post actual findings/results "
+            "to topic feeds like #research or #news."
+        )
+        schema["properties"]["feed"]["description"] = "\n".join(lines)
+    return schema
 
 
 def _make_post_to_feed(base_url: str):
@@ -146,27 +160,11 @@ def _make_manage_feeds(base_url: str):
                 data = resp.json()
                 feeds = data.get("feeds", [])
                 if not feeds:
-                    return "No feeds yet. Use action='create' to make one."
+                    return "No feeds yet."
                 lines = []
                 for f in feeds:
                     lines.append(f"#{f['name']} — {f['description']} ({f['post_count']} posts)")
                 return "\n".join(lines)
-
-            if action == "create":
-                if not name:
-                    return "Error: 'name' is required to create a feed."
-                desc = params.get("description", "")
-                if not desc:
-                    return "Error: 'description' is required to create a feed."
-                author = current_agent_name.get("assistant")
-                resp = await client.post(
-                    f"{base_url}/feed/channels",
-                    json={"name": name, "description": desc, "created_by": author},
-                )
-                data = resp.json()
-                if "error" in data:
-                    return f"Error: {data['error']}"
-                return f"Created feed #{data['name']} (id={data['id']})."
 
             if action == "read":
                 if not name:
@@ -188,15 +186,6 @@ def _make_manage_feeds(base_url: str):
                     lines.append(f"[@{p['author']}] {p['content'][:200]}")
                 return "\n".join(lines)
 
-            if action == "delete":
-                if not name:
-                    return "Error: 'name' is required to delete a feed."
-                resp = await client.delete(f"{base_url}/feed/channels/{name}")
-                data = resp.json()
-                if "error" in data:
-                    return f"Error: {data['error']}"
-                return f"Deleted feed #{name}. Posts moved to global timeline."
-
-        return f"Error: unknown action '{action}'."
+        return f"Error: unknown action '{action}'. Use 'list' or 'read'."
 
     return manage_feeds
