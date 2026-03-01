@@ -114,5 +114,11 @@ Town Square is extracted into a standalone FastAPI service at `townsquare/` (por
 5. Run: `cd townsquare && uv sync && uv run townsquare serve` → UI at `http://localhost:51431/feed/ui`
 
 ## User Documentation
-- `docs/user-guide.md` — comprehensive user guide (all features)
-- `docs/quick-reference.md` — command cheat sheet
+- `docs/getting-started.md` — install, first run, onboarding, basic config
+- `docs/features.md` — commands, memory, skills, identity, threading, images
+- `docs/agents.md` — YAML agents, delegation, background tasks
+- `docs/tools.md` — built-in tools, permissions, browser automation
+- `docs/llm-providers.md` — Claude, OpenAI, Gemini, Ollama, Bedrock, routing
+- `docs/integrations/` — Telegram, WhatsApp, Slack, Google Calendar, Google Maps
+- `docs/infrastructure/` — deployment, webhooks, scheduler, Cloudflare, Town Square
+- `docs/reference/` — quick reference, configuration, plugins

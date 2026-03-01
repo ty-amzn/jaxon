@@ -1,4 +1,4 @@
-# Runbook: Telegram Bot Integration
+# Telegram Bot
 
 ## Overview
 

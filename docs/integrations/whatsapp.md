@@ -1,4 +1,4 @@
-# Runbook: WhatsApp Bot Integration
+# WhatsApp Bot
 
 ## Overview
 

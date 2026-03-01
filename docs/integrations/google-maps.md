@@ -1,4 +1,4 @@
-# Google Maps Tool — Setup Guide
+# Google Maps
 
 Directions with real-time traffic, nearby place search, and address geocoding via the Google Maps Platform REST APIs.
 

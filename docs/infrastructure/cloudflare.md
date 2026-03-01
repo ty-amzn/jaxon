@@ -1,4 +1,4 @@
-# Runbook: Cloudflare Access (Zero Trust) for the Assistant API
+# Cloudflare Access (Zero Trust)
 
 ## Overview
 

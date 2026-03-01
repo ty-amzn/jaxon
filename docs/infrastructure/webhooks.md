@@ -1,4 +1,4 @@
-# Webhooks Guide
+# Webhooks
 
 Trigger workflows from external services (GitHub, IFTTT, iOS Shortcuts, etc.) via HTTP POST requests with bearer token authentication.
 
