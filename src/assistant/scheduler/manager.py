@@ -65,7 +65,8 @@ class SchedulerManager:
 
     def _register_job_from_data(self, job_data: dict) -> None:
         """Register a job with APScheduler from stored data."""
-        trigger = self._build_trigger(job_data["trigger_type"], job_data["trigger_args"])
+        timezone = job_data.get("timezone")
+        trigger = self._build_trigger(job_data["trigger_type"], job_data["trigger_args"], timezone=timezone)
         if trigger is None:
             return
 
@@ -106,14 +107,21 @@ class SchedulerManager:
                 },
             )
 
-    def _build_trigger(self, trigger_type: str, trigger_args: dict) -> Any:
+    def _build_trigger(self, trigger_type: str, trigger_args: dict, timezone: str | None = None) -> Any:
+        from zoneinfo import ZoneInfo
+
+        tz = ZoneInfo(timezone) if timezone else None
+
         if trigger_type == "date":
             run_date = trigger_args.get("run_date")
             if isinstance(run_date, str):
                 run_date = datetime.fromisoformat(run_date)
+            # Attach timezone if the datetime is naive
+            if run_date and tz and run_date.tzinfo is None:
+                run_date = run_date.replace(tzinfo=tz)
             return DateTrigger(run_date=run_date)
         elif trigger_type == "cron":
-            return CronTrigger(**trigger_args)
+            return CronTrigger(**trigger_args, timezone=tz or self._scheduler.timezone)
         elif trigger_type == "interval":
             args = dict(trigger_args)
             if "start_date" in args and isinstance(args["start_date"], str):
@@ -136,6 +144,7 @@ class SchedulerManager:
         trigger_type: str,
         trigger_args: dict,
         message: str | None = None,
+        timezone: str | None = None,
     ) -> str:
         """Add a notification reminder. Returns job ID."""
         job_id = f"reminder_{uuid.uuid4().hex[:8]}"
@@ -148,6 +157,7 @@ class SchedulerManager:
             trigger_args=trigger_args,
             job_type="notification",
             job_args={"message": message or description},
+            timezone=timezone,
         )
 
         self._register_job_from_data({
@@ -157,9 +167,10 @@ class SchedulerManager:
             "trigger_args": trigger_args,
             "job_type": "notification",
             "job_args": {"message": message or description},
+            "timezone": timezone,
         })
 
-        logger.info("Added reminder %s: %s", job_id, description)
+        logger.info("Added reminder %s: %s (tz=%s)", job_id, description, timezone)
         return job_id
 
     def add_assistant_job(
@@ -170,6 +181,7 @@ class SchedulerManager:
         prompt: str,
         session_id: str = "scheduler",
         silent: bool = False,
+        timezone: str | None = None,
     ) -> str:
         """Add a job that runs a prompt through the assistant. Returns job ID."""
         job_id = f"assistant_{uuid.uuid4().hex[:8]}"
@@ -183,6 +195,7 @@ class SchedulerManager:
             trigger_args=trigger_args,
             job_type="assistant",
             job_args=job_args,
+            timezone=timezone,
         )
 
         self._register_job_from_data({
@@ -192,9 +205,10 @@ class SchedulerManager:
             "trigger_args": trigger_args,
             "job_type": "assistant",
             "job_args": job_args,
+            "timezone": timezone,
         })
 
-        logger.info("Added assistant job %s: %s", job_id, description)
+        logger.info("Added assistant job %s: %s (tz=%s)", job_id, description, timezone)
         return job_id
 
     def remove_job(self, job_id: str) -> bool:
@@ -210,10 +224,12 @@ class SchedulerManager:
         jobs = self._store.load_all()
         result = []
         for j in jobs:
+            tz = j.get("timezone") or "scheduler default"
             result.append({
                 "id": j["id"],
                 "description": j["description"],
                 "trigger": f"{j['trigger_type']}({j['trigger_args']})",
+                "timezone": tz,
                 "type": j["job_type"],
             })
         return result

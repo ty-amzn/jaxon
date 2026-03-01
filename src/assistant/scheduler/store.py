@@ -30,10 +30,17 @@ class JobStore:
                 "trigger_args": str,  # JSON
                 "job_type": str,      # "notification" or "assistant"
                 "job_args": str,      # JSON
+                "timezone": str,      # IANA timezone e.g. "America/New_York"
             }, pk="id")
+        else:
+            # Migration: add timezone column if missing
+            cols = {c.name for c in self._db["jobs"].columns}
+            if "timezone" not in cols:
+                self._db.execute("ALTER TABLE jobs ADD COLUMN timezone TEXT")
 
     def save(self, job_id: str, description: str, trigger_type: str,
-             trigger_args: dict, job_type: str, job_args: dict) -> None:
+             trigger_args: dict, job_type: str, job_args: dict,
+             timezone: str | None = None) -> None:
         self._db["jobs"].upsert({
             "id": job_id,
             "description": description,
@@ -41,6 +48,7 @@ class JobStore:
             "trigger_args": json.dumps(trigger_args),
             "job_type": job_type,
             "job_args": json.dumps(job_args),
+            "timezone": timezone,
         }, pk="id")
 
     def load_all(self) -> list[dict[str, Any]]:

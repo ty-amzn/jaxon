@@ -12,7 +12,7 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
     "description": (
         "Manage reminders and scheduled tasks.\n"
         "Actions:\n"
-        "- 'create': schedule a new reminder or task. Requires description, trigger_type, trigger_args, message.\n"
+        "- 'create': schedule a new reminder or task. Requires description, trigger_type, trigger_args, timezone, message.\n"
         "- 'cancel': remove a reminder/task by job_id. Use 'list' first to find the ID.\n"
         "- 'list': show all active reminders and tasks with their IDs and schedules.\n\n"
         "When a reminder fires, the message is executed as a prompt through the AI assistant "
@@ -22,7 +22,9 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
         "compute the absolute datetime from the current time shown in the system prompt and pass as run_date.\n"
         "- 'cron': recurring on a schedule (e.g. every weekday at 9am).\n"
         "- 'interval': repeating at a fixed interval (e.g. every 30 minutes).\n\n"
-        "All times must be in the user's local timezone as shown in the system prompt (NOT UTC unless that IS the user's timezone)."
+        "IMPORTANT: You MUST specify a timezone for every job. Use the user's local timezone "
+        "from the system prompt (e.g. 'America/New_York'). All hour/minute values in trigger_args "
+        "are interpreted in the specified timezone."
     ),
     "input_schema": {
         "type": "object",
@@ -45,9 +47,18 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
                 "type": "object",
                 "description": (
                     "Trigger arguments (required for create). "
-                    "For 'date': {\"run_date\": \"2025-01-15T14:30:00\"} (UTC ISO datetime). "
+                    "For 'date': {\"run_date\": \"2025-01-15T14:30:00\"} (local time in the specified timezone). "
                     "For 'cron': {\"hour\": 9, \"minute\": 0, \"day_of_week\": \"mon-fri\"}. "
                     "For 'interval': {\"minutes\": 30} (supports seconds, minutes, hours)."
+                ),
+            },
+            "timezone": {
+                "type": "string",
+                "description": (
+                    "IANA timezone for this job (required for create). "
+                    "Use the user's local timezone from the system prompt, e.g. 'America/New_York', "
+                    "'America/Los_Angeles', 'Europe/London', 'UTC'. All times in trigger_args "
+                    "are interpreted in this timezone."
                 ),
             },
             "message": {
@@ -99,9 +110,17 @@ def create_schedule_reminder_handler(scheduler: SchedulerManager):
             return f"Reminder {job_id} not found."
 
         # Default: create
-        for field in ("description", "trigger_type", "trigger_args", "message"):
+        for field in ("description", "trigger_type", "trigger_args", "timezone", "message"):
             if field not in params:
                 return f"Error: {field} is required for create."
+
+        # Validate timezone
+        tz_name = params["timezone"]
+        try:
+            from zoneinfo import ZoneInfo
+            ZoneInfo(tz_name)
+        except (KeyError, Exception):
+            return f"Error: invalid timezone '{tz_name}'. Use IANA format like 'America/New_York'."
 
         silent = params.get("silent", False)
         job_id = scheduler.add_assistant_job(
@@ -110,8 +129,9 @@ def create_schedule_reminder_handler(scheduler: SchedulerManager):
             trigger_args=params["trigger_args"],
             prompt=params["message"],
             silent=silent,
+            timezone=tz_name,
         )
         mode = " (silent mode)" if silent else ""
-        return f"Reminder scheduled with ID: {job_id}{mode}"
+        return f"Reminder scheduled with ID: {job_id} (timezone: {tz_name}){mode}"
 
     return schedule_reminder
