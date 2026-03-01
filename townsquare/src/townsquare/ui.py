@@ -1003,8 +1003,11 @@ function closeLikedOverlay(){
 }
 
 function esc(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}
-marked.setOptions({breaks:true,gfm:true});
-function renderMd(s){return DOMPurify.sanitize(marked.parse(String(s)))}
+if(typeof marked!=='undefined')marked.setOptions({breaks:true,gfm:true});
+function renderMd(s){
+  if(typeof marked==='undefined'||typeof DOMPurify==='undefined')return esc(s);
+  return DOMPurify.sanitize(marked.parse(String(s)));
+}
 function ago(iso){
   const d=Date.now()-new Date(iso).getTime();
   if(d<60000)return 'just now';
