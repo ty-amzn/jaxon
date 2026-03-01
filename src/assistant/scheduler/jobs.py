@@ -60,7 +60,7 @@ async def run_workflow_job(
 
 
 _REFLECTION_SYSTEM = (
-    "You extract long-term facts from daily conversation logs. "
+    "You extract long-term facts from daily conversation logs and feed interactions. "
     "Focus on: preferences, habits, interests, personal info, recurring topics, "
     "opinions, and project context."
 )
@@ -73,11 +73,43 @@ recurring topics, opinions, and project context.
 Current durable memory (avoid duplicates):
 {current_memory}
 
-Today's conversations:
+Yesterday's conversations:
 {daily_log}
 
+{feed_section}\
 Respond with ONLY a JSON array of objects: [{{"section": "...", "fact": "..."}}]
 If nothing new is worth remembering, respond with an empty array: []"""
+
+
+async def _fetch_engaged_threads(townsquare_url: str, since: str) -> str:
+    """Fetch Town Square threads the user engaged with since a timestamp."""
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=15) as client:
+            resp = await client.get(
+                f"{townsquare_url}/feed/posts/engaged",
+                params={"author": "user", "since": since},
+            )
+        threads = resp.json()
+        if not threads:
+            return ""
+
+        parts = []
+        for thread in threads:
+            lines = []
+            for post in thread:
+                lines.append(f"  @{post['author']}: {post['content']}")
+            parts.append("\n".join(lines))
+
+        return (
+            "Town Square threads the user engaged with yesterday:\n\n"
+            + "\n\n---\n\n".join(parts)
+            + "\n\n"
+        )
+    except Exception:
+        logger.warning("Reflection: failed to fetch Town Square threads")
+        return ""
 
 
 async def run_reflection_job(
@@ -97,15 +129,24 @@ async def run_reflection_job(
 
     yesterday = datetime.now(timezone.utc) - timedelta(days=1)
     daily_log = memory.daily_log.read_full(date=yesterday)
-    if not daily_log.strip():
-        logger.info("Reflection: no daily log entries for %s, skipping", yesterday.strftime("%Y-%m-%d"))
+
+    # Fetch Town Square threads the user engaged with
+    settings = get_settings()
+    feed_section = ""
+    if settings.townsquare_url:
+        since = yesterday.strftime("%Y-%m-%dT00:00:00")
+        feed_section = await _fetch_engaged_threads(settings.townsquare_url, since)
+
+    if not daily_log.strip() and not feed_section:
+        logger.info("Reflection: no daily log or feed activity for %s, skipping", yesterday.strftime("%Y-%m-%d"))
         return
 
     current_memory = memory.durable.read()
 
     prompt = _REFLECTION_PROMPT.format(
         current_memory=current_memory,
-        daily_log=daily_log,
+        daily_log=daily_log or "(no direct conversations)",
+        feed_section=feed_section,
     )
 
     settings = get_settings()

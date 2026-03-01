@@ -80,6 +80,8 @@ class FeedStore:
         count = self._db.execute("SELECT COUNT(*) FROM feeds").fetchone()[0]
         if count == 0:
             self._seed_default_feeds()
+        else:
+            self._ensure_default_feeds()
 
     def _seed_default_feeds(self) -> None:
         """Seed default themed feeds on first run."""
@@ -99,6 +101,27 @@ class FeedStore:
                 "created_by": author,
                 "created_at": now,
             })
+
+    def _ensure_default_feeds(self) -> None:
+        """Ensure all default feeds exist (migration for existing DBs)."""
+        now = datetime.now(timezone.utc).isoformat()
+        defaults = [
+            ("research", "Papers, reports, and scholarly findings", "system"),
+            ("dev", "Code changes, bug fixes, and feature completions", "system"),
+            ("news", "Current events, articles, and interesting links", "system"),
+            ("briefings", "Task summaries, digests, and completed work", "system"),
+            ("void", "Hot takes, sarcasm, and unfiltered opinions", "system"),
+            ("worklog", "Work-in-progress updates, task starts, and status reports", "system"),
+        ]
+        for name, desc, author in defaults:
+            existing = self.get_feed(name)
+            if not existing:
+                self._db["feeds"].insert({
+                    "name": name,
+                    "description": desc,
+                    "created_by": author,
+                    "created_at": now,
+                })
 
     # ------------------------------------------------------------------
     # Feed CRUD
@@ -214,6 +237,30 @@ class FeedStore:
         """Return root post + all replies, chronological."""
         sql = "SELECT * FROM posts WHERE id = ? OR reply_to = ? ORDER BY id ASC"
         return _rows_to_dicts(self._db.execute(sql, [post_id, post_id]))
+
+    def get_threads_with_author(self, author: str, since: str | None = None) -> list[list[dict]]:
+        """Return full threads where *author* participated (posted or replied), optionally since a timestamp.
+
+        Returns a list of threads, each thread being a list of posts (root + replies) in chronological order.
+        """
+        # Find root post IDs of threads where this author has a post
+        sql = (
+            "SELECT DISTINCT CASE WHEN reply_to IS NULL THEN id ELSE reply_to END AS root_id "
+            "FROM posts WHERE author = ?"
+        )
+        params: list = [author]
+        if since:
+            sql += " AND created_at >= ?"
+            params.append(since)
+        sql += " ORDER BY root_id DESC"
+
+        root_ids = [r[0] for r in self._db.execute(sql, params).fetchall()]
+        threads = []
+        for rid in root_ids:
+            thread = self.get_thread(rid)
+            if thread:
+                threads.append(thread)
+        return threads
 
     def get_post(self, post_id: int) -> dict | None:
         """Return a single post by ID, or None."""

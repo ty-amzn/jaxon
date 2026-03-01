@@ -207,6 +207,14 @@ async def delete_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+@feed_router.get("/posts/engaged")
+async def get_engaged_threads(request: Request, author: str = "user", since: str | None = None):
+    """Return full threads where the given author participated."""
+    store = request.app.state.feed_store
+    threads = store.get_threads_with_author(author, since=since)
+    return threads
+
+
 @feed_router.get("/posts/{post_id}/thread")
 async def get_thread(request: Request, post_id: int):
     store = request.app.state.feed_store

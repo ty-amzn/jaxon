@@ -255,11 +255,6 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 .feed-item .count{font-size:12px;background:var(--bg-tertiary);color:var(--text-tertiary);
   padding:2px 8px;border-radius:10px;min-width:24px;text-align:center}
 .feed-item.active .count{background:var(--accent-faint);color:var(--accent)}
-.create-feed-btn{margin-top:4px;padding:8px 10px;background:transparent;border:1px dashed var(--border);
-  border-radius:var(--radius-xs);color:var(--text-tertiary);font-size:13px;font-weight:500;
-  cursor:pointer;text-align:center;transition:all .15s;font-family:inherit;width:100%}
-.create-feed-btn:hover{border-color:var(--accent);color:var(--accent);background:var(--accent-faint)}
-
 /* Author filter */
 .author-nav{padding:0}
 .author-item{display:flex;align-items:center;gap:8px;padding:7px 10px;cursor:pointer;
@@ -507,7 +502,6 @@ a{color:var(--accent);text-decoration:none}
       </div>
       <div id="feed-list"></div>
     </div>
-    <div class="create-feed-btn" onclick="openCreateFeed()">+ New Feed</div>
   </div>
   <div class="right-card glass">
     <div class="right-section">People</div>
@@ -516,17 +510,6 @@ a{color:var(--accent);text-decoration:none}
 </div>
 <div class="thread-overlay" id="thread-overlay" onclick="closeThread(event)">
   <div class="thread-panel" id="thread-panel"></div>
-</div>
-<div class="modal-overlay" id="create-feed-modal" onclick="if(event.target===this)closeCreateFeed()">
-  <div class="modal">
-    <h3>Create Feed</h3>
-    <input id="feed-name" placeholder="Name (slug, e.g. news)">
-    <textarea id="feed-desc" placeholder="What is this feed about?" rows="2"></textarea>
-    <div class="modal-actions">
-      <button class="cancel-btn" onclick="closeCreateFeed()">Cancel</button>
-      <button class="btn btn-sm" onclick="submitCreateFeed()">Create</button>
-    </div>
-  </div>
 </div>
 <div class="modal-overlay" id="edit-post-modal" onclick="if(event.target===this)closeEditPost()">
   <div class="modal">
@@ -925,26 +908,6 @@ async function sendReply(rootId){
       body:JSON.stringify(body)});
     await openThread(rootId);
   }finally{inp.disabled=false}
-}
-
-function openCreateFeed(){
-  document.getElementById('create-feed-modal').classList.add('open');
-  document.getElementById('feed-name').focus();
-}
-function closeCreateFeed(){
-  document.getElementById('create-feed-modal').classList.remove('open');
-  document.getElementById('feed-name').value='';
-  document.getElementById('feed-desc').value='';
-}
-async function submitCreateFeed(){
-  const name=document.getElementById('feed-name').value.trim().toLowerCase().replace(/[^a-z0-9-]/g,'-');
-  const desc=document.getElementById('feed-desc').value.trim();
-  if(!name||!desc){alert('Both name and description are required.');return}
-  await fetch(API+'/channels',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({name,description:desc})});
-  closeCreateFeed();
-  await loadSidebar();
-  navigate(name);
 }
 
 async function openEditPost(id){
