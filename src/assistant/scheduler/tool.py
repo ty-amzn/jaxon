@@ -15,11 +15,8 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
         "- 'create': schedule a new reminder or task. Requires description, trigger_type, trigger_args, message.\n"
         "- 'cancel': remove a reminder/task by job_id. Use 'list' first to find the ID.\n"
         "- 'list': show all active reminders and tasks with their IDs and schedules.\n\n"
-        "Job types (IMPORTANT: prefer 'assistant' unless the user explicitly asks for a simple reminder):\n"
-        "- 'assistant' (preferred): runs the message as a prompt through the AI assistant at the scheduled time, "
-        "with full tool access. Use this by default for all scheduled tasks and reminders.\n"
-        "- 'notification': sends a pre-written static message. Only use this when the user explicitly "
-        "asks for a simple notification with no AI involvement.\n\n"
+        "When a reminder fires, the message is executed as a prompt through the AI assistant "
+        "with full tool access (search, delegation, notifications, etc.).\n\n"
         "Trigger types:\n"
         "- 'date': one-time at a specific time. Use for 'remind me in 10 minutes' — "
         "compute the absolute datetime from the current time shown in the system prompt and pass as run_date.\n"
@@ -56,15 +53,6 @@ SCHEDULE_REMINDER_DEF: dict[str, Any] = {
             "message": {
                 "type": "string",
                 "description": "The notification message to deliver (required for create)",
-            },
-            "job_type": {
-                "type": "string",
-                "enum": ["notification", "assistant"],
-                "description": (
-                    "Type of job (optional for create, default 'assistant'). "
-                    "Use 'assistant' by default — the message will be executed as a prompt with full tool access. "
-                    "Use 'notification' only when the user explicitly wants a simple static message with no AI involvement."
-                ),
             },
             "silent": {
                 "type": "boolean",
@@ -115,26 +103,15 @@ def create_schedule_reminder_handler(scheduler: SchedulerManager):
             if field not in params:
                 return f"Error: {field} is required for create."
 
-        job_type = params.get("job_type", "assistant")
-
-        if job_type == "assistant":
-            silent = params.get("silent", False)
-            job_id = scheduler.add_assistant_job(
-                description=params["description"],
-                trigger_type=params["trigger_type"],
-                trigger_args=params["trigger_args"],
-                prompt=params["message"],
-                silent=silent,
-            )
-            mode = " (silent mode)" if silent else ""
-            return f"Assistant task scheduled with ID: {job_id}{mode}"
-        else:
-            job_id = scheduler.add_reminder(
-                description=params["description"],
-                trigger_type=params["trigger_type"],
-                trigger_args=params["trigger_args"],
-                message=params.get("message"),
-            )
-            return f"Reminder scheduled with ID: {job_id}"
+        silent = params.get("silent", False)
+        job_id = scheduler.add_assistant_job(
+            description=params["description"],
+            trigger_type=params["trigger_type"],
+            trigger_args=params["trigger_args"],
+            prompt=params["message"],
+            silent=silent,
+        )
+        mode = " (silent mode)" if silent else ""
+        return f"Reminder scheduled with ID: {job_id}{mode}"
 
     return schedule_reminder

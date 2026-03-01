@@ -1,7 +1,14 @@
-"""Webhook receiver for Town Square agent reply requests."""
+"""Webhook receiver for Town Square agent reply requests.
+
+When a user replies to an agent's post in the Town Square UI, Town Square
+fires a webhook here.  Jax receives the context and decides how to handle
+it — he may reply directly, delegate to the original agent, or delegate to
+a different agent if the topic suits.  Just like a human team lead.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 import httpx
@@ -11,20 +18,6 @@ from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 
 townsquare_webhook_router = APIRouter(tags=["townsquare-webhook"])
-
-# Display names for agents in thread context
-AGENT_NAMES = {
-    "assistant": "Jax",
-    "jax": "Jax",
-    "nova": "Nova",
-    "sage": "Sage",
-    "rex": "Rex",
-    "atlas": "Atlas",
-    "scroll": "Scroll",
-    "pixel": "Pixel",
-    "bolt": "Bolt",
-    "user": "Ty",
-}
 
 
 class ReplyWebhookBody(BaseModel):
@@ -49,116 +42,95 @@ async def _fetch_thread_context(
     return []
 
 
-def _build_thread_transcript(thread: list[dict], current_post_id: int) -> str:
+def _build_thread_transcript(thread: list[dict]) -> str:
     """Build a readable conversation transcript from thread posts."""
     if not thread:
         return ""
     lines = []
     for post in thread:
-        if post["id"] == current_post_id:
-            break  # Stop before the message we're replying to
-        name = AGENT_NAMES.get(post["author"], post["author"])
-        lines.append(f"{name}: {post['content']}")
+        lines.append(f"{post['author']}: {post['content']}")
     return "\n".join(lines)
 
 
-async def _generate_agent_reply(
-    request: Request,
-    parent: dict,
-    user_reply_text: str,
-    thread: list[dict],
-    reply_post_id: int,
-) -> str:
-    """Generate a feed reply using the original agent's persona."""
+async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
+    """Give Jax the thread context and let him decide how to respond."""
+    parent = body.parent_post
+    user_reply = body.user_reply
+    townsquare_url = request.app.state.settings.townsquare_url
     chat_interface = request.app.state.chat_interface
     author = parent["author"]
 
-    # Try to load the agent's persona from YAML definitions
-    agent_persona = ""
-    agent_key = "jax" if author == "assistant" else author
-    display_name = AGENT_NAMES.get(author, author)
+    # Fetch full thread for conversation context
+    root_post_id = parent.get("reply_to") or parent["id"]
+    thread = await _fetch_thread_context(townsquare_url, root_post_id)
+    transcript = _build_thread_transcript(thread)
+
+    user_text = user_reply.get("content", "")
+
+    # Build the task for Jax
+    task_parts = [
+        f"Ty replied to a Town Square thread (originally posted by {author}).",
+        f"The reply_to post ID is {body.reply_to}.",
+        "",
+        "Decide how to handle this:",
+        f"- If you should reply yourself, use `post_to_feed` with reply_to={body.reply_to}",
+        f"- If {author} or another agent should handle it, delegate to them "
+        f"  (they have `post_to_feed` and can reply themselves)",
+        "- If it needs research first, delegate to an agent who can look it up then reply",
+        "",
+        "Keep replies brief and conversational (1-3 sentences).",
+        "",
+    ]
+    if transcript:
+        task_parts.append(f"Thread so far:\n{transcript}")
+    else:
+        task_parts.append(f"Original post by {author}:\n{parent['content']}")
+    task_parts.append(f"\nTy's reply:\n{user_text}")
+
+    task = "\n".join(task_parts)
+
+    # Run Jax with his full system prompt, tools, and delegation capabilities
+    from assistant.agents.background import _auto_approve
+    from assistant.gateway.permissions import PermissionManager
+    from assistant.llm.context import build_system_prompt
+    from assistant.llm.types import ToolCall, ToolResult
+
+    agent_catalog = None
     orchestrator = getattr(chat_interface, "_orchestrator", None)
     if orchestrator:
-        loader = getattr(orchestrator, "_loader", None)
-        if loader:
-            agent_def = loader.get_agent(agent_key)
-            if agent_def and agent_def.system_prompt:
-                agent_persona = agent_def.system_prompt
+        agents = orchestrator._loader.list_agents()
+        if agents:
+            agent_catalog = [(a.name, a.description) for a in agents]
 
-    if agent_persona:
-        system = (
-            f"You are {display_name}.\n\n{agent_persona}\n\n---\n\n"
-            f"You are replying in a Town Square feed thread. "
-            f"Reply naturally as yourself. Keep it brief — 1-3 sentences."
-        )
-    else:
-        system = (
-            f"You are {display_name}. You are replying in a Town Square feed thread. "
-            f"Reply naturally. Keep it brief — 1-3 sentences."
+    system_prompt = build_system_prompt(
+        chat_interface._memory, agent_catalog=agent_catalog,
+    )
+
+    # Auto-approve permissions for background webhook handling
+    auto_perms = PermissionManager(_auto_approve)
+
+    async def tool_executor(tc: ToolCall) -> ToolResult:
+        return await chat_interface._tool_registry.execute(
+            tc, permission_override=auto_perms,
         )
 
-    # Build conversation context from thread
-    transcript = _build_thread_transcript(thread, reply_post_id)
-
-    if transcript:
-        content = (
-            f"Thread so far:\n{transcript}\n\n"
-            f"Ty just replied: \"{user_reply_text}\"\n\n"
-            f"Write your reply."
-        )
-    else:
-        content = (
-            f"Your original post was:\n\"{parent['content']}\"\n\n"
-            f"Ty replied: \"{user_reply_text}\"\n\n"
-            f"Write your reply."
-        )
-
-    from assistant.llm.types import StreamEventType
-
-    llm = chat_interface._llm
-    messages = [{"role": "user", "content": content}]
-    full_text = ""
-    async for event in llm.stream_with_tool_loop(system=system, messages=messages):
-        if event.type == StreamEventType.TEXT_DELTA:
-            full_text += event.text
-    return full_text
+    messages = [{"role": "user", "content": task}]
+    async for event in chat_interface._llm.stream_with_tool_loop(
+        system=system_prompt,
+        messages=messages,
+        tools=chat_interface._tool_registry.definitions,
+        tool_executor=tool_executor,
+        max_tool_rounds=chat_interface._settings.max_tool_rounds,
+    ):
+        pass  # Jax handles everything via tools — no text output needed
 
 
 @townsquare_webhook_router.post("/hooks/townsquare/reply")
 async def handle_reply_webhook(request: Request, body: ReplyWebhookBody):
-    """Receive a reply webhook from Town Square, generate agent reply, post it back."""
-    parent = body.parent_post
-    user_reply = body.user_reply
-    townsquare_url = request.app.state.settings.townsquare_url
-
+    """Receive a reply webhook from Town Square and let Jax handle it."""
     try:
-        # Fetch full thread for conversation context
-        root_post_id = parent.get("reply_to") or parent["id"]
-        thread = await _fetch_thread_context(townsquare_url, root_post_id)
-
-        agent_text = await _generate_agent_reply(
-            request,
-            parent,
-            user_reply.get("content", ""),
-            thread,
-            body.reply_to,
-        )
-
-        # Post the agent reply back to Town Square
-        payload = {
-            "content": agent_text.strip(),
-            "author": parent["author"],
-            "reply_to": body.reply_to,
-        }
-        # Inherit feed from parent post
-        feed_id = parent.get("feed_id")
-        if feed_id:
-            payload["feed_id"] = feed_id
-
-        async with httpx.AsyncClient(timeout=30) as client:
-            await client.post(f"{townsquare_url}/feed/posts", json=payload)
-
+        asyncio.create_task(_handle_reply(request, body))
         return {"ok": True}
     except Exception:
-        logger.exception("Failed to generate agent reply for webhook")
-        return {"error": "Failed to generate agent reply."}
+        logger.exception("Failed to handle Town Square reply webhook")
+        return {"error": "Failed to handle reply webhook."}
