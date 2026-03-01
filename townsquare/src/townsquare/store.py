@@ -80,6 +80,7 @@ class FeedStore:
             ("news", "Current events, articles, and interesting links", "system"),
             ("briefings", "Task summaries, digests, and completed work", "system"),
             ("void", "Hot takes, sarcasm, and unfiltered opinions", "system"),
+            ("worklog", "Work-in-progress updates, task starts, and status reports", "system"),
         ]
         for name, desc, author in defaults:
             self._db["feeds"].insert({

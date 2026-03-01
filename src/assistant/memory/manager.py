@@ -59,6 +59,7 @@ class MemoryManager:
         self,
         skill_names: list[str] | None = None,
         include_identity: bool = True,
+        agent_catalog: list[tuple[str, str]] | None = None,
     ) -> str:
         """Assemble system prompt from identity, durable memory, skills, and today's log.
 
@@ -67,6 +68,9 @@ class MemoryManager:
                          Pass ``None`` to include all skills.
             include_identity: If False, skip IDENTITY.md (for sub-agents that
                               have their own persona). Shared RULES.md is always included.
+            agent_catalog: List of (name, description) tuples for available agents.
+                           When provided, an ``<available_agents>`` section is appended
+                           so the main agent knows which agents it can delegate to.
         """
         from datetime import datetime, timezone
         from zoneinfo import ZoneInfo
@@ -101,6 +105,14 @@ class MemoryManager:
             skills_prompt = self.skills.get_skills_metadata_prompt(skill_names)
             if skills_prompt:
                 parts.append(skills_prompt)
+
+        # Add agent catalog (dynamic — built from loaded YAML definitions)
+        if agent_catalog:
+            lines = ["<available_agents>"]
+            for aname, adesc in agent_catalog:
+                lines.append(f'<agent name="{aname}">{adesc}</agent>')
+            lines.append("</available_agents>")
+            parts.append("\n".join(lines))
 
         # Add plugin skills
         if self._plugin_skills:

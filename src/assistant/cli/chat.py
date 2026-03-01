@@ -94,6 +94,15 @@ class ChatInterface:
         # Track active Live widget so approval prompts can pause it
         self._active_live: Live | None = None
 
+    def _get_agent_catalog(self) -> list[tuple[str, str]] | None:
+        """Build an (name, description) catalog from loaded agent definitions."""
+        if not self._orchestrator:
+            return None
+        agents = self._orchestrator._loader.list_agents()
+        if not agents:
+            return None
+        return [(a.name, a.description) for a in agents]
+
     def _init_plugins(self, settings: Settings) -> None:
         """Initialize the plugin system."""
         from assistant.plugins.hooks import HookDispatcher
@@ -278,7 +287,7 @@ class ChatInterface:
                 images_token = current_images.set(None)
             session.clear_tool_calls()
 
-            system_prompt = build_system_prompt(self._memory)
+            system_prompt = build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
             messages = build_messages(
                 session.get_context_messages(self._settings.max_context_messages),
             )
@@ -497,7 +506,7 @@ class ChatInterface:
             images_token = current_images.set(None)
         session.clear_tool_calls()
 
-        system_prompt = build_system_prompt(self._memory)
+        system_prompt = build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
         messages = build_messages(
             session.get_context_messages(self._settings.max_context_messages),
         )

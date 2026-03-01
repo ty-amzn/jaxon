@@ -6,9 +6,12 @@ from assistant.llm.types import Message
 from assistant.memory.manager import MemoryManager
 
 
-def build_system_prompt(memory: MemoryManager) -> str:
+def build_system_prompt(
+    memory: MemoryManager,
+    agent_catalog: list[tuple[str, str]] | None = None,
+) -> str:
     """Build the system prompt from all memory sources."""
-    return memory.get_system_prompt()
+    return memory.get_system_prompt(agent_catalog=agent_catalog)
 
 
 def build_messages(
