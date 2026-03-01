@@ -1189,7 +1189,7 @@ function updateRepliedCard(){
   const seeAll=document.getElementById('replied-see-all');
   if(!repliedPosts.length){card.style.display='none';return}
   card.style.display='';
-  const shown=repliedPosts.slice(0,5);
+  const shown=repliedPosts.slice(0,10);
   seeAll.style.display='';
   list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
