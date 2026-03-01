@@ -71,6 +71,9 @@ class StreamEvent:
     error_code: int = 0  # HTTP status code for ERROR events
     provider: Provider | None = None  # For ROUTING_INFO events
     model: str = ""  # For ROUTING_INFO events
+    input_tokens: int = 0  # Populated on MESSAGE_COMPLETE
+    output_tokens: int = 0  # Populated on MESSAGE_COMPLETE
+    stop_reason: str = ""  # Populated on MESSAGE_COMPLETE
 
 
 @dataclass

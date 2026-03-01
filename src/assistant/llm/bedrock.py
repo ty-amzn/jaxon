@@ -136,14 +136,18 @@ class BedrockClient(BaseLLMClient):
         max_tool_rounds: int = 10,
     ) -> AsyncGenerator[StreamEvent, None]:
         current_messages = list(messages)
+        total_input_tokens = 0
+        total_output_tokens = 0
+        last_stop_reason = ""
 
         for _round in range(max_tool_rounds):
             tool_calls_in_round: list[ToolCall] = []
             text_parts: list[str] = []
+            round_usage: dict[str, Any] = {}
 
             try:
                 async for event in self._stream_single(
-                    system, current_messages, tools
+                    system, current_messages, tools, usage_out=round_usage
                 ):
                     if event.type == StreamEventType.TEXT_DELTA:
                         text_parts.append(event.text)
@@ -165,10 +169,18 @@ class BedrockClient(BaseLLMClient):
                 )
                 return
 
+            total_input_tokens += round_usage.get("input_tokens", 0)
+            total_output_tokens += round_usage.get("output_tokens", 0)
+            if round_usage.get("stop_reason"):
+                last_stop_reason = round_usage["stop_reason"]
+
             if not tool_calls_in_round:
                 yield StreamEvent(
                     type=StreamEventType.MESSAGE_COMPLETE,
                     text="".join(text_parts),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    stop_reason=last_stop_reason,
                 )
                 return
 
@@ -209,9 +221,10 @@ class BedrockClient(BaseLLMClient):
         })
 
         summary_parts: list[str] = []
+        summary_usage: dict[str, Any] = {}
         try:
             async for event in self._stream_single(
-                system, current_messages, tools=None
+                system, current_messages, tools=None, usage_out=summary_usage
             ):
                 if event.type == StreamEventType.TEXT_DELTA:
                     summary_parts.append(event.text)
@@ -221,9 +234,17 @@ class BedrockClient(BaseLLMClient):
             yield StreamEvent(type=StreamEventType.ERROR, error=str(exc))
             return
 
+        total_input_tokens += summary_usage.get("input_tokens", 0)
+        total_output_tokens += summary_usage.get("output_tokens", 0)
+        if summary_usage.get("stop_reason"):
+            last_stop_reason = summary_usage["stop_reason"]
+
         yield StreamEvent(
             type=StreamEventType.MESSAGE_COMPLETE,
             text="".join(summary_parts),
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            stop_reason=last_stop_reason,
         )
 
     async def _stream_single(
@@ -231,6 +252,7 @@ class BedrockClient(BaseLLMClient):
         system: str,
         messages: list[dict],
         tools: list[dict] | None,
+        usage_out: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
         """Run a single Bedrock converse_stream call, bridging sync→async."""
         queue: asyncio.Queue[StreamEvent | None] = asyncio.Queue()
@@ -297,6 +319,15 @@ class BedrockClient(BaseLLMClient):
                             current_tool_name = ""
                             current_tool_id = ""
                             current_tool_json = ""
+
+                    elif "metadata" in evt:
+                        meta = evt["metadata"]
+                        if usage_out is not None and "usage" in meta:
+                            u = meta["usage"]
+                            usage_out["input_tokens"] = u.get("inputTokens", 0)
+                            usage_out["output_tokens"] = u.get("outputTokens", 0)
+                        if usage_out is not None:
+                            usage_out["stop_reason"] = meta.get("stopReason", "")
 
                 # Signal completion
                 queue.put_nowait(None)

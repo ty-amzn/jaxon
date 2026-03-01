@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+import time
 from collections.abc import AsyncGenerator, Callable, Awaitable
 from typing import Any
 
@@ -12,6 +13,7 @@ from assistant.llm.base import BaseLLMClient, ToolExecutor
 from assistant.llm.bedrock import BedrockClient
 from assistant.llm.client import ClaudeClient
 from assistant.llm.gemini import GeminiClient
+from assistant.llm.metrics import LLMMetricsClient, MetricsContext
 from assistant.llm.ollama import OllamaClient
 from assistant.llm.openai_client import OpenAIClient
 from assistant.llm.types import (
@@ -34,8 +36,9 @@ _CONTEXT_TOO_LONG_RE = re.compile(
 class LLMRouter(BaseLLMClient):
     """Routes requests between multiple LLM providers based on config."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, metrics_client: LLMMetricsClient | None = None) -> None:
         self._settings = settings
+        self._metrics = metrics_client
         self._claude_client: ClaudeClient | None = None
         self._ollama_client: OllamaClient | None = None
         self._openai_client: OpenAIClient | None = None
@@ -269,107 +272,160 @@ class LLMRouter(BaseLLMClient):
         tools: list[dict] | None = None,
         tool_executor: ToolExecutor | None = None,
         max_tool_rounds: int = 10,
+        session_id: str | None = None,
+        agent_name: str | None = None,
     ) -> AsyncGenerator[StreamEvent, None]:
-        """Route to appropriate LLM and stream response."""
-        use_ollama = False
+        """Route to appropriate LLM and stream response.
 
-        # Check if Ollama should intercept simple queries
-        if self._settings.ollama_enabled and self._settings.default_provider != "ollama":
-            use_ollama = self._should_use_ollama(messages, tools)
-            if use_ollama and not await self._check_ollama_available():
-                logger.info("Ollama not available, using default provider")
-                use_ollama = False
+        Args:
+            system: System prompt
+            messages: Conversation messages
+            tools: Tool definitions
+            tool_executor: Tool executor callback
+            max_tool_rounds: Maximum tool use rounds
+            session_id: Optional session ID for metrics correlation
+            agent_name: Optional agent name for metrics correlation
+        """
+        # Initialize metrics context
+        metrics = MetricsContext(self._metrics, session_id, agent_name)
+        metrics.start()
+        if tools:
+            metrics.record_tools_provided()
 
-        # Select client
-        if use_ollama:
-            client: BaseLLMClient = self._get_ollama_client()
-            provider = Provider.OLLAMA
-            model = self._settings.ollama_model
-        else:
-            client, provider, model = self._get_default_client()
+        try:
+            use_ollama = False
 
-        self._config = LLMConfig(
-            provider=provider,
-            model=model,
-            max_tokens=self._settings.max_tokens,
-        )
+            # Check if Ollama should intercept simple queries
+            if self._settings.ollama_enabled and self._settings.default_provider != "ollama":
+                use_ollama = self._should_use_ollama(messages, tools)
+                if use_ollama and not await self._check_ollama_available():
+                    logger.info("Ollama not available, using default provider")
+                    use_ollama = False
 
-        # Yield routing info event
-        yield StreamEvent(
-            type=StreamEventType.ROUTING_INFO,
-            provider=self._config.provider,
-            model=self._config.model,
-        )
+            # Select client
+            if use_ollama:
+                client: BaseLLMClient = self._get_ollama_client()
+                provider = Provider.OLLAMA
+                model = self._settings.ollama_model
+            else:
+                client, provider, model = self._get_default_client()
 
-        # Stream from selected client, watching for context-too-long errors
-        context_error_event: StreamEvent | None = None
-        async for event in client.stream_with_tool_loop(
-            system=system,
-            messages=messages,
-            tools=tools,
-            tool_executor=tool_executor,
-            max_tool_rounds=max_tool_rounds,
-        ):
-            if self._is_context_too_long_error(event):
-                context_error_event = event
-                break
-            yield event
+            # Record provider/model for metrics
+            metrics.record_routing_info(provider.value, model)
 
-        if context_error_event is None:
-            return
+            self._config = LLMConfig(
+                provider=provider,
+                model=model,
+                max_tokens=self._settings.max_tokens,
+            )
 
-        # --- Context too long: attempt fallback chain ---
-        logger.warning(
-            "Context too long for %s/%s — attempting fallback", provider.value, model
-        )
-
-        # 1. Try context_fallback callback (delegates to long_context_reader agent)
-        if self._context_fallback is not None:
-            # Extract the user's last text message
-            user_text = ""
-            for msg in reversed(messages):
-                if msg.get("role") == "user":
-                    c = msg.get("content", "")
-                    user_text = c if isinstance(c, str) else str(c)
-                    break
-            try:
-                fallback_result = await self._context_fallback(user_text)
-                if fallback_result:
-                    logger.info("Context fallback agent produced a result")
-                    yield StreamEvent(
-                        type=StreamEventType.TEXT_DELTA,
-                        text=fallback_result,
-                    )
-                    yield StreamEvent(
-                        type=StreamEventType.MESSAGE_COMPLETE,
-                        text=fallback_result,
-                    )
-                    return
-            except Exception as exc:
-                logger.warning("Context fallback agent failed: %s", exc)
-
-        # 2. Try a cloud provider with larger context window
-        cloud = self._get_cloud_fallback(provider)
-        if cloud is not None:
-            fallback_client, fb_provider, fb_model = cloud
-            logger.info("Falling back to %s/%s", fb_provider.value, fb_model)
+            # Yield routing info event
             yield StreamEvent(
                 type=StreamEventType.ROUTING_INFO,
-                provider=fb_provider,
-                model=fb_model,
+                provider=self._config.provider,
+                model=self._config.model,
             )
-            async for event in fallback_client.stream_with_tool_loop(
+
+            # Stream from selected client, watching for context-too-long errors
+            context_error_event: StreamEvent | None = None
+            response_parts: list[str] = []
+            async for event in client.stream_with_tool_loop(
                 system=system,
                 messages=messages,
                 tools=tools,
                 tool_executor=tool_executor,
                 max_tool_rounds=max_tool_rounds,
             ):
+                if self._is_context_too_long_error(event):
+                    context_error_event = event
+                    break
+                # Track tool rounds for metrics
+                if event.type == StreamEventType.TOOL_USE_COMPLETE:
+                    metrics.record_tool_round()
+                elif event.type == StreamEventType.TEXT_DELTA:
+                    response_parts.append(event.text)
+                elif event.type == StreamEventType.MESSAGE_COMPLETE:
+                    if event.input_tokens or event.output_tokens:
+                        metrics.record_usage(event.input_tokens, event.output_tokens, event.stop_reason)
+                elif event.type == StreamEventType.ERROR:
+                    metrics.record_error(event.error)
                 yield event
-            return
 
-        # 3. Nothing worked — yield the original error
-        yield context_error_event
+            if context_error_event is None:
+                metrics.record_prompt(system, messages)
+                metrics.record_response("".join(response_parts))
+                return
+
+            # --- Context too long: attempt fallback chain ---
+            logger.warning(
+                "Context too long for %s/%s — attempting fallback", provider.value, model
+            )
+            metrics.record_error("Context too long")
+
+            # 1. Try context_fallback callback (delegates to long_context_reader agent)
+            if self._context_fallback is not None:
+                # Extract the user's last text message
+                user_text = ""
+                for msg in reversed(messages):
+                    if msg.get("role") == "user":
+                        c = msg.get("content", "")
+                        user_text = c if isinstance(c, str) else str(c)
+                        break
+                try:
+                    fallback_result = await self._context_fallback(user_text)
+                    if fallback_result:
+                        logger.info("Context fallback agent produced a result")
+                        yield StreamEvent(
+                            type=StreamEventType.TEXT_DELTA,
+                            text=fallback_result,
+                        )
+                        yield StreamEvent(
+                            type=StreamEventType.MESSAGE_COMPLETE,
+                            text=fallback_result,
+                        )
+                        return
+                except Exception as exc:
+                    logger.warning("Context fallback agent failed: %s", exc)
+
+            # 2. Try a cloud provider with larger context window
+            cloud = self._get_cloud_fallback(provider)
+            if cloud is not None:
+                fallback_client, fb_provider, fb_model = cloud
+                logger.info("Falling back to %s/%s", fb_provider.value, fb_model)
+                metrics.record_routing_info(fb_provider.value, fb_model)  # Update metrics for fallback
+                yield StreamEvent(
+                    type=StreamEventType.ROUTING_INFO,
+                    provider=fb_provider,
+                    model=fb_model,
+                )
+                fallback_response_parts: list[str] = []
+                async for event in fallback_client.stream_with_tool_loop(
+                    system=system,
+                    messages=messages,
+                    tools=tools,
+                    tool_executor=tool_executor,
+                    max_tool_rounds=max_tool_rounds,
+                ):
+                    if event.type == StreamEventType.TOOL_USE_COMPLETE:
+                        metrics.record_tool_round()
+                    elif event.type == StreamEventType.TEXT_DELTA:
+                        fallback_response_parts.append(event.text)
+                    elif event.type == StreamEventType.MESSAGE_COMPLETE:
+                        if event.input_tokens or event.output_tokens:
+                            metrics.record_usage(event.input_tokens, event.output_tokens, event.stop_reason)
+                    elif event.type == StreamEventType.ERROR:
+                        metrics.record_error(event.error)
+                    yield event
+                metrics.record_prompt(system, messages)
+                metrics.record_response("".join(fallback_response_parts))
+                return
+
+            # 3. Nothing worked — yield the original error
+            yield context_error_event
+
+        finally:
+            # Log metrics to Observatory (fire-and-forget)
+            await metrics.finish()
 
     _PROVIDER_MAP: dict[str, Provider] = {
         "claude": Provider.CLAUDE,
@@ -471,3 +527,5 @@ class LLMRouter(BaseLLMClient):
         for client in self._model_clients.values():
             await client.close()
         self._model_clients.clear()
+        if self._metrics:
+            await self._metrics.close()

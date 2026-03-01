@@ -61,6 +61,13 @@ class OpenAICompatibleClient(BaseLLMClient):
             return {"max_completion_tokens": self._config.max_tokens}
         return {"max_tokens": self._config.max_tokens}
 
+    def _stream_options(self) -> dict[str, Any]:
+        """Return stream_options to merge into request body.
+
+        Override in subclasses that don't support stream_options (e.g. Ollama).
+        """
+        return {"stream_options": {"include_usage": True}}
+
     def _convert_tools_to_openai(self, tools: list[dict] | None) -> list[dict] | None:
         """Convert Anthropic tool format to OpenAI format."""
         if not tools:
@@ -179,6 +186,9 @@ class OpenAICompatibleClient(BaseLLMClient):
         current_messages = self._convert_messages_to_openai(system, messages)
         openai_tools = self._convert_tools_to_openai(tools)
         label = self._get_provider_label()
+        total_input_tokens = 0
+        total_output_tokens = 0
+        last_stop_reason = ""
 
         for _round in range(max_tool_rounds):
             tool_calls_in_round: list[ToolCall] = []
@@ -189,6 +199,7 @@ class OpenAICompatibleClient(BaseLLMClient):
                 **self._max_tokens_param(),
                 "messages": current_messages,
                 "stream": True,
+                **self._stream_options(),
             }
             if openai_tools:
                 request_body["tools"] = openai_tools
@@ -221,9 +232,17 @@ class OpenAICompatibleClient(BaseLLMClient):
                             except json.JSONDecodeError:
                                 continue
 
-                            delta = (
-                                data.get("choices", [{}])[0].get("delta", {})
-                            )
+                            # Parse usage from final SSE chunk
+                            if "usage" in data and data["usage"]:
+                                usage = data["usage"]
+                                total_input_tokens += usage.get("prompt_tokens", 0)
+                                total_output_tokens += usage.get("completion_tokens", 0)
+
+                            choice = data.get("choices", [{}])[0] if data.get("choices") else {}
+                            finish = choice.get("finish_reason")
+                            if finish:
+                                last_stop_reason = finish
+                            delta = choice.get("delta", {})
 
                             if "content" in delta and delta["content"]:
                                 text_parts.append(delta["content"])
@@ -304,6 +323,9 @@ class OpenAICompatibleClient(BaseLLMClient):
                 yield StreamEvent(
                     type=StreamEventType.MESSAGE_COMPLETE,
                     text="".join(text_parts),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    stop_reason=last_stop_reason,
                 )
                 return
 
@@ -359,6 +381,7 @@ class OpenAICompatibleClient(BaseLLMClient):
             **self._max_tokens_param(),
             "messages": current_messages,
             "stream": True,
+            **self._stream_options(),
         }
 
         try:
@@ -377,7 +400,15 @@ class OpenAICompatibleClient(BaseLLMClient):
                                 data = json.loads(line[6:])
                             except json.JSONDecodeError:
                                 continue
-                            delta = data.get("choices", [{}])[0].get("delta", {})
+                            if "usage" in data and data["usage"]:
+                                usage = data["usage"]
+                                total_input_tokens += usage.get("prompt_tokens", 0)
+                                total_output_tokens += usage.get("completion_tokens", 0)
+                            choice = data.get("choices", [{}])[0] if data.get("choices") else {}
+                            finish = choice.get("finish_reason")
+                            if finish:
+                                last_stop_reason = finish
+                            delta = choice.get("delta", {})
                             if "content" in delta and delta["content"]:
                                 summary_parts.append(delta["content"])
                                 yield StreamEvent(
@@ -390,6 +421,9 @@ class OpenAICompatibleClient(BaseLLMClient):
         yield StreamEvent(
             type=StreamEventType.MESSAGE_COMPLETE,
             text="".join(summary_parts),
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            stop_reason=last_stop_reason,
         )
 
     async def close(self) -> None:

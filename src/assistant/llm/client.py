@@ -71,6 +71,9 @@ class ClaudeClient(BaseLLMClient):
         continues the conversation until a final text response.
         """
         current_messages = list(messages)
+        total_input_tokens = 0
+        total_output_tokens = 0
+        last_stop_reason = ""
 
         for _round in range(max_tool_rounds):
             tool_calls_in_round: list[ToolCall] = []
@@ -130,10 +133,23 @@ class ClaudeClient(BaseLLMClient):
                             current_tool_id = ""
                             current_tool_json = ""
 
+            # Extract usage from the completed stream
+            try:
+                final_msg = await stream.get_final_message()
+                if final_msg.usage:
+                    total_input_tokens += final_msg.usage.input_tokens
+                    total_output_tokens += final_msg.usage.output_tokens
+                last_stop_reason = final_msg.stop_reason or ""
+            except Exception:
+                pass
+
             if not tool_calls_in_round:
                 yield StreamEvent(
                     type=StreamEventType.MESSAGE_COMPLETE,
                     text="".join(text_parts),
+                    input_tokens=total_input_tokens,
+                    output_tokens=total_output_tokens,
+                    stop_reason=last_stop_reason,
                 )
                 return
 
@@ -197,7 +213,19 @@ class ClaudeClient(BaseLLMClient):
                             text=delta.text,
                         )
 
+        try:
+            final_msg = await stream.get_final_message()
+            if final_msg.usage:
+                total_input_tokens += final_msg.usage.input_tokens
+                total_output_tokens += final_msg.usage.output_tokens
+            last_stop_reason = final_msg.stop_reason or ""
+        except Exception:
+            pass
+
         yield StreamEvent(
             type=StreamEventType.MESSAGE_COMPLETE,
             text="".join(summary_parts),
+            input_tokens=total_input_tokens,
+            output_tokens=total_output_tokens,
+            stop_reason=last_stop_reason,
         )

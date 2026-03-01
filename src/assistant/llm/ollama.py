@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+from typing import Any
 
 from assistant.llm.openai_compat import OpenAICompatibleClient
 from assistant.llm.types import LLMConfig, Provider
@@ -37,6 +38,10 @@ class OllamaClient(OpenAICompatibleClient):
 
     def _get_provider_label(self) -> str:
         return "Ollama"
+
+    def _stream_options(self) -> dict[str, Any]:
+        """Ollama doesn't support stream_options."""
+        return {}
 
     async def is_available(self) -> bool:
         """Check if Ollama server is running."""
