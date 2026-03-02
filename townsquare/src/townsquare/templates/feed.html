@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Town Square</title>
+<link rel="manifest" href="/feed/manifest.json">
+<meta name="theme-color" content="#0f1419">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="icon" href="/feed/icon-192.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/feed/icon-192.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
+<link rel="stylesheet" href="/feed/static/styles.css?v=2">
+</head>
+<body>
+<!-- Top bar: logo + search + theme toggle -->
+<header class="top-bar">
+  <div class="top-bar-left">
+    <div class="logo">TS</div>
+    <h2>Town Square</h2>
+  </div>
+  <div class="top-bar-center">
+    <div class="search-box">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search-input" type="text" placeholder="Search posts..." autocomplete="off">
+      <span id="search-clear" class="search-clear" onclick="clearSearch()" style="display:none">&times;</span>
+    </div>
+    <select id="period-filter" class="period-filter" onchange="changePeriod(this.value)">
+      <option value="7" selected>1 week</option>
+      <option value="30">1 month</option>
+      <option value="180">6 months</option>
+      <option value="all">All time</option>
+    </select>
+  </div>
+  <div class="top-bar-right">
+    <button class="theme-toggle" onclick="toggleTheme()">
+      <svg id="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M21 12.79A9 9 0 1111.21 3a7 7 0 009.79 9.79z"/>
+      </svg>
+      <span id="theme-label">Light mode</span>
+    </button>
+  </div>
+</header>
+<!-- Three-column panels -->
+<div class="panels">
+<!-- Left panel: compose card + liked/replied -->
+<div class="panel panel-left">
+  <div class="compose glass">
+    <div class="compose-top">
+      <div class="compose-avatar">Ty</div>
+      <div class="compose-body">
+        <textarea id="compose-text" placeholder="What's happening?" rows="1"
+          oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+      </div>
+    </div>
+    <div class="bar">
+      <select id="compose-feed"><option value="">Global</option></select>
+      <input id="compose-image" type="url" placeholder="Image URL (optional)" style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:6px 12px;color:var(--text-primary);font-size:12px;outline:none;font-family:inherit;min-width:0">
+      <button class="btn btn-sm" id="compose-btn" onclick="createPost()">Post</button>
+    </div>
+  </div>
+  <div class="liked-card glass" id="liked-card" style="display:none">
+    <div class="liked-header">
+      <div class="right-section" style="margin-bottom:0">Liked</div>
+      <span class="liked-see-all" id="liked-see-all" onclick="openLikedOverlay()">See all</span>
+    </div>
+    <div class="liked-list" id="liked-list" style="margin-top:8px"></div>
+  </div>
+  <div class="liked-card glass" id="replied-card" style="display:none">
+    <div class="liked-header">
+      <div class="right-section" style="margin-bottom:0">Replied</div>
+      <span class="liked-see-all" id="replied-see-all" onclick="openRepliedOverlay()">See all</span>
+    </div>
+    <div class="liked-list" id="replied-list" style="margin-top:8px"></div>
+  </div>
+</div>
+<!-- Center panel: feed header + timeline -->
+<div class="panel panel-center">
+  <div class="feed-header" id="feed-header"><h1>All Posts</h1></div>
+  <div class="center-scroll" id="center-scroll">
+    <div class="timeline" id="timeline"></div>
+    <button class="load-more-btn" id="load-more-btn" onclick="loadMore()" style="display:none">Load more</button>
+  </div>
+</div>
+<!-- Right panel: feeds card + people card + palette -->
+<div class="panel panel-right">
+  <div class="right-card glass">
+    <div class="right-section">Feeds</div>
+    <div class="feed-nav">
+      <div class="feed-item active" id="all-posts-item" onclick="navigate('')">
+        <span>All Posts</span>
+      </div>
+      <div id="feed-list"></div>
+    </div>
+  </div>
+  <div class="right-card glass">
+    <div class="right-section">People</div>
+    <div class="author-nav" id="author-list"></div>
+  </div>
+  <div class="palette-card glass">
+    <div class="right-section">Palette</div>
+    <div class="palette-row" id="palette-row"></div>
+  </div>
+</div>
+</div>
+<div class="thread-overlay" id="thread-overlay" onclick="closeThread(event)">
+  <div class="thread-panel" id="thread-panel"></div>
+</div>
+<div class="modal-overlay" id="edit-post-modal" onclick="if(event.target===this)closeEditPost()">
+  <div class="modal">
+    <h3>Edit Post</h3>
+    <textarea id="edit-post-text" rows="4"></textarea>
+    <input id="edit-post-image" type="url" placeholder="Image URL (optional)">
+    <input type="hidden" id="edit-post-id">
+    <div class="modal-actions">
+      <button class="cancel-btn" onclick="closeEditPost()">Cancel</button>
+      <button class="btn btn-sm" onclick="submitEditPost()">Save</button>
+    </div>
+  </div>
+</div>
+<div class="thread-overlay" id="liked-overlay" onclick="if(event.target===this)closeLikedOverlay()">
+  <div class="thread-panel" style="max-width:560px">
+    <div class="thread-header">
+      <h3>Liked Posts</h3>
+      <button class="close" onclick="closeLikedOverlay()">&times;</button>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:8px;border-bottom:1px solid var(--border)">
+      <select id="liked-filter-author" onchange="renderLikedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All people</option>
+      </select>
+      <select id="liked-filter-feed" onchange="renderLikedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All feeds</option>
+      </select>
+    </div>
+    <div id="liked-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
+<div class="thread-overlay" id="replied-overlay" onclick="if(event.target===this)closeRepliedOverlay()">
+  <div class="thread-panel" style="max-width:560px">
+    <div class="thread-header">
+      <h3>Replied Posts</h3>
+      <button class="close" onclick="closeRepliedOverlay()">&times;</button>
+    </div>
+    <div style="padding:12px 16px;display:flex;gap:8px;border-bottom:1px solid var(--border)">
+      <select id="replied-filter-author" onchange="renderRepliedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All people</option>
+      </select>
+      <select id="replied-filter-feed" onchange="renderRepliedOverlay()" style="flex:1;background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer">
+        <option value="">All feeds</option>
+      </select>
+    </div>
+    <div id="replied-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
+  </div>
+</div>
+<script src="/feed/static/app.js?v=2"></script>
+</body>
+</html>
