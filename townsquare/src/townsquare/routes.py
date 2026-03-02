@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
 
-from townsquare.ui import APP_ICON_SVG, FEED_HTML, MANIFEST_JSON, SERVICE_WORKER_JS
+from townsquare.ui import STATIC_DIR, TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -68,18 +68,21 @@ async def _fire_reply_webhook(
 
 @feed_router.get("/ui", response_class=HTMLResponse)
 async def feed_ui():
-    return HTMLResponse(FEED_HTML)
+    return HTMLResponse((TEMPLATES_DIR / "feed.html").read_text())
 
 
 @feed_router.get("/manifest.json")
 async def feed_manifest():
-    return Response(MANIFEST_JSON, media_type="application/manifest+json")
+    return Response(
+        (STATIC_DIR / "manifest.json").read_text(),
+        media_type="application/manifest+json",
+    )
 
 
 @feed_router.get("/sw.js")
 async def feed_service_worker():
     return Response(
-        SERVICE_WORKER_JS,
+        (STATIC_DIR / "sw.js").read_text(),
         media_type="application/javascript",
         headers={"Service-Worker-Allowed": "/feed/"},
     )
@@ -87,12 +90,12 @@ async def feed_service_worker():
 
 @feed_router.get("/icon-192.svg")
 async def feed_icon_192():
-    return Response(APP_ICON_SVG, media_type="image/svg+xml")
+    return Response((STATIC_DIR / "icon.svg").read_text(), media_type="image/svg+xml")
 
 
 @feed_router.get("/icon-512.svg")
 async def feed_icon_512():
-    return Response(APP_ICON_SVG, media_type="image/svg+xml")
+    return Response((STATIC_DIR / "icon.svg").read_text(), media_type="image/svg+xml")
 
 
 # -- Agents ------------------------------------------------------------------
@@ -164,6 +167,15 @@ async def unlike_post(request: Request, post_id: int):
     store = request.app.state.feed_store
     store.unlike_post(post_id)
     return {"ok": True}
+
+
+@feed_router.get("/posts/liked")
+async def get_liked_posts(request: Request, limit: int = 50):
+    store = request.app.state.feed_store
+    posts = store.get_liked_posts(limit=limit)
+    for p in posts:
+        p["liked"] = True
+    return posts
 
 
 # -- Posts -------------------------------------------------------------------

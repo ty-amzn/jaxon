@@ -553,24 +553,35 @@ async function toggleLike(id,el){
   el.classList.toggle('liked');
   const p=timelinePosts.find(x=>x.id===id);
   if(p) p.liked=!isLiked;
-  updateLikedCard();
   try{
     await fetch(API+'/posts/'+id+'/like',{method:isLiked?'DELETE':'POST'});
+    await updateLikedCard();
   }catch(e){
     el.classList.toggle('liked');
     if(p) p.liked=isLiked;
-    updateLikedCard();
+    await updateLikedCard();
   }
 }
 
-function updateLikedCard(){
-  const liked=timelinePosts.filter(p=>p.liked);
+let allLikedPosts=[];
+async function updateLikedCard(){
+  try{
+    const resp=await fetch(API+'/posts/liked?limit=50');
+    allLikedPosts=await resp.json();
+    // Attach feed names from cache
+    for(const p of allLikedPosts){
+      if(p.feed_id&&feedsCache){
+        const f=feedsCache.find(fc=>fc.id===p.feed_id);
+        if(f) p.feed_name=f.name;
+      }
+    }
+  }catch(e){allLikedPosts=[];console.warn('Failed to load liked posts',e)}
   const card=document.getElementById('liked-card');
   const list=document.getElementById('liked-list');
   const seeAll=document.getElementById('liked-see-all');
-  if(!liked.length){card.style.display='none';return}
+  if(!allLikedPosts.length){card.style.display='none';return}
   card.style.display='';
-  const shown=liked.slice(0,5);
+  const shown=allLikedPosts.slice(0,5);
   seeAll.style.display='';
   list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
@@ -598,15 +609,14 @@ function likedItemHtml(p){
 }
 
 function openLikedOverlay(){
-  const liked=timelinePosts.filter(p=>p.liked);
   // Populate author filter
   const authorSel=document.getElementById('liked-filter-author');
-  const authors=[...new Set(liked.map(p=>p.author))];
+  const authors=[...new Set(allLikedPosts.map(p=>p.author))];
   authorSel.innerHTML='<option value="">All people</option>'+
     authors.map(a=>`<option value="${esc(a)}">${esc(displayName(a))}</option>`).join('');
   // Populate feed filter
   const feedSel=document.getElementById('liked-filter-feed');
-  const feeds=[...new Set(liked.map(p=>p.feed_name).filter(Boolean))];
+  const feeds=[...new Set(allLikedPosts.map(p=>p.feed_name).filter(Boolean))];
   feedSel.innerHTML='<option value="">All feeds</option>'+
     feeds.map(f=>`<option value="${esc(f)}">#${esc(f)}</option>`).join('');
   renderLikedOverlay();
@@ -616,7 +626,7 @@ function openLikedOverlay(){
 function renderLikedOverlay(){
   const authorVal=document.getElementById('liked-filter-author').value;
   const feedVal=document.getElementById('liked-filter-feed').value;
-  let liked=timelinePosts.filter(p=>p.liked);
+  let liked=allLikedPosts.slice();
   if(authorVal) liked=liked.filter(p=>p.author===authorVal);
   if(feedVal) liked=liked.filter(p=>p.feed_name===feedVal);
   const list=document.getElementById('liked-overlay-list');
@@ -767,7 +777,6 @@ function ago(iso){
 // Init
 document.getElementById('search-input').addEventListener('input',onSearchInput);
 document.getElementById('center-scroll').addEventListener('scroll',function(){
-  if(currentPeriod!=='all'&&!currentSearch) return;
   const s=this;
   if(s.scrollTop+s.clientHeight>=s.scrollHeight-200) loadMore();
 });
