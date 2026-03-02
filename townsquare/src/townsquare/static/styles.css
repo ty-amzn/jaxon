@@ -176,7 +176,7 @@ body{font-family:'Inter',system-ui,-apple-system,sans-serif;background:var(--gra
 a{color:var(--accent);text-decoration:none}
 
 /* Search bar */
-.search-box{display:flex;align-items:center;gap:6px;flex:1;background:var(--bg-tertiary);
+.search-box{display:flex;align-items:center;gap:6px;flex:1;max-width:260px;background:var(--bg-tertiary);
   border:1px solid var(--border);border-radius:20px;padding:6px 12px;color:var(--text-secondary)}
 .search-box input{flex:1;background:none;border:none;outline:none;color:var(--text-primary);
   font-size:13px;font-family:inherit}
