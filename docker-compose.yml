@@ -2,8 +2,6 @@ services:
   jaxon:
     container_name: jaxon
     build: .
-    ports:
-      - "51430:51430"
     env_file:
       - .env
     volumes:
@@ -23,8 +21,6 @@ services:
   townsquare:
     container_name: townsquare
     build: ./townsquare
-    ports:
-      - "51431:51431"
     env_file:
       - ./townsquare/.env
     volumes:
@@ -32,6 +28,20 @@ services:
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:51431/feed/channels"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    networks:
+      - npm-shared
+
+  observatory:
+    container_name: observatory
+    build: ./observatory
+    volumes:
+      - ./observatory/data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:51432/observe/stats"]
       interval: 30s
       timeout: 5s
       retries: 3

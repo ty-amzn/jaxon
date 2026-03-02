@@ -118,6 +118,27 @@ During the DND window, non-urgent notifications are queued and delivered when th
 
 ---
 
+## Reflection
+
+Nightly memory reflection extracts long-term memories from daily conversation logs.
+
+### Configuration
+
+```bash
+ASSISTANT_REFLECTION_ENABLED=true
+ASSISTANT_REFLECTION_MODEL=ollama/minimax-m2.5:cloud   # Model to use
+ASSISTANT_REFLECTION_HOUR=0                              # Hour to run (0 = midnight)
+```
+
+When enabled, a background job runs each night that:
+1. Reads the previous day's conversation log
+2. Uses the configured model to extract notable facts and patterns
+3. Stores them in durable memory (`MEMORY.md`)
+
+The reflection model should be a local or cloud model with good summarization. Use `provider/model` syntax (e.g., `ollama/llama3`, `openai/gpt-4o-mini`).
+
+---
+
 ## Backups
 
 Create and restore snapshots of all assistant data.

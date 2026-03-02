@@ -68,14 +68,19 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 ## LLM Tools
 
 | Tool | Auto-approved? |
-|------|---------------|
+|------|-----------------|
 | `shell_exec` (read commands) | Yes |
 | `read_file` | Yes |
 | `write_file` | No |
 | `http_request` (GET) | Yes |
 | `http_request` (POST, etc.) | No |
+| `web_fetch` | Yes |
+| `pdf_read` | Yes |
+| `arxiv_search` | Yes |
+| `get_weather` | Yes |
 | `web_search` | Yes |
 | `memory_search` | Yes |
+| `memory_store` | No |
 | `memory_forget` | No (delete) |
 | `update_identity` (read) | Yes |
 | `update_identity` (write) | No |
@@ -85,14 +90,29 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `manage_agent` (create/edit/delete) | No |
 | `schedule_reminder` | No |
 | `delegate_to_agent` (supports `background=true`) | Yes |
+| `delegate_parallel` | Yes |
 | `task_status` | Yes |
+| `cancel_task` | No |
+| `read_output_page` | Yes |
 | `browse_web` (extract/screenshot/evaluate) | Yes |
 | `browse_web` (click/fill) | No |
 | `youtube_search` | Yes |
+| `youtube_playlist` (list) | Yes |
+| `youtube_playlist` (add/remove/create) | No |
 | `reddit_search` | Yes |
+| `hackernews` | Yes |
 | `google_maps` | Yes |
 | `finance` | Yes |
 | `post_to_feed` | Yes |
+| `manage_feeds` | Yes |
+| `send_email` | Yes |
+| `contacts` (list/get/search) | Yes |
+| `contacts` (create/update/delete) | No |
+| `calendar` (list/today) | Yes |
+| `calendar` (create/update/delete) | No |
+| `reminders` (list) | Yes |
+| `reminders` (create/complete/update/delete) | No |
+| `send_notification` | Yes |
 
 ## Configuration (`.env`)
 
@@ -199,19 +219,54 @@ ASSISTANT_PLUGINS_ENABLED=false
 ASSISTANT_AGENTS_ENABLED=false
 ```
 
+### Calendar & Contacts
+```bash
+ASSISTANT_GOOGLE_CALENDAR_ENABLED=false
+GOOGLE_CLIENT_ID=your-client-id
+GOOGLE_CLIENT_SECRET=your-client-secret
+ASSISTANT_CALDAV_ENABLED=false
+ASSISTANT_CALDAV_URL=http://localhost:5232/assistant/calendar/
+CALDAV_USERNAME=assistant
+CALDAV_PASSWORD=your-password
+ASSISTANT_CALENDAR_FEEDS=name|https://url.ics,name2|https://url2.ics
+```
+
+### YouTube & Reddit & Hacker News
+```bash
+ASSISTANT_YOUTUBE_ENABLED=false              # Search/transcripts (yt-dlp)
+ASSISTANT_YOUTUBE_PLAYLIST_ENABLED=false      # Playlist management (OAuth2)
+ASSISTANT_REDDIT_ENABLED=false
+ASSISTANT_HACKERNEWS_ENABLED=false
+```
+
+### Advanced
+```bash
+ASSISTANT_APPROVAL_REQUIRED_TOOLS=calendar:create,calendar:update   # Explicit approval list
+ASSISTANT_TOOL_OUTPUT_CAP=15000              # Max chars before pagination
+ASSISTANT_REFLECTION_ENABLED=false           # Nightly memory reflection
+ASSISTANT_REFLECTION_MODEL=ollama/minimax-m2.5:cloud
+ASSISTANT_REFLECTION_HOUR=0                  # Hour to run (0 = midnight)
+ASSISTANT_OBSERVATORY_URL=http://localhost:51432   # LLM metrics server
+```
+
 ## Agent Definition (YAML)
 
 ```yaml
 # data/agents/researcher.yaml
 name: researcher
+display_name: Nova           # optional — human-friendly name
+tagline: the internet sleuth  # optional — short descriptor
 description: Research agent
 system_prompt: |
   You are a research assistant.
 allowed_tools:
   - web_search
   - read_file
-model: openai/gpt-4o          # optional — provider/model syntax
+allowed_skills:              # optional — whitelist skills (omit = all, [] = none)
+  - web-tools
+model: openai/gpt-4o         # optional — provider/model syntax
 max_tool_rounds: 50
+vision: true                 # optional — override vision detection
 ```
 
 Model providers: `claude/`, `openai/`, `gemini/`, `ollama/`, `bedrock/`. Omit for default.
@@ -282,4 +337,6 @@ ASSISTANT_TELEGRAM_ENABLED=true
 ASSISTANT_WHATSAPP_ENABLED=true
 ASSISTANT_WEBHOOK_ENABLED=true
 ASSISTANT_DND_ENABLED=true
+ASSISTANT_REFLECTION_ENABLED=true
+ASSISTANT_OBSERVATORY_URL=http://localhost:51432
 ```

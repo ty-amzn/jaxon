@@ -7,10 +7,12 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from starlette.staticfiles import StaticFiles
 
 from townsquare.config import Settings
 from townsquare.routes import feed_router
 from townsquare.store import FeedStore
+from townsquare.ui import STATIC_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -39,4 +41,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.include_router(feed_router)
+    app.mount("/feed/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
     return app

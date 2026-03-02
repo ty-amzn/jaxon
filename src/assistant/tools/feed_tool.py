@@ -22,7 +22,9 @@ POST_TO_FEED_DEF: dict[str, Any] = {
         "reply to your posts. Optionally post to a specific themed feed.\n\n"
         "IMPORTANT — write like a tweet, not a report. No markdown headers, "
         "no bullet points, no bold. Just plain conversational text, 1-3 sentences. "
-        "If you have multiple items, make multiple posts (one per item)."
+        "If you have multiple items, make multiple posts (one per item).\n\n"
+        "You can attach one image per post via image_url. If you find a relevant "
+        "image during research (article hero image, chart, photo), include it."
     ),
     "input_schema": {
         "type": "object",
@@ -40,6 +42,10 @@ POST_TO_FEED_DEF: dict[str, Any] = {
             "feed": {
                 "type": "string",
                 "description": "Optional feed name to post to. Omit for global timeline.",
+            },
+            "image_url": {
+                "type": "string",
+                "description": "Optional image URL to attach to the post. One image per post.",
             },
         },
         "required": ["content"],
@@ -122,6 +128,8 @@ def _make_post_to_feed(base_url: str):
         if len(content) > 2000:
             return "Error: content exceeds 2000 character limit."
 
+        image_url = params.get("image_url")
+
         author = current_agent_name.get("assistant")
         payload: dict[str, Any] = {
             "content": content,
@@ -131,6 +139,8 @@ def _make_post_to_feed(base_url: str):
             payload["reply_to"] = reply_to
         if feed_name:
             payload["feed"] = feed_name
+        if image_url:
+            payload["image_url"] = image_url
 
         async with httpx.AsyncClient(timeout=30) as client:
             resp = await client.post(f"{base_url}/feed/posts", json=payload)

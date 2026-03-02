@@ -308,4 +308,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     await shutdown_browser()
 
+    # Close LLM router (metrics client, provider clients)
+    if hasattr(chat_interface, '_llm'):
+        await chat_interface._llm.close()
+
     logger.info("Assistant API shutting down")

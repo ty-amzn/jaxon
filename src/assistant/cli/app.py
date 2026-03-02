@@ -200,6 +200,15 @@ def google_auth_cmd() -> None:
     ctx.invoke(google_auth)
 
 
+@cli.command("youtube-auth")
+def youtube_auth_cmd() -> None:
+    """Authenticate with YouTube (one-time OAuth2 setup)."""
+    from assistant.cli.commands.youtube_auth import youtube_auth
+
+    ctx = click.get_current_context()
+    ctx.invoke(youtube_auth)
+
+
 @cli.command()
 @click.option("--host", default=None, help="Host to bind to")
 @click.option("--port", default=None, type=int, help="Port to bind to")

@@ -79,6 +79,15 @@ class FeedStore:
                 ")"
             )
 
+        # Read-state tracking (unread reply notifications)
+        if "read_state" not in self._db.table_names():
+            self._db.execute(
+                "CREATE TABLE read_state ("
+                "  post_id INTEGER PRIMARY KEY,"
+                "  last_read_at TEXT NOT NULL"
+                ")"
+            )
+
         # Seed defaults if table is empty
         count = self._db.execute("SELECT COUNT(*) FROM feeds").fetchone()[0]
         if count == 0:
@@ -363,6 +372,40 @@ class FeedStore:
             "ORDER BY l.created_at DESC LIMIT ?"
         )
         return _rows_to_dicts(self._db.execute(sql, [limit]))
+
+    # ------------------------------------------------------------------
+    # Read state (unread reply tracking)
+    # ------------------------------------------------------------------
+
+    def mark_read(self, post_id: int) -> None:
+        """Record that the user has read a thread (by root post ID) right now."""
+        now = datetime.now(timezone.utc).isoformat()
+        self._db.execute(
+            "INSERT OR REPLACE INTO read_state (post_id, last_read_at) VALUES (?, ?)",
+            [post_id, now],
+        )
+
+    def get_read_state(self) -> dict[int, str]:
+        """Return {post_id: last_read_at} for all tracked threads."""
+        rows = self._db.execute("SELECT post_id, last_read_at FROM read_state").fetchall()
+        return {r[0]: r[1] for r in rows}
+
+    def count_unread_replies(self, root_id: int, last_read_at: str | None) -> int:
+        """Count replies to *root_id* after *last_read_at* that weren't posted by 'user'.
+
+        If last_read_at is None (thread never opened), all non-user replies count.
+        """
+        if last_read_at is None:
+            row = self._db.execute(
+                "SELECT COUNT(*) FROM posts WHERE reply_to = ? AND author != 'user'",
+                [root_id],
+            ).fetchone()
+        else:
+            row = self._db.execute(
+                "SELECT COUNT(*) FROM posts WHERE reply_to = ? AND author != 'user' AND created_at > ?",
+                [root_id, last_read_at],
+            ).fetchone()
+        return row[0] if row else 0
 
     # ------------------------------------------------------------------
     # Agents

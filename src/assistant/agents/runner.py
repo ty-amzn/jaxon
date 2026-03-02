@@ -8,6 +8,7 @@ from typing import Any
 from assistant.agents.types import AgentDef, AgentResult
 from assistant.gateway.permissions import PermissionManager
 from assistant.llm.base import BaseLLMClient
+from assistant.llm.metrics import MetricsContext
 from assistant.llm.router import LLMRouter
 from assistant.llm.types import StreamEventType, ToolCall, ToolResult
 from assistant.tools.registry import ToolRegistry
@@ -115,25 +116,57 @@ class AgentRunner:
 
         # Select client: per-agent model or default router
         client: BaseLLMClient = self._router
+        metrics: MetricsContext | None = None
         if agent.model:
             client = self._router.get_client_for_model(agent.model)
             logger.info("Agent %s using model %s", agent.name, agent.model)
 
+            # Raw clients bypass the router's metrics — track manually
+            metrics = MetricsContext(
+                self._router._metrics, agent_name=agent.name,
+            )
+            # Parse provider/model from "provider/model" syntax
+            if "/" in agent.model:
+                prov, model_name = agent.model.split("/", 1)
+            else:
+                prov, model_name = "unknown", agent.model
+            metrics.start()
+            metrics.record_routing_info(prov, model_name)
+            if tools:
+                metrics.record_tools_provided()
+
         # Run the LLM with tool loop (no streaming to user)
         full_response = ""
+        response_parts: list[str] = []
         try:
-            async for event in client.stream_with_tool_loop(
-                system=system_prompt,
-                messages=messages,
-                tools=tools if tools else None,
-                tool_executor=scoped_executor,
-                max_tool_rounds=agent.max_tool_rounds,
-            ):
+            # When going through the router, pass agent_name for its own metrics
+            kwargs: dict[str, Any] = {
+                "system": system_prompt,
+                "messages": messages,
+                "tools": tools if tools else None,
+                "tool_executor": scoped_executor,
+                "max_tool_rounds": agent.max_tool_rounds,
+            }
+            if not agent.model:
+                kwargs["agent_name"] = agent.name
+
+            async for event in client.stream_with_tool_loop(**kwargs):
                 if event.type == StreamEventType.TEXT_DELTA:
                     full_response += event.text
+                    response_parts.append(event.text)
                 elif event.type == StreamEventType.MESSAGE_COMPLETE:
                     full_response = event.text
+                    if metrics:
+                        metrics.record_usage(
+                            event.input_tokens, event.output_tokens,
+                            event.stop_reason,
+                        )
+                elif event.type == StreamEventType.TOOL_USE_COMPLETE:
+                    if metrics:
+                        metrics.record_tool_round()
                 elif event.type == StreamEventType.ERROR:
+                    if metrics:
+                        metrics.record_error(event.error)
                     return AgentResult(
                         agent_name=agent.name,
                         response="",
@@ -142,12 +175,19 @@ class AgentRunner:
                     )
         except Exception as e:
             logger.exception("Agent %s failed", agent.name)
+            if metrics:
+                metrics.record_error(str(e))
             return AgentResult(
                 agent_name=agent.name,
                 response="",
                 tool_calls_made=tool_calls_made,
                 error=str(e),
             )
+        finally:
+            if metrics:
+                metrics.record_prompt(system_prompt, messages)
+                metrics.record_response("".join(response_parts))
+                await metrics.finish()
 
         return AgentResult(
             agent_name=agent.name,

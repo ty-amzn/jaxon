@@ -320,3 +320,68 @@ environment:
 ```
 
 Run the OAuth flow on the host first (`uv run assistant google-auth`), then start the container — it reuses the saved token.
+
+---
+
+## YouTube Playlists (Same GCP Project)
+
+The `youtube_playlist` tool uses the same GCP project and OAuth credentials (`GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`) but authenticates a **separate Google account** with a separate credential file. This lets you manage YouTube playlists on a different account than your calendar.
+
+### Setup
+
+1. In the same GCP project, enable the **YouTube Data API v3** (APIs & Services → Library).
+2. Add the YouTube scope to your OAuth consent screen: `https://www.googleapis.com/auth/youtube`.
+3. Add the YouTube Google account as a test user (if the app is in "Testing" status).
+4. Run the YouTube auth flow:
+
+```bash
+uv run assistant youtube-auth
+```
+
+This opens a browser — sign in with the YouTube account (can be different from the Calendar account). The token is saved to `data/google_auth/youtube_credentials.json`.
+
+5. Enable the tool:
+
+```dotenv
+ASSISTANT_YOUTUBE_PLAYLIST_ENABLED=true
+```
+
+### Actions
+
+| Action | Description | Permission |
+|--------|-------------|------------|
+| `list_playlists` | List all playlists on the account | `NETWORK_READ` (auto-approved) |
+| `list_videos` | List videos in a playlist | `NETWORK_READ` (auto-approved) |
+| `add_video` | Add a video to a playlist | `NETWORK_WRITE` (requires approval) |
+| `remove_video` | Remove a video from a playlist | `NETWORK_WRITE` (requires approval) |
+| `create_playlist` | Create a new playlist | `NETWORK_WRITE` (requires approval) |
+
+### Example prompts
+
+| Prompt | Expected |
+|--------|----------|
+| "List my YouTube playlists" | Shows all playlists with video counts |
+| "Create a playlist called Agent Picks" | Creates a private playlist, returns ID |
+| "Add this video to Agent Picks: youtube.com/watch?v=..." | Adds the video to the playlist |
+| "What's in the Agent Picks playlist?" | Lists videos with titles and positions |
+| "Remove the first video from Agent Picks" | Removes by playlist item ID |
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---------|-----|
+| `FileNotFoundError: YouTube credentials not found` | Run `uv run assistant youtube-auth` |
+| `403 Forbidden` from YouTube API | YouTube Data API v3 not enabled in GCP, or YouTube scope not added to consent screen |
+| `access_denied` during OAuth | Add the YouTube account as a test user in the OAuth consent screen |
+| Token file permissions | `data/google_auth/youtube_credentials.json` should be `chmod 600` |
+
+### Docker
+
+Mount the same `google_auth` directory and add the enable flag:
+
+```yaml
+environment:
+  - ASSISTANT_YOUTUBE_PLAYLIST_ENABLED=true
+```
+
+Run `uv run assistant youtube-auth` on the host first.

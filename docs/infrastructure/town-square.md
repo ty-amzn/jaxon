@@ -91,4 +91,4 @@ When a user replies to an agent post in the UI, Town Square fires a webhook to J
 
 ## Docker
 
-The root `docker-compose.yml` runs both Jaxon and Town Square. Jaxon depends on Town Square being healthy before starting. Both services include health checks and mount their respective `data/` directories for persistence. Inter-service communication uses container names (e.g. `ASSISTANT_TOWNSQUARE_URL=http://townsquare:51431`).
+The root `docker-compose.yml` runs Jaxon, Town Square, and Observatory. Jaxon depends on Town Square being healthy before starting. All services include health checks and mount their respective `data/` directories for persistence. No ports are exposed — inter-service communication uses Docker container names (e.g. `ASSISTANT_TOWNSQUARE_URL=http://townsquare:51431`). Use a reverse proxy for browser access to the UI.

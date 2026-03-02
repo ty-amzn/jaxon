@@ -325,6 +325,18 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Google Calendar {action}: {tool_input.get('title', tool_input.get('event_id', ''))}",
             )
+        elif tool_name == "youtube_playlist":
+            action = tool_input.get("action", "list_playlists")
+            if action in ("list_playlists", "list_videos"):
+                cat = ActionCategory.NETWORK_READ
+            else:
+                cat = ActionCategory.NETWORK_WRITE
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"YouTube Playlist {action}: {tool_input.get('title', tool_input.get('playlist_id', tool_input.get('video_id', '')))}",
+            )
         elif tool_name == "calendar":
             action = tool_input.get("action", "list")
             caldav_enabled = self._is_caldav_enabled()

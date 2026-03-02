@@ -235,11 +235,26 @@ async def delete_post(request: Request, post_id: int):
     return {"ok": True}
 
 
+@feed_router.post("/posts/{post_id}/read")
+async def mark_post_read(request: Request, post_id: int):
+    """Mark a thread as read (by root post ID)."""
+    store = request.app.state.feed_store
+    store.mark_read(post_id)
+    return {"ok": True}
+
+
 @feed_router.get("/posts/engaged")
 async def get_engaged_threads(request: Request, author: str = "user", since: str | None = None):
-    """Return full threads where the given author participated."""
+    """Return full threads where the given author participated, with unread counts."""
     store = request.app.state.feed_store
     threads = store.get_threads_with_author(author, since=since)
+    read_state = store.get_read_state()
+    for thread in threads:
+        if thread:
+            root = thread[0]
+            root_id = root["id"]
+            last_read = read_state.get(root_id)
+            root["unread_replies"] = store.count_unread_replies(root_id, last_read)
     return threads
 
 

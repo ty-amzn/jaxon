@@ -161,6 +161,7 @@ async def run_reflection_job(
             tools=None,
             tool_executor=None,
             max_tool_rounds=0,
+            agent_name="reflection",
         ):
             if event.type == StreamEventType.TEXT_DELTA:
                 full_response += event.text

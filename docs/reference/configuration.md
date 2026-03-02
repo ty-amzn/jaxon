@@ -77,12 +77,14 @@ No API key settings — uses the standard AWS credential chain (AWS_PROFILE, ~/.
 | `ASSISTANT_GOOGLE_MAPS_ENABLED` | `false` | Enable Google Maps tool |
 | `GOOGLE_MAPS_API_KEY` | `""` | Google Maps API key (no prefix) |
 
-## YouTube & Reddit
+## YouTube, Reddit & Hacker News
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `ASSISTANT_YOUTUBE_ENABLED` | `false` | Enable YouTube search/transcripts |
+| `ASSISTANT_YOUTUBE_ENABLED` | `false` | Enable YouTube search/transcripts (yt-dlp) |
+| `ASSISTANT_YOUTUBE_PLAYLIST_ENABLED` | `false` | Enable YouTube playlist management (OAuth2) |
 | `ASSISTANT_REDDIT_ENABLED` | `false` | Enable Reddit search/browsing |
+| `ASSISTANT_HACKERNEWS_ENABLED` | `false` | Enable Hacker News browsing |
 
 ## Telegram
 
@@ -148,6 +150,37 @@ No API key settings — uses the standard AWS credential chain (AWS_PROFILE, ~/.
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ASSISTANT_TOWNSQUARE_URL` | `""` | Town Square service URL (enables feed tools) |
+
+## Calendar & Contacts
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_GOOGLE_CALENDAR_ENABLED` | `false` | Enable Google Calendar backend |
+| `GOOGLE_CLIENT_ID` | `""` | Google OAuth client ID (no prefix) |
+| `GOOGLE_CLIENT_SECRET` | `""` | Google OAuth client secret (no prefix) |
+| `ASSISTANT_CALDAV_ENABLED` | `false` | Enable CalDAV backend (Radicale) |
+| `ASSISTANT_CALDAV_URL` | `""` | CalDAV server URL |
+| `CALDAV_USERNAME` | `""` | CalDAV username (no prefix) |
+| `CALDAV_PASSWORD` | `""` | CalDAV password (no prefix) |
+| `ASSISTANT_CALENDAR_FEEDS` | `""` | ICS feed URLs to sync (format: `name\|url,name2\|url2`) |
+
+## Reflection
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_REFLECTION_ENABLED` | `false` | Enable nightly memory reflection |
+| `ASSISTANT_REFLECTION_MODEL` | `ollama/minimax-m2.5:cloud` | Model for reflection job |
+| `ASSISTANT_REFLECTION_HOUR` | `0` | Hour to run reflection (0 = midnight) |
+
+## Advanced
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_APPROVAL_REQUIRED_TOOLS` | `""` | Comma-separated tools requiring approval (e.g., `calendar:create,schedule_reminder`) |
+| `ASSISTANT_TOOL_OUTPUT_CAP` | `15000` | Max output chars before pagination |
+| `ASSISTANT_VISION` | (auto) | Override vision detection (`true`/`false`) |
+| `ASSISTANT_MAX_MEDIA_SIZE_MB` | `10` | Max image size in MB |
+| `ASSISTANT_OBSERVATORY_URL` | `""` | LLM metrics server URL |
 
 ## Plugins & Agents
 

@@ -30,6 +30,8 @@ Type `/help` in the chat to see all available commands.
 | `/schedule list` | List scheduled jobs |
 | `/schedule remove <id>` | Remove a scheduled job |
 | `/watch` | Manage filesystem monitoring |
+| `/watch add <path>` | Watch a directory for changes |
+| `/watch remove <path>` | Stop watching a directory |
 | `/workflow list` | List all workflows |
 | `/workflow run <name>` | Run a workflow |
 | `/workflow reload` | Reload workflow definitions |
@@ -194,6 +196,78 @@ Create and edit operations require approval. The skill files are saved to `data/
 
 ---
 
+## Hacker News
+
+The `hackernews` tool provides access to Hacker News feeds and search:
+
+```
+You: What's trending on Hacker News?
+You: Search HN for discussions about Rust
+You: Show me the top stories from Ask HN
+```
+
+Enable with `ASSISTANT_HACKERNEWS_ENABLED=true`.
+
+---
+
+## Weather
+
+The `get_weather` tool fetches current conditions and forecasts:
+
+```
+You: What's the weather in Tokyo?
+You: Weather forecast for Paris this week
+You: Is it going to rain in Seattle tomorrow?
+```
+
+Uses the free Open-Meteo API — no API key required.
+
+---
+
+## arXiv Papers
+
+The `arxiv_search` tool searches academic papers:
+
+```
+You: Find papers about transformer architectures
+You: Search arXiv for quantum computing
+```
+
+---
+
+## PDF Reading
+
+The `pdf_read` tool extracts text from PDF URLs:
+
+```
+You: Summarize this paper: https://arxiv.org/pdf/2301.12345.pdf
+You: What's in this document? (pages 1-5)
+```
+
+Supports page ranges with the `pages` parameter.
+
+---
+
+## Contacts (Personal Relationship Manager)
+
+The `contacts` tool manages personal contacts in SQLite:
+
+```
+You: Create a contact for Jane Smith at Acme Corp, met at Conference 2024
+You: What contacts do I have at Acme?
+You: Update Jane's email to jane@newdomain.com
+```
+
+Automatically tracks last contact date and interaction count.
+
+---
+
+## Email Notifications
+
+The `send_email` tool sends notifications via IFTTT webhook. Configure in your IFTTT account to receive emails.
+
+---
+
 ## Conversation Threading
 
 Save, load, and export conversation threads for organized multi-session work.
@@ -278,3 +352,39 @@ Create and restore snapshots of all assistant data.
 ```
 
 Backups are `.tar.gz` files in `data/backups/`. They include all data: memory, threads, skills, databases, and logs.
+
+---
+
+## Nightly Reflection
+
+When enabled, the assistant runs a nightly job that reviews the previous day's conversations and extracts long-term memories to `MEMORY.md`.
+
+### Configuration
+
+```bash
+ASSISTANT_REFLECTION_ENABLED=true
+ASSISTANT_REFLECTION_MODEL=ollama/minimax-m2.5:cloud   # Model for reflection
+ASSISTANT_REFLECTION_HOUR=0                             # Hour to run (0 = midnight)
+```
+
+The reflection job:
+1. Reads the previous day's daily log
+2. Identifies important facts, preferences, and commitments
+3. Proposes additions to `MEMORY.md`
+4. Requires your approval before writing
+
+This helps the assistant remember important details across sessions without manual memory management.
+
+---
+
+## LLM Observatory
+
+Optional metrics server for tracking LLM usage across providers. When configured, the assistant sends metrics (token counts, latency, costs) to the observatory for aggregation and visualization.
+
+### Configuration
+
+```bash
+ASSISTANT_OBSERVATORY_URL=http://localhost:51432
+```
+
+The observatory is a separate service. When running, you can view usage statistics, cost breakdowns by provider, and response time trends.

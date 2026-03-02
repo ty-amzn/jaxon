@@ -133,6 +133,7 @@ class Settings(BaseSettings):
 
     # YouTube
     youtube_enabled: bool = False
+    youtube_playlist_enabled: bool = False
 
     # Reddit
     reddit_enabled: bool = False
@@ -154,6 +155,9 @@ class Settings(BaseSettings):
 
     # Town Square (standalone feed service)
     townsquare_url: str = ""
+
+    # LLM Observatory (metrics server)
+    observatory_url: str = ""  # e.g. http://localhost:51432
 
     # DND (Phase 4)
     dnd_enabled: bool = False

@@ -38,12 +38,17 @@ max_tool_rounds: 50
 | Field | Description |
 |-------|-------------|
 | `name` | Unique identifier |
+| `display_name` | Human-friendly name (e.g., "Nova") — defaults to `name.title()` |
+| `tagline` | Short descriptor (e.g., "the internet sleuth") |
 | `description` | What the agent does |
 | `system_prompt` | Agent-specific instructions |
 | `allowed_tools` | Whitelist of tools (empty = all tools) |
 | `denied_tools` | Blacklist of tools (used when allowed_tools is empty) |
+| `allowed_skills` | Whitelist of skills to include in system prompt (empty = no skills, omit = all skills) |
 | `model` | LLM model override (`provider/model` syntax) |
 | `max_tool_rounds` | Max tool calls per task (default: 5) |
+| `vision` | Override vision detection (`true`/`false`, omit for auto-detect from model) |
+| `can_delegate` | Allow agent to delegate to other agents (default: false) |
 
 ---
 
@@ -68,7 +73,7 @@ Supported provider prefixes:
 
 | Prefix | Provider | Example |
 |--------|----------|---------|
-| `claude/` | Anthropic Claude | `claude/claude-sonnet-4-5-20250514` |
+| `claude/` | Anthropic Claude | `claude/claude-sonnet-4-20250514` |
 | `openai/` | OpenAI | `openai/gpt-4o` |
 | `gemini/` | Google Gemini | `gemini/gemini-2.0-flash` |
 | `ollama/` | Ollama (local) | `ollama/llama3` |
@@ -109,10 +114,19 @@ Tasks are stored in memory (up to 50). They do not persist across restarts.
 
 ---
 
-## Built-in Agents
+## Example Agents
 
-- **researcher** — Web search and file reading (max 8 tool rounds)
-- **coder** — Read, write, and execute code (max 10 tool rounds)
+The `data.example/agents/` directory includes these agent templates:
+
+| Agent | Description | Tools |
+|-------|-------------|-------|
+| **coder** | Read, write, and execute code | shell_exec, read_file, write_file |
+| **web_researcher** | Search the web and fetch sources | web_search, web_fetch, http_request |
+| **academic_researcher** | Find and analyze academic papers | arxiv_search, web_fetch, read_file |
+| **journalist** | Monitor news sources and post digests | hackernews, reddit_search, web_fetch, post_to_feed |
+| **image_analyst** | Analyze images with vision models | read_file, write_file |
+| **long_text_reader** | Process large documents | read_file, web_fetch |
+| **research_coordinator** | Orchestrate multi-agent research | delegate_to_agent, delegate_parallel |
 
 ---
 

@@ -1,4 +1,4 @@
-const CACHE='town-square-v5';
+const CACHE='town-square-v7';
 const SHELL=['/feed/ui','/feed/icon-192.svg','/feed/static/styles.css','/feed/static/app.js'];
 const FONT_RE=/fonts\.googleapis\.com|fonts\.gstatic\.com/;
 const API_RE=/\/feed\/(posts|channels)/;

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -13,6 +14,54 @@ logger = logging.getLogger(__name__)
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+
+# US state abbreviations → full names for matching Open-Meteo's admin1 field
+_US_STATES: dict[str, str] = {
+    "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+    "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+    "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+    "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+    "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+    "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+    "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+    "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+    "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+    "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+    "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+    "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+    "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+}
+
+
+def _parse_location(raw: str) -> tuple[str, str]:
+    """Split 'City, State/Country' into (city_name, qualifier).
+
+    Open-Meteo's geocoding API only searches by city name — qualifiers like
+    'MA', 'Massachusetts', or 'France' must be matched against results.
+    """
+    # Try splitting on comma or slash
+    parts = re.split(r"[,/]", raw, maxsplit=1)
+    city = parts[0].strip()
+    qualifier = parts[1].strip() if len(parts) > 1 else ""
+    # Expand US state abbreviations
+    if qualifier.upper() in _US_STATES:
+        qualifier = _US_STATES[qualifier.upper()]
+    return city, qualifier
+
+
+def _pick_best_result(results: list[dict], qualifier: str) -> dict:
+    """Pick the best geocoding result matching the qualifier string."""
+    if not qualifier:
+        return results[0]
+    q = qualifier.lower()
+    for r in results:
+        admin1 = (r.get("admin1") or "").lower()
+        country = (r.get("country") or "").lower()
+        # Match against state/region or country
+        if q == admin1 or q == country or q in admin1 or q in country:
+            return r
+    # No match — fall back to first result
+    return results[0]
 
 # WMO Weather interpretation codes → descriptions
 WMO_CODES: dict[int, str] = {
@@ -68,12 +117,14 @@ async def get_weather(params: dict[str, Any]) -> str:
     forecast_days = min(max(int(params.get("forecast_days", 3)), 1), 7)
     include_hourly = params.get("hourly", False)
 
+    city_name, qualifier = _parse_location(location)
+
     try:
         async with make_httpx_client(timeout=15.0) as client:
-            # Step 1: Geocode
+            # Step 1: Geocode (search by city name only; qualifier used to pick best match)
             geo_resp = await client.get(
                 GEOCODE_URL,
-                params={"name": location, "count": 1, "language": "en", "format": "json"},
+                params={"name": city_name, "count": 10, "language": "en", "format": "json"},
             )
             geo_resp.raise_for_status()
             geo_data = geo_resp.json()
@@ -82,12 +133,14 @@ async def get_weather(params: dict[str, Any]) -> str:
             if not results:
                 return f"Could not find location: {location}"
 
-            place = results[0]
+            place = _pick_best_result(results, qualifier)
             lat = place["latitude"]
             lon = place["longitude"]
             name = place.get("name", location)
+            admin1 = place.get("admin1", "")
             country = place.get("country", "")
-            display_name = f"{name}, {country}" if country else name
+            display_parts = [name] + [p for p in (admin1, country) if p]
+            display_name = ", ".join(display_parts)
 
             # Step 2: Fetch forecast
             forecast_params: dict[str, Any] = {
@@ -168,8 +221,8 @@ WEATHER_TOOL_DEF = {
             "location": {
                 "type": "string",
                 "description": (
-                    "Freeform location search text. Works best with short place names like "
-                    "'London', 'Tokyo', 'New York', 'Paris, France', 'San Francisco, CA'. "
+                    "City or place name, optionally followed by state/country qualifier. "
+                    "Examples: 'London', 'Tokyo', 'New York', 'Newton, MA', 'Paris, France'. "
                     "Extract just the place name from the user's message — do not pass full "
                     "sentences like 'What is the weather in London'."
                 ),

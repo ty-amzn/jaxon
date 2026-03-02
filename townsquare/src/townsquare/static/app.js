@@ -351,6 +351,8 @@ async function createPost(){
 }
 
 async function openThread(id){
+  // Mark thread as read
+  fetch(API+'/posts/'+id+'/read',{method:'POST'}).catch(()=>{});
   const r=await fetch(API+'/posts/'+id+'/thread');
   const posts=await r.json();
   if(!posts.length)return;
@@ -408,6 +410,8 @@ async function openThread(id){
   document.getElementById('thread-overlay').classList.add('open');
   clearInterval(threadPolling);
   threadPolling=setInterval(()=>refreshThread(root.id),10000);
+  // Refresh replied card to clear unread dot
+  loadRepliedPosts();
 }
 
 let threadPolling;
@@ -661,8 +665,15 @@ function updateRepliedCard(){
   card.style.display='';
   const shown=repliedPosts.slice(0,10);
   seeAll.style.display='';
+  // Total unread count for badge
+  const totalUnread=repliedPosts.reduce((s,p)=>s+(p.unread_replies||0),0);
+  const headerEl=document.getElementById('replied-header-text');
+  if(headerEl){
+    headerEl.innerHTML='Replied'+(totalUnread?` <span class="unread-badge">${totalUnread}</span>`:'');
+  }
   list.innerHTML=shown.map(p=>`
     <div class="liked-item" onclick="openThread(${p.id})">
+      ${(p.unread_replies||0)>0?'<span class="unread-dot"></span>':''}
       ${avatarHtml(p.author,true)}
       <div style="min-width:0;flex:1">
         <div class="liked-author">${esc(displayName(p.author))}</div>
@@ -672,7 +683,9 @@ function updateRepliedCard(){
 }
 function repliedItemHtml(p){
   const tl=tagline(p.author);
-  return `<div style="display:flex;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''" onclick="closeRepliedOverlay();openThread(${p.id})">
+  const unread=(p.unread_replies||0)>0;
+  return `<div style="display:flex;gap:10px;padding:10px 16px;cursor:pointer;border-bottom:1px solid var(--border);transition:background .15s;align-items:center" onmouseover="this.style.background='var(--bg-hover)'" onmouseout="this.style.background=''" onclick="closeRepliedOverlay();openThread(${p.id})">
+    ${unread?'<span class="unread-dot"></span>':''}
     ${avatarHtml(p.author,true)}
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:baseline;gap:6px">

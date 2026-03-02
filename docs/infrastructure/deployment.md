@@ -1,33 +1,23 @@
 # Deployment
 
+## Services & Ports
+
+| Service | Port | Description |
+|---------|------|-------------|
+| Jaxon | 51430 | Main assistant API, webhooks, messaging bots |
+| Town Square | 51431 | Feed/microblog service with web UI at `/feed/ui` |
+| Observatory | 51432 | LLM metrics server with dashboard at `/observe/ui` |
+
+All three services are defined in the root `docker-compose.yml`. No ports are exposed to the host — services communicate over a shared Docker network. Use a reverse proxy (Nginx Proxy Manager, Cloudflare tunnel, etc.) for browser access.
+
 ## Docker Compose (Recommended)
 
-The included `docker-compose.yml` provides a production-ready setup:
-
-```yaml
-services:
-  assistant:
-    build: .
-    ports:
-      - "51430:51430"
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-    healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51430/health').raise_for_status()"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-```
-
 ```bash
-# Build and start
+# Build and start all services
 docker compose up -d
 
 # View logs
-docker compose logs -f assistant
+docker compose logs -f jaxon
 
 # Rebuild after code changes
 docker compose up -d --build
@@ -36,45 +26,26 @@ docker compose up -d --build
 docker compose down
 ```
 
-The container:
-- Exposes port 51430 for the API, webhooks, and Telegram webhook mode
-- Mounts `./data` for persistent storage (memory, threads, databases, logs)
+Each service:
+- Mounts its own `data/` directory for persistent storage
 - Restarts automatically unless explicitly stopped
-- Includes a health check that polls `/health` every 30 seconds
+- Includes a health check (polled every 30 seconds)
 
 ---
 
 ## Docker with Ollama
 
-To run with a local LLM alongside the assistant:
+To add a local LLM alongside the assistant, add an Ollama service:
 
 ```yaml
-# docker-compose.yml
-services:
-  assistant:
-    build: .
-    ports:
-      - "51430:51430"
-    env_file:
-      - .env
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
-    depends_on:
-      - ollama
-    healthcheck:
-      test: ["CMD", "python", "-c", "import httpx; httpx.get('http://localhost:51430/health').raise_for_status()"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
-
+# Add to docker-compose.yml
   ollama:
     image: ollama/ollama
-    ports:
-      - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
     restart: unless-stopped
+    networks:
+      - npm-shared
 
 volumes:
   ollama_data:
@@ -94,19 +65,17 @@ docker compose exec ollama ollama pull llama3.2
 
 ## Docker with SearXNG
 
-Add web search capabilities:
+To add web search capabilities:
 
 ```yaml
-services:
-  # ... assistant and ollama services above ...
-
+# Add to docker-compose.yml
   searxng:
     image: searxng/searxng
-    ports:
-      - "8888:8080"
     volumes:
       - ./searxng:/etc/searxng
     restart: unless-stopped
+    networks:
+      - npm-shared
 ```
 
 ```bash
@@ -141,9 +110,17 @@ uv run assistant chat
 
 ---
 
-## Reverse Proxy (nginx)
+## Reverse Proxy
 
-For production deployments behind a reverse proxy:
+Since no ports are exposed to the host, use a reverse proxy on the same Docker network to provide browser access. With Nginx Proxy Manager or similar, point proxy hosts at the container names:
+
+| Domain | Upstream |
+|--------|----------|
+| `assistant.example.com` | `jaxon:51430` |
+| `feed.example.com` | `townsquare:51431` |
+| `observatory.example.com` | `observatory:51432` |
+
+Or with plain nginx:
 
 ```nginx
 server {
@@ -154,7 +131,7 @@ server {
     ssl_certificate_key /path/to/key.pem;
 
     location / {
-        proxy_pass http://127.0.0.1:51430;
+        proxy_pass http://jaxon:51430;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

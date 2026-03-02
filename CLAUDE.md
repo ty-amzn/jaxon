@@ -106,6 +106,7 @@ All 12 steps implemented:
 5. YouTube/Reddit/Google Maps gated by per-tool config flags; finance always-on. All classified as NETWORK_READ (auto-approved)
 6. Hacker News tool — `tools/hackernews_tool.py`: `hackernews` with top/search/story actions via HN Firebase API + Algolia search. Gated by `hackernews_enabled` config flag.
 7. Journalist agent — `data.example/agents/journalist.yaml`: autonomous news monitor that researches HN/Reddit/web and posts digests to Town Square
+8. YouTube Playlist tool — `tools/youtube_playlist.py` + `tools/youtube_playlist_tool.py`: manage playlists via YouTube Data API v3 (OAuth2). Separate `youtube-auth` CLI command, saves to `youtube_credentials.json`. Gated by `youtube_playlist_enabled` config flag (independent of `youtube_enabled`).
 
 ## Phase 9 (Town Square — Standalone Feed Service)
 Town Square is extracted into a standalone FastAPI service at `townsquare/` (port 51431).

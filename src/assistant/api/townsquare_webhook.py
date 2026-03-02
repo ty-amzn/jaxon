@@ -112,7 +112,11 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
     task = "\n".join(task_parts)
 
     # Run Jax with his full system prompt, tools, and delegation capabilities
-    from assistant.agents.background import _auto_approve
+    from assistant.agents.background import (
+        _auto_approve,
+        current_delivery,
+        current_review_delivery,
+    )
     from assistant.gateway.permissions import PermissionManager
     from assistant.llm.context import build_system_prompt
     from assistant.llm.types import ToolCall, ToolResult
@@ -129,6 +133,46 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
 
     # Auto-approve permissions for background webhook handling
     auto_perms = PermissionManager(_auto_approve)
+
+    # Set up delivery callbacks so background agent results get posted back
+    async def _ts_deliver(text: str) -> None:
+        """Post background task result as a reply in the Town Square thread."""
+        try:
+            async with httpx.AsyncClient(timeout=30) as client:
+                await client.post(
+                    f"{townsquare_url}/feed/posts",
+                    json={
+                        "content": text,
+                        "author": "jax",
+                        "reply_to": body.reply_to,
+                    },
+                )
+        except Exception:
+            logger.exception("Failed to deliver background result to Town Square")
+
+    async def _ts_review(raw_result: str, agent_name: str) -> None:
+        """Route background agent result through Jax for summarization."""
+        synthetic = (
+            f'[Background research from agent "{agent_name}" is complete. '
+            f"Here is the raw output:]\n\n"
+            f"{raw_result}\n\n"
+            f"[Deliver this result to Ty by posting a summary to Town Square "
+            f"using `post_to_feed` with reply_to={body.reply_to}. "
+            f"Keep it concise — a few key points, not the full report.]"
+        )
+        review_messages = [{"role": "user", "content": synthetic}]
+        async for _event in chat_interface._llm.stream_with_tool_loop(
+            system=system_prompt,
+            messages=review_messages,
+            tools=chat_interface._tool_registry.definitions,
+            tool_executor=tool_executor,
+            max_tool_rounds=chat_interface._settings.max_tool_rounds,
+            agent_name="townsquare-review",
+        ):
+            pass
+
+    current_delivery.set(_ts_deliver)
+    current_review_delivery.set(_ts_review)
 
     async def tool_executor(tc: ToolCall) -> ToolResult:
         return await chat_interface._tool_registry.execute(

@@ -16,7 +16,16 @@ playwright install chromium  # Install browser for browse_web tool (one-time)
 ```bash
 uv run assistant chat       # Interactive CLI
 uv run assistant serve      # API server at :51430
+uv run assistant ask "What time is it?"  # Single question
 uv run pytest               # Run tests
+```
+
+### Authentication Commands
+
+```bash
+uv run assistant google-auth   # Authenticate Google Calendar (OAuth2)
+uv run assistant youtube-auth  # Authenticate YouTube playlists (OAuth2)
+uv run assistant whatsapp-pair # Pair WhatsApp by scanning QR code
 ```
 
 ## Minimal Configuration
