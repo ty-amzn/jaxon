@@ -1,4 +1,4 @@
-"""SQLite store for LLM inference events."""
+"""SQLite store for LLM inference events and tool call events."""
 
 from __future__ import annotations
 
@@ -32,6 +32,7 @@ class ObservatoryStore:
     }
 
     def _ensure_table(self) -> None:
+        self._ensure_tool_events_table()
         if "inference_events" not in self._db.table_names():
             self._db["inference_events"].create(
                 {
@@ -78,8 +79,32 @@ class ObservatoryStore:
                         f"ALTER TABLE inference_events ADD COLUMN {col_name} {'INTEGER' if col_type is int else 'TEXT'}"
                     )
 
+    def _ensure_tool_events_table(self) -> None:
+        if "tool_events" not in self._db.table_names():
+            self._db["tool_events"].create(
+                {
+                    "id": int,
+                    "timestamp": str,
+                    "tool_name": str,
+                    "duration_ms": int,
+                    "success": int,
+                    "error_message": str,
+                    "session_id": str,
+                    "agent_name": str,
+                    "action_category": str,
+                },
+                pk="id",
+                not_null={"timestamp", "tool_name", "duration_ms", "success"},
+            )
+            self._db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_events_timestamp ON tool_events(timestamp DESC)"
+            )
+            self._db.execute(
+                "CREATE INDEX IF NOT EXISTS idx_tool_events_tool_name ON tool_events(tool_name)"
+            )
+
     # ------------------------------------------------------------------
-    # Events
+    # Inference Events
     # ------------------------------------------------------------------
 
     def log_event(self, event: dict[str, Any]) -> dict:
@@ -114,6 +139,7 @@ class ObservatoryStore:
         model: str | None = None,
         session_id: str | None = None,
         success: bool | None = None,
+        agent_name: str | None = None,
     ) -> list[dict]:
         """Return events matching filters, newest first."""
         sql = "SELECT * FROM inference_events WHERE 1=1"
@@ -134,6 +160,9 @@ class ObservatoryStore:
         if success is not None:
             sql += " AND success = ?"
             params.append(1 if success else 0)
+        if agent_name:
+            sql += " AND agent_name = ?"
+            params.append(agent_name)
 
         sql += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
@@ -220,6 +249,14 @@ class ObservatoryStore:
             for row in tokens_by_model_rows
         }
 
+        # Calls by agent
+        agent_rows = self._db.execute(
+            "SELECT COALESCE(agent_name, 'jax') as agent, COUNT(*) as count "
+            "FROM inference_events WHERE timestamp >= ? GROUP BY agent",
+            [cutoff_str],
+        ).fetchall()
+        calls_by_agent = {row[0]: row[1] for row in agent_rows}
+
         return {
             "period_hours": period_hours,
             "total_calls": total_calls,
@@ -228,6 +265,7 @@ class ObservatoryStore:
             "avg_latency_ms": avg_latency_ms,
             "calls_by_provider": calls_by_provider,
             "calls_by_model": calls_by_model,
+            "calls_by_agent": calls_by_agent,
             "calls_per_hour": calls_per_hour,
             "total_input_tokens": total_input_tokens,
             "total_output_tokens": total_output_tokens,
@@ -257,4 +295,121 @@ class ObservatoryStore:
         )
         events_deleted = event_cursor.rowcount
 
-        return raw_cleaned, events_deleted
+        # Delete old tool events (same retention as inference events)
+        tool_cursor = self._db.execute(
+            "DELETE FROM tool_events WHERE timestamp < ?",
+            [event_cutoff],
+        )
+        tool_events_deleted = tool_cursor.rowcount
+
+        return raw_cleaned, events_deleted + tool_events_deleted
+
+    # ------------------------------------------------------------------
+    # Tool Events
+    # ------------------------------------------------------------------
+
+    def log_tool_event(self, event: dict[str, Any]) -> dict:
+        """Insert a tool call event and return it with ID."""
+        row = {
+            "timestamp": event.get("timestamp") or datetime.now(timezone.utc).isoformat(),
+            "tool_name": event["tool_name"],
+            "duration_ms": event["duration_ms"],
+            "success": 1 if event.get("success", True) else 0,
+            "error_message": event.get("error_message"),
+            "session_id": event.get("session_id"),
+            "agent_name": event.get("agent_name"),
+            "action_category": event.get("action_category"),
+        }
+        result = self._db["tool_events"].insert(row)
+        row["id"] = result.last_pk
+        return row
+
+    def get_tool_events(
+        self,
+        limit: int = 100,
+        before_id: int | None = None,
+        tool_name: str | None = None,
+        agent_name: str | None = None,
+        success: bool | None = None,
+    ) -> list[dict]:
+        """Return tool events matching filters, newest first."""
+        sql = "SELECT * FROM tool_events WHERE 1=1"
+        params: list = []
+
+        if before_id is not None:
+            sql += " AND id < ?"
+            params.append(before_id)
+        if tool_name:
+            sql += " AND tool_name = ?"
+            params.append(tool_name)
+        if agent_name:
+            sql += " AND agent_name = ?"
+            params.append(agent_name)
+        if success is not None:
+            sql += " AND success = ?"
+            params.append(1 if success else 0)
+
+        sql += " ORDER BY id DESC LIMIT ?"
+        params.append(limit)
+        return _rows_to_dicts(self._db.execute(sql, params))
+
+    def get_tool_stats(self, period_hours: int = 24) -> dict:
+        """Return aggregate tool call statistics for the given period."""
+        from datetime import timedelta
+
+        cutoff_str = (datetime.now(timezone.utc) - timedelta(hours=period_hours)).isoformat()
+
+        # Total calls
+        total_row = self._db.execute(
+            "SELECT COUNT(*) FROM tool_events WHERE timestamp >= ?",
+            [cutoff_str],
+        ).fetchone()
+        total_calls = total_row[0] if total_row else 0
+
+        # Error rate
+        error_row = self._db.execute(
+            "SELECT COUNT(*) FROM tool_events WHERE timestamp >= ? AND success = 0",
+            [cutoff_str],
+        ).fetchone()
+        error_count = error_row[0] if error_row else 0
+        error_rate = (error_count / total_calls * 100) if total_calls > 0 else 0
+
+        # Average duration
+        avg_row = self._db.execute(
+            "SELECT AVG(duration_ms) FROM tool_events WHERE timestamp >= ?",
+            [cutoff_str],
+        ).fetchone()
+        avg_duration_ms = round(avg_row[0]) if avg_row and avg_row[0] else 0
+
+        # Calls by tool
+        tool_rows = self._db.execute(
+            "SELECT tool_name, COUNT(*) as count FROM tool_events WHERE timestamp >= ? GROUP BY tool_name ORDER BY count DESC",
+            [cutoff_str],
+        ).fetchall()
+        calls_by_tool = {row[0]: row[1] for row in tool_rows}
+
+        # Average duration by tool
+        avg_by_tool_rows = self._db.execute(
+            "SELECT tool_name, AVG(duration_ms) FROM tool_events WHERE timestamp >= ? GROUP BY tool_name",
+            [cutoff_str],
+        ).fetchall()
+        avg_duration_by_tool = {row[0]: round(row[1]) for row in avg_by_tool_rows}
+
+        # Calls per hour
+        hourly_rows = self._db.execute(
+            "SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour, COUNT(*) as count "
+            "FROM tool_events WHERE timestamp >= ? GROUP BY hour ORDER BY hour",
+            [cutoff_str],
+        ).fetchall()
+        calls_per_hour = [{"hour": row[0], "count": row[1]} for row in hourly_rows]
+
+        return {
+            "period_hours": period_hours,
+            "total_calls": total_calls,
+            "error_count": error_count,
+            "error_rate": round(error_rate, 2),
+            "avg_duration_ms": avg_duration_ms,
+            "calls_by_tool": calls_by_tool,
+            "avg_duration_by_tool": avg_duration_by_tool,
+            "calls_per_hour": calls_per_hour,
+        }

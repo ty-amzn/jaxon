@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from assistant.core.logging import AuditLogger
 from assistant.gateway.permissions import PermissionManager
 from assistant.llm.types import ToolCall, ToolResult
+
+if TYPE_CHECKING:
+    from assistant.llm.metrics import ToolMetricsClient
 
 logger = logging.getLogger(__name__)
 
@@ -24,12 +28,14 @@ class ToolRegistry:
         permission_manager: PermissionManager,
         audit_logger: AuditLogger,
         output_cap: int = 15_000,
+        tool_metrics: ToolMetricsClient | None = None,
     ) -> None:
         self._handlers: dict[str, ToolHandler] = {}
         self._definitions: list[dict[str, Any]] = []
         self._permissions = permission_manager
         self._audit = audit_logger
         self._output_cap = output_cap
+        self._tool_metrics = tool_metrics
 
     def register(
         self,
@@ -122,6 +128,10 @@ class ToolRegistry:
                 approval_required=perm_request.requires_approval,
                 duration_ms=duration_ms,
             )
+            self._log_tool_metrics(
+                tool_call.name, duration_ms, True, None,
+                session_id, perm_request.action_category.value,
+            )
             # Paginate oversized output (skip for read_output_page itself)
             if (
                 len(result_text) > self._output_cap
@@ -157,8 +167,37 @@ class ToolRegistry:
                 action_category=perm_request.action_category.value,
                 duration_ms=duration_ms,
             )
+            self._log_tool_metrics(
+                tool_call.name, duration_ms, False, error_msg,
+                session_id, perm_request.action_category.value,
+            )
             return ToolResult(
                 tool_use_id=tool_call.id,
                 content=f"Error: {error_msg}",
                 is_error=True,
             )
+
+    def _log_tool_metrics(
+        self,
+        tool_name: str,
+        duration_ms: int,
+        success: bool,
+        error_message: str | None,
+        session_id: str,
+        action_category: str,
+    ) -> None:
+        """Fire-and-forget tool metrics logging to Observatory."""
+        if self._tool_metrics is None:
+            return
+        from assistant.llm.metrics import ToolEvent
+
+        event = ToolEvent(
+            tool_name=tool_name,
+            duration_ms=duration_ms,
+            success=success,
+            error_message=error_message,
+            session_id=session_id or None,
+            agent_name=None,
+            action_category=action_category,
+        )
+        asyncio.create_task(self._tool_metrics.log_tool_call(event))

@@ -24,6 +24,7 @@ from assistant.core.logging import AuditLogger
 from assistant.gateway.permissions import PermissionManager, PermissionRequest, parse_approval_required
 from assistant.gateway.session import SessionManager
 from assistant.gateway.thread_store import ThreadStore
+from assistant.llm.metrics import LLMMetricsClient, ToolMetricsClient
 from assistant.llm.router import LLMRouter
 from assistant.llm.context import build_messages, build_system_prompt
 from assistant.llm.tools import create_tool_registry, register_orchestrator_tools
@@ -65,11 +66,21 @@ class ChatInterface:
         approval_tools = parse_approval_required(settings.approval_required_tools)
         self._permissions = PermissionManager(self._cli_approval, approval_required_tools=approval_tools)
 
+        # LLM metrics client (optional, for Observatory integration)
+        self._metrics_client: LLMMetricsClient | None = None
+        self._tool_metrics_client: ToolMetricsClient | None = None
+        if settings.observatory_url:
+            self._metrics_client = LLMMetricsClient(settings.observatory_url)
+            self._tool_metrics_client = ToolMetricsClient(settings.observatory_url)
+
         # Tools
-        self._tool_registry = create_tool_registry(self._permissions, self._audit, settings, self._memory)
+        self._tool_registry = create_tool_registry(
+            self._permissions, self._audit, settings, self._memory,
+            tool_metrics=self._tool_metrics_client,
+        )
 
         # LLM client (router between Ollama and Claude)
-        self._llm = LLMRouter(settings)
+        self._llm = LLMRouter(settings, metrics_client=self._metrics_client)
 
         # Media handler for image uploads
         self._media_handler = MediaHandler(max_size_mb=settings.max_media_size_mb)
@@ -314,6 +325,7 @@ class ChatInterface:
                         tools=self._tool_registry.definitions,
                         tool_executor=headless_tool_executor,
                         max_tool_rounds=self._settings.max_tool_rounds,
+                        session_id=session.id,
                     ):
                         if event.type == StreamEventType.TEXT_DELTA:
                             full_response += event.text
@@ -528,6 +540,7 @@ class ChatInterface:
                 tools=self._tool_registry.definitions,
                 tool_executor=lambda tc: self._execute_tool(tc, session=session),
                 max_tool_rounds=self._settings.max_tool_rounds,
+                session_id=session.id,
             ):
                 if self._cancel_event.is_set():
                     break

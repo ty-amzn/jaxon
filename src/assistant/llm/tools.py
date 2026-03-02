@@ -40,6 +40,7 @@ from assistant.tools.google_calendar_tool import GOOGLE_CALENDAR_TOOL_DEF, googl
 from assistant.tools.contacts_tool import CONTACTS_TOOL_DEF, contacts_tool
 from assistant.tools.reminders_tool import REMINDERS_TOOL_DEF, reminders_tool
 from assistant.tools.youtube_tool import YOUTUBE_SEARCH_TOOL_DEF, youtube_search
+from assistant.tools.youtube_playlist_tool import YOUTUBE_PLAYLIST_TOOL_DEF, youtube_playlist_tool
 from assistant.tools.reddit_tool import REDDIT_SEARCH_TOOL_DEF, reddit_search
 from assistant.tools.hackernews_tool import HACKERNEWS_TOOL_DEF, hackernews
 from assistant.tools.google_maps_tool import GOOGLE_MAPS_TOOL_DEF, google_maps
@@ -80,10 +81,11 @@ def create_tool_registry(
     memory: Any | None = None,
     dispatcher: Any | None = None,
     townsquare_url: str | None = None,
+    tool_metrics: Any | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     output_cap = settings.tool_output_cap if settings else 15_000
-    registry = ToolRegistry(permission_manager, audit_logger, output_cap=output_cap)
+    registry = ToolRegistry(permission_manager, audit_logger, output_cap=output_cap, tool_metrics=tool_metrics)
 
     registry.register(
         SHELL_TOOL_DEF["name"],
@@ -216,6 +218,15 @@ def create_tool_registry(
             MANAGE_FEEDS_DEF["description"],
             MANAGE_FEEDS_DEF["input_schema"],
             _make_manage_feeds(townsquare_url),
+        )
+
+    # Register YouTube Playlist tool if enabled
+    if settings and settings.youtube_playlist_enabled:
+        registry.register(
+            YOUTUBE_PLAYLIST_TOOL_DEF["name"],
+            YOUTUBE_PLAYLIST_TOOL_DEF["description"],
+            YOUTUBE_PLAYLIST_TOOL_DEF["input_schema"],
+            youtube_playlist_tool,
         )
 
     # Register YouTube tool if enabled

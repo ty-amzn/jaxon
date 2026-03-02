@@ -11,6 +11,17 @@ from observatory.ui import APP_ICON_SVG, DASHBOARD_HTML, MANIFEST_JSON, SERVICE_
 observe_router = APIRouter(prefix="/observe", tags=["observe"])
 
 
+class ToolEventBody(BaseModel):
+    timestamp: str | None = None
+    tool_name: str = Field(..., min_length=1)
+    duration_ms: int = Field(..., ge=0)
+    success: bool = True
+    error_message: str | None = None
+    session_id: str | None = None
+    agent_name: str | None = None
+    action_category: str | None = None
+
+
 class InferenceEventBody(BaseModel):
     timestamp: str | None = None
     provider: str = Field(..., min_length=1)
@@ -79,6 +90,7 @@ async def get_events(
     model: str | None = None,
     session_id: str | None = None,
     success: bool | None = None,
+    agent_name: str | None = None,
 ):
     store = request.app.state.observe_store
     events = store.get_events(
@@ -88,6 +100,7 @@ async def get_events(
         model=model,
         session_id=session_id,
         success=success,
+        agent_name=agent_name,
     )
     return events
 
@@ -121,3 +134,37 @@ async def get_stats(request: Request, period_hours: int = 24):
     store = request.app.state.observe_store
     stats = store.get_stats(period_hours=period_hours)
     return stats
+
+
+# -- Tool Events -------------------------------------------------------------
+
+@observe_router.post("/tool-events")
+async def log_tool_event(request: Request, body: ToolEventBody):
+    store = request.app.state.observe_store
+    event = store.log_tool_event(body.model_dump())
+    return {"ok": True, "id": event["id"]}
+
+
+@observe_router.get("/tool-events")
+async def get_tool_events(
+    request: Request,
+    limit: int = 100,
+    before_id: int | None = None,
+    tool_name: str | None = None,
+    agent_name: str | None = None,
+    success: bool | None = None,
+):
+    store = request.app.state.observe_store
+    return store.get_tool_events(
+        limit=limit,
+        before_id=before_id,
+        tool_name=tool_name,
+        agent_name=agent_name,
+        success=success,
+    )
+
+
+@observe_router.get("/tool-stats")
+async def get_tool_stats(request: Request, period_hours: int = 24):
+    store = request.app.state.observe_store
+    return store.get_tool_stats(period_hours=period_hours)

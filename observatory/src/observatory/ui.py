@@ -31,7 +31,7 @@ MANIFEST_JSON = json.dumps(
 SERVICE_WORKER_JS = """\
 const CACHE='observatory-v1';
 const SHELL=['/observe/ui','/observe/icon-192.svg'];
-const API_RE=/\\/observe\\/(events|stats)/;
+const API_RE=/\\/observe\\/(events|stats|tool-events|tool-stats)/;
 
 self.addEventListener('install',e=>{
   e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL)).then(()=>self.skipWaiting()));
@@ -189,6 +189,7 @@ DASHBOARD_HTML = """\
     .badge-success { background: rgba(63,185,80,0.2); color: var(--success); }
     .badge-error { background: rgba(248,81,73,0.2); color: var(--error); }
     .provider-badge { background: rgba(88,166,255,0.2); color: var(--accent); }
+    .agent-badge { background: rgba(210,153,255,0.2); color: #d299ff; }
     .duration { font-family: monospace; }
     .load-more {
       display: block;
@@ -258,6 +259,7 @@ DASHBOARD_HTML = """\
           <option value="168">Last 7 days</option>
           <option value="720">Last 30 days</option>
         </select>
+        <button id="refresh-btn" class="period-select" style="cursor:pointer;" title="Refresh">&#x21bb; Refresh</button>
       </div>
     </header>
 
@@ -306,6 +308,9 @@ DASHBOARD_HTML = """\
           <select id="filter-provider" class="filter-input">
             <option value="">All Providers</option>
           </select>
+          <select id="filter-agent" class="filter-input">
+            <option value="">All Agents</option>
+          </select>
           <select id="filter-success" class="filter-input">
             <option value="">All Status</option>
             <option value="true">Success</option>
@@ -317,6 +322,7 @@ DASHBOARD_HTML = """\
         <thead>
           <tr>
             <th>Time</th>
+            <th>Agent</th>
             <th>Provider</th>
             <th>Model</th>
             <th>Duration</th>
@@ -331,16 +337,77 @@ DASHBOARD_HTML = """\
       </table>
       <button class="load-more" id="load-more">Load more</button>
     </div>
+
+    <!-- Tool Calls Section -->
+    <h2 style="margin: 32px 0 16px; font-size: 20px; font-weight: 600; border-top: 1px solid var(--border); padding-top: 24px;">🔧 Tool Calls</h2>
+
+    <div class="stats-grid" id="tool-stats-grid">
+      <div class="stat-card">
+        <div class="stat-label">Total Tool Calls</div>
+        <div class="stat-value" id="stat-tool-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Tool Error Rate</div>
+        <div class="stat-value" id="stat-tool-error-rate">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Avg Tool Latency</div>
+        <div class="stat-value" id="stat-tool-latency">—</div>
+      </div>
+    </div>
+
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-title">Top Tools</div>
+        <div class="chart-container">
+          <canvas id="tool-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="table-card" id="tool-events-card">
+      <div class="table-header">
+        <div class="table-title">Recent Tool Calls</div>
+        <div class="filters">
+          <select id="filter-tool-name" class="filter-input">
+            <option value="">All Tools</option>
+          </select>
+          <select id="filter-tool-success" class="filter-input">
+            <option value="">All Status</option>
+            <option value="true">Success</option>
+            <option value="false">Errors</option>
+          </select>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Agent</th>
+            <th>Tool</th>
+            <th>Duration</th>
+            <th>Category</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="tool-events-body">
+        </tbody>
+      </table>
+      <button class="load-more" id="tool-load-more">Load more</button>
+    </div>
   </div>
 
   <script>
     let timelineChart = null;
     let providerChart = null;
+    let toolChart = null;
     let lastEventId = null;
+    let lastToolEventId = null;
     let currentPeriod = 24;
 
     const periodSelect = document.getElementById('period-select');
     const filterProvider = document.getElementById('filter-provider');
+    const filterAgent = document.getElementById('filter-agent');
     const filterSuccess = document.getElementById('filter-success');
     const loadMoreBtn = document.getElementById('load-more');
 
@@ -353,8 +420,10 @@ DASHBOARD_HTML = """\
       let url = '/observe/events?limit=50';
       if (beforeId) url += `&before_id=${beforeId}`;
       const provider = filterProvider.value;
+      const agent = filterAgent.value;
       const success = filterSuccess.value;
       if (provider) url += `&provider=${provider}`;
+      if (agent) url += `&agent_name=${agent}`;
       if (success) url += `&success=${success}`;
       const res = await fetch(url);
       return res.json();
@@ -458,7 +527,7 @@ DASHBOARD_HTML = """\
       if (!append) tbody.innerHTML = '';
 
       if (events.length === 0 && !append) {
-        tbody.innerHTML = '<tr><td colspan="8" class="empty">No events recorded</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" class="empty">No events recorded</td></tr>';
         return;
       }
 
@@ -477,8 +546,10 @@ DASHBOARD_HTML = """\
         const tokHtml = (inTok || outTok) ? `${formatTokens(inTok)} / ${formatTokens(outTok)}` : '—';
         const stopHtml = event.stop_reason || '—';
 
+        const agentName = event.agent_name || 'jax';
         tr.innerHTML = `
           <td>${formatTime(event.timestamp)}</td>
+          <td><span class="badge agent-badge">${agentName}</span></td>
           <td><span class="badge provider-badge">${event.provider}</span></td>
           <td>${event.model}</td>
           <td class="duration">${formatDuration(event.duration_ms)}</td>
@@ -495,13 +566,13 @@ DASHBOARD_HTML = """\
         const rawRow = document.createElement('tr');
         rawRow.classList.add('raw-row');
         rawRow.id = `raw-${event.id}`;
-        rawRow.innerHTML = `<td colspan="8"><div class="raw-content" id="raw-content-${event.id}">Loading...</div></td>`;
+        rawRow.innerHTML = `<td colspan="9"><div class="raw-content" id="raw-content-${event.id}">Loading...</div></td>`;
         tbody.appendChild(rawRow);
 
         if (!event.success && event.error_message) {
           const errorRow = document.createElement('tr');
           errorRow.id = `error-${event.id}`;
-          errorRow.innerHTML = `<td colspan="8" class="error-message">${event.error_message}</td>`;
+          errorRow.innerHTML = `<td colspan="9" class="error-message">${event.error_message}</td>`;
           tbody.appendChild(errorRow);
         }
       });
@@ -565,12 +636,28 @@ DASHBOARD_HTML = """\
       select.value = currentValue;
     }
 
+    function updateAgentFilter(stats) {
+      const select = document.getElementById('filter-agent');
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">All Agents</option>';
+      if (stats.calls_by_agent) {
+        Object.keys(stats.calls_by_agent).sort().forEach(a => {
+          const opt = document.createElement('option');
+          opt.value = a;
+          opt.textContent = `${a} (${stats.calls_by_agent[a]})`;
+          select.appendChild(opt);
+        });
+      }
+      select.value = currentValue;
+    }
+
     async function refresh() {
       const stats = await fetchStats();
       updateStats(stats);
       updateTimelineChart(stats);
       updateProviderChart(stats);
       updateProviderFilter(stats);
+      updateAgentFilter(stats);
 
       lastEventId = null;
       const events = await fetchEvents();
@@ -586,6 +673,7 @@ DASHBOARD_HTML = """\
     periodSelect.addEventListener('change', () => {
       currentPeriod = parseInt(periodSelect.value);
       refresh();
+      refreshTools();
     });
 
     filterProvider.addEventListener('change', () => {
@@ -598,10 +686,166 @@ DASHBOARD_HTML = """\
       fetchEvents().then(events => renderEvents(events));
     });
 
+    filterAgent.addEventListener('change', () => {
+      lastEventId = null;
+      fetchEvents().then(events => renderEvents(events));
+    });
+
     loadMoreBtn.addEventListener('click', loadMore);
+
+    document.getElementById('refresh-btn').addEventListener('click', () => {
+      refresh();
+      refreshTools();
+    });
+
+    // -- Tool Events ----------------------------------------------------------
+
+    const filterToolName = document.getElementById('filter-tool-name');
+    const filterToolSuccess = document.getElementById('filter-tool-success');
+    const toolLoadMoreBtn = document.getElementById('tool-load-more');
+
+    async function fetchToolStats() {
+      const res = await fetch(`/observe/tool-stats?period_hours=${currentPeriod}`);
+      return res.json();
+    }
+
+    async function fetchToolEvents(beforeId = null) {
+      let url = '/observe/tool-events?limit=50';
+      if (beforeId) url += `&before_id=${beforeId}`;
+      const tn = filterToolName.value;
+      const success = filterToolSuccess.value;
+      if (tn) url += `&tool_name=${tn}`;
+      if (success) url += `&success=${success}`;
+      const res = await fetch(url);
+      return res.json();
+    }
+
+    function updateToolStats(stats) {
+      document.getElementById('stat-tool-total').textContent = stats.total_calls.toLocaleString();
+
+      const errEl = document.getElementById('stat-tool-error-rate');
+      errEl.textContent = stats.error_rate.toFixed(1) + '%';
+      errEl.className = 'stat-value ' + (stats.error_rate > 5 ? 'error' : stats.error_rate > 1 ? 'warning' : 'success');
+
+      document.getElementById('stat-tool-latency').textContent = formatDuration(stats.avg_duration_ms);
+    }
+
+    function updateToolChart(stats) {
+      const ctx = document.getElementById('tool-chart').getContext('2d');
+      const entries = Object.entries(stats.calls_by_tool || {}).slice(0, 15);
+      const labels = entries.map(e => e[0]);
+      const data = entries.map(e => e[1]);
+      const colors = ['#58a6ff','#3fb950','#f0883e','#a371f7','#f85149','#d29922','#79c0ff','#56d364','#ffa657','#bc8cff','#ff7b72','#e3b341','#a5d6ff','#7ee787','#ffc680'];
+
+      if (toolChart) toolChart.destroy();
+      toolChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Calls',
+            data,
+            backgroundColor: colors.slice(0, labels.length),
+          }]
+        },
+        options: {
+          indexAxis: 'y',
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { grid: { color: '#30363d' }, ticks: { color: '#7d8590' }, beginAtZero: true },
+            y: { grid: { display: false }, ticks: { color: '#e6edf3', font: { size: 11 } } }
+          }
+        }
+      });
+    }
+
+    function updateToolNameFilter(stats) {
+      const select = filterToolName;
+      const currentValue = select.value;
+      select.innerHTML = '<option value="">All Tools</option>';
+      Object.keys(stats.calls_by_tool || {}).sort().forEach(t => {
+        const opt = document.createElement('option');
+        opt.value = t;
+        opt.textContent = t;
+        select.appendChild(opt);
+      });
+      select.value = currentValue;
+    }
+
+    function renderToolEvents(events, append = false) {
+      const tbody = document.getElementById('tool-events-body');
+      if (!append) tbody.innerHTML = '';
+
+      if (events.length === 0 && !append) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No tool events recorded</td></tr>';
+        return;
+      }
+
+      events.forEach(event => {
+        const tr = document.createElement('tr');
+        if (!event.success) tr.classList.add('error-row');
+
+        const statusHtml = event.success
+          ? '<span class="badge badge-success">OK</span>'
+          : '<span class="badge badge-error">Error</span>';
+
+        const agentName = event.agent_name || 'jax';
+        const category = event.action_category || '—';
+        tr.innerHTML = `
+          <td>${formatTime(event.timestamp)}</td>
+          <td><span class="badge agent-badge">${agentName}</span></td>
+          <td><span class="badge provider-badge">${event.tool_name}</span></td>
+          <td class="duration">${formatDuration(event.duration_ms)}</td>
+          <td>${category}</td>
+          <td>${statusHtml}</td>
+        `;
+
+        tbody.appendChild(tr);
+
+        if (!event.success && event.error_message) {
+          const errorRow = document.createElement('tr');
+          errorRow.innerHTML = `<td colspan="6" class="error-message visible">${escapeHtml(event.error_message)}</td>`;
+          tbody.appendChild(errorRow);
+        }
+      });
+
+      if (events.length > 0) {
+        lastToolEventId = events[events.length - 1].id;
+      }
+    }
+
+    async function refreshTools() {
+      const stats = await fetchToolStats();
+      updateToolStats(stats);
+      updateToolChart(stats);
+      updateToolNameFilter(stats);
+
+      lastToolEventId = null;
+      const events = await fetchToolEvents();
+      renderToolEvents(events);
+    }
+
+    filterToolName.addEventListener('change', () => {
+      lastToolEventId = null;
+      fetchToolEvents().then(events => renderToolEvents(events));
+    });
+
+    filterToolSuccess.addEventListener('change', () => {
+      lastToolEventId = null;
+      fetchToolEvents().then(events => renderToolEvents(events));
+    });
+
+    toolLoadMoreBtn.addEventListener('click', async () => {
+      if (!lastToolEventId) return;
+      const events = await fetchToolEvents(lastToolEventId);
+      renderToolEvents(events, true);
+    });
 
     // Initial load
     refresh();
+    refreshTools();
   </script>
 </body>
 </html>"""

@@ -62,6 +62,58 @@ class InferenceEvent:
         return d
 
 
+@dataclass
+class ToolEvent:
+    """Represents a single tool call."""
+
+    tool_name: str
+    duration_ms: int
+    success: bool
+    error_message: str | None = None
+    session_id: str | None = None
+    agent_name: str | None = None
+    action_category: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dict for JSON serialization."""
+        d: dict[str, Any] = {
+            "tool_name": self.tool_name,
+            "duration_ms": self.duration_ms,
+            "success": self.success,
+        }
+        if self.error_message:
+            d["error_message"] = self.error_message
+        if self.session_id:
+            d["session_id"] = self.session_id
+        if self.agent_name:
+            d["agent_name"] = self.agent_name
+        if self.action_category:
+            d["action_category"] = self.action_category
+        return d
+
+
+class ToolMetricsClient:
+    """Fire-and-forget HTTP client for logging tool events to Observatory."""
+
+    def __init__(self, base_url: str) -> None:
+        self._base_url = base_url.rstrip("/")
+        self._client = httpx.AsyncClient(timeout=5.0)
+
+    async def log_tool_call(self, event: ToolEvent) -> None:
+        """Log a tool event to Observatory (fire-and-forget)."""
+        try:
+            await self._client.post(
+                f"{self._base_url}/observe/tool-events",
+                json=event.to_dict(),
+            )
+        except Exception:
+            logger.debug("Failed to log tool event to Observatory")
+
+    async def close(self) -> None:
+        """Close the HTTP client."""
+        await self._client.aclose()
+
+
 class LLMMetricsClient:
     """Fire-and-forget HTTP client for logging to Observatory."""
 
