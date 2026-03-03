@@ -227,9 +227,26 @@ async def run_assistant_job(
     When silent=True, the prompt is augmented to instruct the agent to use
     send_notification explicitly; auto-delivery of the response is skipped.
     """
+    # Delivery callback so background agents can route results through Telegram/etc.
+    # Even the direct-fallback path routes through Jax so the user always hears
+    # from Jax, never raw sub-agent output.
+    async def _scheduler_deliver(text: str) -> None:
+        try:
+            review = await chat_interface.get_response(
+                session_id,
+                f"[A background agent produced this result. Summarise it for "
+                f"the user in your own voice.]\n\n{text}",
+            )
+            await dispatcher.send(review or text)
+        except Exception:
+            await dispatcher.send(text)
+
     try:
         effective_prompt = _SILENT_PROMPT_PREFIX + prompt if silent else prompt
-        response = await chat_interface.get_response(session_id, effective_prompt)
+        response = await chat_interface.get_response(
+            session_id, effective_prompt,
+            delivery_callback=_scheduler_deliver,
+        )
         if not silent:
             # Route through main agent for review/summarization
             synthetic = (
@@ -247,7 +264,10 @@ async def run_assistant_job(
                 'here with a one-line summary like "Emailed you the full '
                 'report on X."]'
             )
-            review_response = await chat_interface.get_response(session_id, synthetic)
+            review_response = await chat_interface.get_response(
+                session_id, synthetic,
+                delivery_callback=_scheduler_deliver,
+            )
             if review_response and review_response.strip() != "[SKIP]":
                 await dispatcher.send(review_response)
     except Exception:
