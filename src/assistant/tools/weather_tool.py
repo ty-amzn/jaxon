@@ -1,4 +1,4 @@
-"""Weather tool — current conditions and forecast via Open-Meteo API."""
+"""Weather tool — current conditions, forecast, and alerts via Open-Meteo + NWS APIs."""
 
 from __future__ import annotations
 
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 GEOCODE_URL = "https://geocoding-api.open-meteo.com/v1/search"
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+NWS_ALERTS_URL = "https://api.weather.gov/alerts/active"
 
 # US state abbreviations → full names for matching Open-Meteo's admin1 field
 _US_STATES: dict[str, str] = {
@@ -100,12 +101,62 @@ def _weather_description(code: int) -> str:
     return WMO_CODES.get(code, f"Unknown ({code})")
 
 
+async def _fetch_nws_alerts(lat: float, lon: float) -> str:
+    """Fetch active NWS weather alerts for a lat/lon point.
+
+    US-only; returns empty string for non-US locations or on any error.
+    """
+    try:
+        async with make_httpx_client(
+            timeout=10.0,
+            headers={
+                "User-Agent": "(jaxon-assistant, contact@example.com)",
+                "Accept": "application/geo+json",
+            },
+        ) as client:
+            resp = await client.get(
+                NWS_ALERTS_URL,
+                params={"point": f"{lat:.4f},{lon:.4f}"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+            features = data.get("features", [])
+            if not features:
+                return ""
+
+            lines = ["## Active Weather Alerts"]
+            for f in features[:5]:
+                props = f.get("properties", {})
+                event = props.get("event", "Unknown Alert")
+                severity = props.get("severity", "Unknown")
+                headline = props.get("headline", "")
+                description = props.get("description", "")
+                expires = props.get("expires", "")
+
+                lines.append(f"### {event} ({severity})")
+                if headline:
+                    lines.append(f"**{headline}**")
+                if description:
+                    desc = description[:500]
+                    if len(description) > 500:
+                        desc += "..."
+                    lines.append(desc)
+                if expires:
+                    lines.append(f"*Expires: {expires}*")
+                lines.append("")
+
+            return "\n".join(lines)
+    except Exception:
+        return ""
+
+
 async def get_weather(params: dict[str, Any]) -> str:
-    """Fetch weather for a location using Open-Meteo.
+    """Fetch weather for a location using Open-Meteo, with optional NWS alerts.
 
     Args:
         params: Dictionary with 'location' (str), optional 'forecast_days' (int),
-                and optional 'hourly' (bool).
+                optional 'hourly' (bool), and optional 'units' ("metric"|"imperial").
 
     Returns:
         Formatted weather report as markdown.
@@ -116,6 +167,12 @@ async def get_weather(params: dict[str, Any]) -> str:
 
     forecast_days = min(max(int(params.get("forecast_days", 3)), 1), 7)
     include_hourly = params.get("hourly", False)
+    units = params.get("units", "metric")
+    imperial = units == "imperial"
+
+    temp_unit = "\u00b0F" if imperial else "\u00b0C"
+    wind_unit = "mph" if imperial else "km/h"
+    precip_unit = "in" if imperial else "mm"
 
     city_name, qualifier = _parse_location(location)
 
@@ -146,13 +203,27 @@ async def get_weather(params: dict[str, Any]) -> str:
             forecast_params: dict[str, Any] = {
                 "latitude": lat,
                 "longitude": lon,
-                "current": "temperature_2m,relative_humidity_2m,wind_speed_10m,weather_code",
-                "daily": "weather_code,temperature_2m_max,temperature_2m_min,precipitation_sum",
+                "current": (
+                    "temperature_2m,apparent_temperature,"
+                    "relative_humidity_2m,wind_speed_10m,weather_code"
+                ),
+                "daily": (
+                    "weather_code,temperature_2m_max,temperature_2m_min,"
+                    "apparent_temperature_max,apparent_temperature_min,"
+                    "precipitation_sum,snowfall_sum"
+                ),
                 "forecast_days": forecast_days,
                 "timezone": "auto",
             }
+            if imperial:
+                forecast_params["temperature_unit"] = "fahrenheit"
+                forecast_params["wind_speed_unit"] = "mph"
+                forecast_params["precipitation_unit"] = "inch"
             if include_hourly:
-                forecast_params["hourly"] = "temperature_2m,weather_code,precipitation,wind_speed_10m"
+                forecast_params["hourly"] = (
+                    "temperature_2m,apparent_temperature,weather_code,"
+                    "precipitation,wind_speed_10m,snowfall,snow_depth"
+                )
 
             weather_resp = await client.get(FORECAST_URL, params=forecast_params)
             weather_resp.raise_for_status()
@@ -161,6 +232,9 @@ async def get_weather(params: dict[str, Any]) -> str:
     except httpx.HTTPError as e:
         return f"Weather API error: {e}"
 
+    # Fetch NWS alerts (separate call; fails silently for non-US locations)
+    alerts_section = await _fetch_nws_alerts(lat, lon)
+
     # Format current conditions
     current = weather.get("current", {})
     lines = [
@@ -168,10 +242,15 @@ async def get_weather(params: dict[str, Any]) -> str:
         "",
         "## Current Conditions",
         f"- **Condition:** {_weather_description(current.get('weather_code', -1))}",
-        f"- **Temperature:** {current.get('temperature_2m', '?')}°C",
+        f"- **Temperature:** {current.get('temperature_2m', '?')}{temp_unit}",
+        f"- **Feels Like:** {current.get('apparent_temperature', '?')}{temp_unit}",
         f"- **Humidity:** {current.get('relative_humidity_2m', '?')}%",
-        f"- **Wind Speed:** {current.get('wind_speed_10m', '?')} km/h",
+        f"- **Wind Speed:** {current.get('wind_speed_10m', '?')} {wind_unit}",
     ]
+
+    # Alerts section (before forecasts for visibility)
+    if alerts_section:
+        lines += ["", alerts_section]
 
     # Format hourly forecast
     hourly = weather.get("hourly", {})
@@ -181,12 +260,22 @@ async def get_weather(params: dict[str, Any]) -> str:
         for i, time_str in enumerate(hourly_times):
             code = hourly.get("weather_code", [])[i] if i < len(hourly.get("weather_code", [])) else -1
             temp = hourly.get("temperature_2m", [])[i] if i < len(hourly.get("temperature_2m", [])) else "?"
+            feels = hourly.get("apparent_temperature", [])[i] if i < len(hourly.get("apparent_temperature", [])) else None
             precip = hourly.get("precipitation", [])[i] if i < len(hourly.get("precipitation", [])) else 0
             wind = hourly.get("wind_speed_10m", [])[i] if i < len(hourly.get("wind_speed_10m", [])) else "?"
+            snow = hourly.get("snowfall", [])[i] if i < len(hourly.get("snowfall", [])) else 0
+            snow_depth = hourly.get("snow_depth", [])[i] if i < len(hourly.get("snow_depth", [])) else 0
             desc = _weather_description(code)
-            line = f"- **{time_str}:** {desc}, {temp}°C, wind {wind} km/h"
+            line = f"- **{time_str}:** {desc}, {temp}{temp_unit}"
+            if feels is not None:
+                line += f" (feels {feels}{temp_unit})"
+            line += f", wind {wind} {wind_unit}"
             if precip and precip > 0:
-                line += f", {precip} mm"
+                line += f", {precip} {precip_unit}"
+            if snow and snow > 0:
+                line += f", snow {snow} cm"
+            if snow_depth and snow_depth > 0:
+                line += f", snow depth {snow_depth} cm"
             lines.append(line)
 
     # Format daily forecast
@@ -198,11 +287,18 @@ async def get_weather(params: dict[str, Any]) -> str:
             code = daily.get("weather_code", [])[i] if i < len(daily.get("weather_code", [])) else -1
             t_max = daily.get("temperature_2m_max", [])[i] if i < len(daily.get("temperature_2m_max", [])) else "?"
             t_min = daily.get("temperature_2m_min", [])[i] if i < len(daily.get("temperature_2m_min", [])) else "?"
+            fl_max = daily.get("apparent_temperature_max", [])[i] if i < len(daily.get("apparent_temperature_max", [])) else None
+            fl_min = daily.get("apparent_temperature_min", [])[i] if i < len(daily.get("apparent_temperature_min", [])) else None
             precip = daily.get("precipitation_sum", [])[i] if i < len(daily.get("precipitation_sum", [])) else 0
+            snow = daily.get("snowfall_sum", [])[i] if i < len(daily.get("snowfall_sum", [])) else 0
             desc = _weather_description(code)
-            line = f"- **{date}:** {desc}, {t_min}°C – {t_max}°C"
+            line = f"- **{date}:** {desc}, {t_min}{temp_unit} \u2013 {t_max}{temp_unit}"
+            if fl_min is not None and fl_max is not None:
+                line += f" (feels {fl_min} \u2013 {fl_max}{temp_unit})"
             if precip and precip > 0:
-                line += f", {precip} mm precip"
+                line += f", {precip} {precip_unit} precip"
+            if snow and snow > 0:
+                line += f", {snow} cm snow"
             lines.append(line)
 
     return "\n".join(lines)
@@ -211,9 +307,11 @@ async def get_weather(params: dict[str, Any]) -> str:
 WEATHER_TOOL_DEF = {
     "name": "get_weather",
     "description": (
-        "Get current weather conditions and forecast for a location. "
-        "Uses the free Open-Meteo API. The location parameter must be a "
-        "geographic place name (city, town, or region) — not a question or sentence."
+        "Get current weather conditions, feels-like temperature, snow data, "
+        "and forecast for a location. Includes active NWS severe weather alerts "
+        "for US locations. Uses the free Open-Meteo API. The location parameter "
+        "must be a geographic place name (city, town, or region) — not a question "
+        "or sentence."
     ),
     "input_schema": {
         "type": "object",
@@ -234,8 +332,14 @@ WEATHER_TOOL_DEF = {
             },
             "hourly": {
                 "type": "boolean",
-                "description": "Include hourly forecast breakdown (temperature, weather, precipitation, wind). Default false.",
+                "description": "Include hourly forecast breakdown (temperature, feels-like, weather, precipitation, wind, snowfall). Default false.",
                 "default": False,
+            },
+            "units": {
+                "type": "string",
+                "enum": ["metric", "imperial"],
+                "description": "Unit system: 'metric' (default, °C/km/h/mm) or 'imperial' (°F/mph/in).",
+                "default": "metric",
             },
         },
         "required": ["location"],
