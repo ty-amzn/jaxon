@@ -212,15 +212,16 @@ Enable with `ASSISTANT_HACKERNEWS_ENABLED=true`.
 
 ## Weather
 
-The `get_weather` tool fetches current conditions and forecasts:
+The `get_weather` tool fetches current conditions, feels-like temperature, snow data, and forecasts. For US locations, it also includes active NWS severe weather alerts. Supports metric (default) and imperial units.
 
 ```
 You: What's the weather in Tokyo?
 You: Weather forecast for Paris this week
 You: Is it going to rain in Seattle tomorrow?
+You: What's the weather in Boston in Fahrenheit?
 ```
 
-Uses the free Open-Meteo API — no API key required.
+Uses the free Open-Meteo and NWS APIs — no API key required.
 
 ---
 

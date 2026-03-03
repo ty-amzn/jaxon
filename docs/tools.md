@@ -13,7 +13,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `web_fetch` | Fetch and extract text from URLs | Auto-approved (NETWORK_READ) |
 | `pdf_read` | Extract text from PDF URLs | Auto-approved (NETWORK_READ) |
 | `arxiv_search` | Search arXiv for academic papers | Auto-approved (NETWORK_READ) |
-| `get_weather` | Current conditions and forecast via Open-Meteo | Auto-approved (NETWORK_READ) |
+| `get_weather` | Current conditions, feels-like, snow, forecast, and NWS alerts via Open-Meteo | Auto-approved (NETWORK_READ) |
 | `web_search` | Search the web via SearXNG | Auto-approved (if enabled) |
 | `memory_search` | Search conversation history and memory | Auto-approved |
 | `memory_store` | Store a fact in durable memory | Requires approval (WRITE) |
@@ -92,11 +92,14 @@ Automatically tracks last contact date and interaction count.
 
 ## Weather
 
-The `get_weather` tool fetches current conditions and forecasts from Open-Meteo (free, no API key required):
+The `get_weather` tool fetches current conditions, feels-like temperature, snow data, and forecasts from Open-Meteo (free, no API key required). For US locations, it also fetches active NWS severe weather alerts.
+
+Supports `units` parameter: `"metric"` (default, °C/km/h/mm) or `"imperial"` (°F/mph/in).
 
 ```
 What's the weather in Tokyo?
 Weather forecast for Paris, France for the next 5 days
+What's the weather in Boston in Fahrenheit?
 ```
 
 ---
