@@ -18,5 +18,6 @@ system_prompt: |
 allowed_tools:
   - web_search
   - web_fetch
+  - wikipedia
   - http_request
 max_tool_rounds: 10

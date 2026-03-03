@@ -35,6 +35,7 @@ allowed_tools:
   - reddit_search
   - web_search
   - web_fetch
+  - wikipedia
   - post_to_feed
   - manage_feeds
 max_tool_rounds: 15
