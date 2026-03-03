@@ -145,6 +145,11 @@ class Settings(BaseSettings):
     google_maps_enabled: bool = False
     google_maps_api_key: str = Field(default="", validation_alias="GOOGLE_MAPS_API_KEY")
 
+    # Philips Hue
+    hue_enabled: bool = False
+    hue_bridge_ip: str = Field(default="", validation_alias="HUE_BRIDGE_IP")
+    hue_api_key: str = Field(default="", validation_alias="HUE_API_KEY")
+
     # Tool output pagination
     tool_output_cap: int = 15_000
 

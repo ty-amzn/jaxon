@@ -35,6 +35,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `reddit_search` | Search Reddit, browse subreddits, or read posts | Auto-approved (if enabled) |
 | `hackernews` | Browse Hacker News (top, best, new, ask, show) and search | Auto-approved (if enabled) |
 | `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
+| `hue` | Philips Hue smart light control (list, on/off, brightness, color, scenes) | List auto-approved; control/activate require approval (if enabled) |
 | `finance` | Stock quotes, crypto prices, and currency conversion | Auto-approved |
 | `post_to_feed` | Post updates to the internal feed (Town Square) | Auto-approved |
 | `manage_feeds` | Manage Town Square feed subscriptions | Auto-approved |
@@ -144,6 +145,30 @@ Optional `pages` parameter: `"1-5,8,10"` to extract specific pages.
 ## Email Notifications
 
 The `send_email` tool sends emails via IFTTT webhook. Configure in IFTTT to receive notifications.
+
+---
+
+## Philips Hue Smart Lighting
+
+The `hue` tool controls Philips Hue lights via the local CLIP API v2 (direct bridge connection, no cloud):
+
+| Action | Description | Permission |
+|--------|-------------|------------|
+| `list_lights` | List all lights with name, state, brightness | NETWORK_READ (auto-approved) |
+| `list_rooms` | List rooms with grouped light IDs and states | NETWORK_READ (auto-approved) |
+| `list_scenes` | List scenes grouped by room | NETWORK_READ (auto-approved) |
+| `control_light` | Control a single light (on/off, brightness, color, color temp) | NETWORK_WRITE (requires approval) |
+| `control_room` | Control all lights in a room via grouped_light ID | NETWORK_WRITE (requires approval) |
+| `activate_scene` | Activate a Hue scene | NETWORK_WRITE (requires approval) |
+
+Supports named colors (red, blue, green, warm white, cool white, purple, pink, etc.), color temperature presets (warm/cool/neutral), mirek values (153–500), and transition durations.
+
+Configuration:
+```bash
+ASSISTANT_HUE_ENABLED=true
+HUE_BRIDGE_IP=192.168.1.100        # Your Hue Bridge local IP
+HUE_API_KEY=your-hue-api-key       # Generate via bridge button press + API
+```
 
 ---
 

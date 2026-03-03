@@ -103,6 +103,8 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `reddit_search` | Yes |
 | `hackernews` | Yes |
 | `google_maps` | Yes |
+| `hue` (list_lights/list_rooms/list_scenes) | Yes |
+| `hue` (control_light/control_room/activate_scene) | No |
 | `finance` | Yes |
 | `post_to_feed` | Yes |
 | `manage_feeds` | Yes |
@@ -158,6 +160,13 @@ ASSISTANT_LOCAL_MODEL_THRESHOLD_TOKENS=1000
 ```bash
 ASSISTANT_GOOGLE_MAPS_ENABLED=false
 GOOGLE_MAPS_API_KEY=your-key
+```
+
+### Philips Hue
+```bash
+ASSISTANT_HUE_ENABLED=false
+HUE_BRIDGE_IP=192.168.1.100
+HUE_API_KEY=your-hue-api-key
 ```
 
 ### Search

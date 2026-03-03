@@ -262,6 +262,24 @@ Supports page ranges with the `pages` parameter.
 
 ---
 
+## Philips Hue Smart Lighting
+
+The `hue` tool controls Philips Hue lights on your local network:
+
+```
+You: Turn off the bedroom lights
+You: Set the living room to 50% warm white
+You: List all my Hue scenes
+You: Activate the Relax scene
+You: Set the kitchen lights to red
+```
+
+Supports named colors, color temperature presets, brightness control, and scene activation. Requires a Hue Bridge on the local network.
+
+Enable with `ASSISTANT_HUE_ENABLED=true`, `HUE_BRIDGE_IP`, and `HUE_API_KEY`.
+
+---
+
 ## Contacts (Personal Relationship Manager)
 
 The `contacts` tool manages personal contacts in SQLite:

@@ -302,6 +302,19 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Maps {action}: {tool_input.get('query', tool_input.get('origin', ''))}",
             )
+        elif tool_name == "hue":
+            action = tool_input.get("action", "list_lights")
+            if action in ("list_lights", "list_rooms", "list_scenes"):
+                cat = ActionCategory.NETWORK_READ
+            else:
+                cat = ActionCategory.NETWORK_WRITE
+            target = tool_input.get("id", "")
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=cat,
+                details=tool_input,
+                description=f"Hue {action}: {target}" if target else f"Hue {action}",
+            )
         elif tool_name == "schedule_reminder":
             action = tool_input.get("action", "create")
             if action == "list":

@@ -45,6 +45,7 @@ from assistant.tools.youtube_playlist_tool import YOUTUBE_PLAYLIST_TOOL_DEF, you
 from assistant.tools.reddit_tool import REDDIT_SEARCH_TOOL_DEF, reddit_search
 from assistant.tools.hackernews_tool import HACKERNEWS_TOOL_DEF, hackernews
 from assistant.tools.google_maps_tool import GOOGLE_MAPS_TOOL_DEF, google_maps
+from assistant.tools.hue_tool import HUE_TOOL_DEF, hue
 from assistant.tools.read_page_tool import READ_OUTPUT_PAGE_DEF, read_output_page
 from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
 from assistant.tools.feed_tool import (
@@ -275,6 +276,21 @@ def create_tool_registry(
             GOOGLE_MAPS_TOOL_DEF["description"],
             GOOGLE_MAPS_TOOL_DEF["input_schema"],
             google_maps_wrapper,
+        )
+
+    # Register Philips Hue tool if enabled
+    if settings and settings.hue_enabled:
+        hue_bridge_ip = settings.hue_bridge_ip
+        hue_api_key = settings.hue_api_key
+
+        async def hue_wrapper(params: dict[str, Any]) -> str:
+            return await hue(params, hue_bridge_ip, hue_api_key)
+
+        registry.register(
+            HUE_TOOL_DEF["name"],
+            HUE_TOOL_DEF["description"],
+            HUE_TOOL_DEF["input_schema"],
+            hue_wrapper,
         )
 
     # Register web_search if enabled
