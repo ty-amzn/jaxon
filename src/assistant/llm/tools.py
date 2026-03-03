@@ -34,6 +34,7 @@ from assistant.tools.web_fetch import WEB_FETCH_TOOL_DEF, web_fetch
 from assistant.tools.web_search import WEB_SEARCH_TOOL_DEF, web_search
 from assistant.tools.pdf_tool import PDF_READ_TOOL_DEF, pdf_read
 from assistant.tools.arxiv_tool import ARXIV_SEARCH_TOOL_DEF, arxiv_search
+from assistant.tools.wikipedia_tool import WIKIPEDIA_TOOL_DEF, wikipedia
 from assistant.tools.email_tool import SEND_EMAIL_DEF, send_email
 from assistant.tools.calendar_tool import CALENDAR_TOOL_DEF, calendar_tool
 from assistant.tools.google_calendar_tool import GOOGLE_CALENDAR_TOOL_DEF, google_calendar_tool
@@ -130,6 +131,12 @@ def create_tool_registry(
         ARXIV_SEARCH_TOOL_DEF["description"],
         ARXIV_SEARCH_TOOL_DEF["input_schema"],
         arxiv_search,
+    )
+    registry.register(
+        WIKIPEDIA_TOOL_DEF["name"],
+        WIKIPEDIA_TOOL_DEF["description"],
+        WIKIPEDIA_TOOL_DEF["input_schema"],
+        wikipedia,
     )
     registry.register(
         WEATHER_TOOL_DEF["name"],

@@ -221,6 +221,14 @@ class PermissionManager:
                 details=tool_input,
                 description=f"arXiv: {tool_input.get('query', '')}",
             )
+        elif tool_name == "wikipedia":
+            action = tool_input.get("action", "summary")
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.NETWORK_READ,
+                details=tool_input,
+                description=f"Wikipedia {action}: {tool_input.get('query', '')}",
+            )
         elif tool_name == "get_weather":
             return PermissionRequest(
                 tool_name=tool_name,

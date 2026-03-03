@@ -77,6 +77,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `web_fetch` | Yes |
 | `pdf_read` | Yes |
 | `arxiv_search` | Yes |
+| `wikipedia` | Yes |
 | `get_weather` | Yes |
 | `web_search` | Yes |
 | `memory_search` | Yes |

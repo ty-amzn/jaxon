@@ -13,6 +13,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `web_fetch` | Fetch and extract text from URLs | Auto-approved (NETWORK_READ) |
 | `pdf_read` | Extract text from PDF URLs | Auto-approved (NETWORK_READ) |
 | `arxiv_search` | Search arXiv for academic papers | Auto-approved (NETWORK_READ) |
+| `wikipedia` | Wikipedia article summaries and search | Auto-approved (NETWORK_READ) |
 | `get_weather` | Current conditions, feels-like, snow, forecast, and NWS alerts via Open-Meteo | Auto-approved (NETWORK_READ) |
 | `web_search` | Search the web via SearXNG | Auto-approved (if enabled) |
 | `memory_search` | Search conversation history and memory | Auto-approved |
@@ -100,6 +101,18 @@ Supports `units` parameter: `"metric"` (default, Â°C/km/h/mm) or `"imperial"` (Â
 What's the weather in Tokyo?
 Weather forecast for Paris, France for the next 5 days
 What's the weather in Boston in Fahrenheit?
+```
+
+---
+
+## Wikipedia
+
+The `wikipedia` tool fetches article summaries or searches for topics (free, no API key required). Faster and cleaner than `web_fetch` for factual lookups:
+
+```
+Tell me about the Apollo 11 mission
+Who was Ada Lovelace?
+Search Wikipedia for articles about quantum entanglement
 ```
 
 ---

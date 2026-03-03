@@ -225,6 +225,19 @@ Uses the free Open-Meteo and NWS APIs — no API key required.
 
 ---
 
+## Wikipedia
+
+The `wikipedia` tool fetches clean article summaries or searches for topics. Preferred over `web_search` + `web_fetch` for factual lookups:
+
+```
+You: Tell me about the Apollo 11 mission
+You: Who was Ada Lovelace?
+```
+
+Uses the free Wikipedia REST API — no API key required.
+
+---
+
 ## arXiv Papers
 
 The `arxiv_search` tool searches academic papers:
