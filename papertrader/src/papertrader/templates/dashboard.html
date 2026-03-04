@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Paper Trading</title>
+  <link rel="stylesheet" href="/trading/static/styles.css">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+  <div class="header">
+    <h1>
+      Paper Trading
+      <span class="subtitle">Simulated portfolios with live prices</span>
+    </h1>
+    <div class="header-actions">
+      <button class="theme-toggle" onclick="toggleTheme()">Theme</button>
+    </div>
+  </div>
+
+  <div class="container" id="main">
+    <div class="loading">Loading...</div>
+  </div>
+
+  <script src="/trading/static/app.js"></script>
+</body>
+</html>

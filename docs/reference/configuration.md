@@ -145,6 +145,13 @@ No API key settings — uses the standard AWS credential chain (AWS_PROFILE, ~/.
 | `ASSISTANT_DND_END` | `07:00` | DND end (HH:MM) |
 | `ASSISTANT_DND_ALLOW_URGENT` | `true` | Allow urgent during DND |
 
+## Paper Trading
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `ASSISTANT_PAPER_TRADING_ENABLED` | `false` | Enable paper trading tool |
+| `ASSISTANT_PAPER_TRADING_URL` | `""` | Paper Trading service URL (e.g. `http://localhost:51433`) |
+
 ## Town Square (Feed)
 
 | Variable | Default | Description |

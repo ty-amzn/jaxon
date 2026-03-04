@@ -150,6 +150,10 @@ class Settings(BaseSettings):
     hue_bridge_ip: str = Field(default="", validation_alias="HUE_BRIDGE_IP")
     hue_api_key: str = Field(default="", validation_alias="HUE_API_KEY")
 
+    # Paper Trading
+    paper_trading_enabled: bool = False
+    paper_trading_url: str = ""
+
     # Tool output pagination
     tool_output_cap: int = 15_000
 

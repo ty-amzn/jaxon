@@ -54,6 +54,7 @@ from assistant.tools.feed_tool import (
     _make_manage_feeds,
     _make_post_to_feed,
 )
+from assistant.tools.paper_trading_tool import PAPER_TRADE_DEF, _make_paper_trade
 
 
 def register_orchestrator_tools(
@@ -291,6 +292,15 @@ def create_tool_registry(
             HUE_TOOL_DEF["description"],
             HUE_TOOL_DEF["input_schema"],
             hue_wrapper,
+        )
+
+    # Register paper trading tool if enabled
+    if settings and settings.paper_trading_enabled and settings.paper_trading_url:
+        registry.register(
+            PAPER_TRADE_DEF["name"],
+            PAPER_TRADE_DEF["description"],
+            PAPER_TRADE_DEF["input_schema"],
+            _make_paper_trade(settings.paper_trading_url),
         )
 
     # Register web_search if enabled

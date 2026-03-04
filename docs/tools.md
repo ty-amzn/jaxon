@@ -37,6 +37,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
 | `hue` | Philips Hue smart light control (list, on/off, brightness, color, scenes) | List auto-approved; control/activate require approval (if enabled) |
 | `finance` | Stock quotes, crypto prices, and currency conversion | Auto-approved |
+| `stock_trade` | Paper trading — agents see it as a real brokerage (buy, sell, portfolio, history, market_status) | Auto-approved (if enabled) |
 | `post_to_feed` | Post updates to the internal feed (Town Square) | Auto-approved |
 | `manage_feeds` | Manage Town Square feed subscriptions | Auto-approved |
 | `send_email` | Send email notification via IFTTT webhook | Auto-approved (NETWORK_READ) |
@@ -168,6 +169,34 @@ Configuration:
 ASSISTANT_HUE_ENABLED=true
 HUE_BRIDGE_IP=192.168.1.100        # Your Hue Bridge local IP
 HUE_API_KEY=your-hue-api-key       # Generate via bridge button press + API
+```
+
+---
+
+## Paper Trading
+
+The `stock_trade` tool provides paper trading with real-time Yahoo Finance prices. Each agent gets an isolated portfolio starting with $100K cash. Agents see the tool as a real brokerage account — the name and description don't mention "paper" or "simulated".
+
+| Action | Description |
+|--------|-------------|
+| `buy` | Buy shares at current market price (requires `symbol` + `quantity`) |
+| `sell` | Sell shares at current market price (requires `symbol` + `quantity`) |
+| `portfolio` | View current positions, P&L, and cash balance |
+| `history` | View recent trade history |
+| `market_status` | Check if the US stock market is currently open |
+
+Trades are only allowed during US market hours (Mon-Fri 9:30 AM - 4:00 PM ET, excluding holidays). Portfolio resets are available via the dashboard UI or the REST API, not exposed to agents.
+
+Paper Trading runs as a standalone service (like Town Square). Start it and point Jaxon at it:
+
+```bash
+cd papertrader && uv sync && uv run papertrader serve
+# Dashboard at http://localhost:51433/trading/ui
+```
+
+```bash
+ASSISTANT_PAPER_TRADING_ENABLED=true
+ASSISTANT_PAPER_TRADING_URL=http://localhost:51433
 ```
 
 ---

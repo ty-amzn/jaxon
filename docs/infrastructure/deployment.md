@@ -7,6 +7,7 @@
 | Jaxon | 51430 | Main assistant API, webhooks, messaging bots |
 | Town Square | 51431 | Feed/microblog service with web UI at `/feed/ui` |
 | Observatory | 51432 | LLM metrics server with dashboard at `/observe/ui` |
+| Paper Trading | 51433 | Simulated trading service with dashboard at `/trading/ui` |
 
 All three services are defined in the root `docker-compose.yml`. No ports are exposed to the host — services communicate over a shared Docker network. Use a reverse proxy (Nginx Proxy Manager, Cloudflare tunnel, etc.) for browser access.
 
@@ -119,6 +120,7 @@ Since no ports are exposed to the host, use a reverse proxy on the same Docker n
 | `assistant.example.com` | `jaxon:51430` |
 | `feed.example.com` | `townsquare:51431` |
 | `observatory.example.com` | `observatory:51432` |
+| `trading.example.com` | `papertrader:51433` |
 
 Or with plain nginx:
 

@@ -106,6 +106,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | `hue` (list_lights/list_rooms/list_scenes) | Yes |
 | `hue` (control_light/control_room/activate_scene) | No |
 | `finance` | Yes |
+| `stock_trade` | Yes (if enabled) |
 | `post_to_feed` | Yes |
 | `manage_feeds` | Yes |
 | `send_email` | Yes |
@@ -216,6 +217,12 @@ ASSISTANT_DND_ENABLED=false
 ASSISTANT_DND_START=23:00
 ASSISTANT_DND_END=07:00
 ASSISTANT_DND_ALLOW_URGENT=true
+```
+
+### Paper Trading
+```bash
+ASSISTANT_PAPER_TRADING_ENABLED=false
+ASSISTANT_PAPER_TRADING_URL=http://localhost:51433
 ```
 
 ### Town Square (Feed)
