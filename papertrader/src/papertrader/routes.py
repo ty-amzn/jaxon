@@ -9,7 +9,7 @@ from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
-from papertrader.prices import fetch_price, fetch_prices
+from papertrader.prices import fetch_price, fetch_prices, fetch_savings_apy
 from papertrader.ui import TEMPLATES_DIR
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,17 @@ class TradeRequest(BaseModel):
     quantity: float = Field(..., gt=0)
 
 
+class SavingsRequest(BaseModel):
+    amount: float = Field(..., gt=0)
+
+
+class NoteRequest(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200)
+    content: str = Field(..., min_length=1)
+    category: str = Field("general", pattern="^(research|thesis|watchlist|lesson|general)$")
+    note_id: int | None = None
+
+
 # -- Dashboard UI ------------------------------------------------------------
 
 @trading_router.get("/ui", response_class=HTMLResponse)
@@ -111,8 +122,13 @@ async def list_portfolios(request: Request):
     store = request.app.state.store
     portfolios = store.list_portfolios()
 
+    apy = await fetch_savings_apy()
     enriched = []
     for p in portfolios:
+        store.accrue_interest(p["id"], apy)
+        # Re-read after accrual
+        p = store.get_portfolio(p["agent_name"]) or p
+
         positions = store.get_positions(p["id"])
         positions_value = 0.0
 
@@ -124,7 +140,8 @@ async def list_portfolios(request: Request):
                 if info:
                     positions_value += pos["quantity"] * info["price"]
 
-        total_value = p["current_cash"] + positions_value
+        savings = p.get("savings", 0) or 0
+        total_value = p["current_cash"] + savings + positions_value
         pnl = total_value - p["starting_cash"]
         enriched.append({
             **p,
@@ -145,6 +162,11 @@ async def get_portfolio(agent: str, request: Request):
     portfolio = store.get_portfolio(agent)
     if not portfolio:
         return {"error": f"No portfolio found for agent '{agent}'"}
+
+    # Accrue savings interest so balance is current
+    apy = await fetch_savings_apy()
+    store.accrue_interest(portfolio["id"], apy)
+    portfolio = store.get_portfolio(agent)
 
     positions = store.get_positions(portfolio["id"])
     positions_value = 0.0
@@ -169,7 +191,8 @@ async def get_portfolio(agent: str, request: Request):
                 "pnl_pct": round((pnl / cost_basis) * 100, 2) if cost_basis else 0,
             })
 
-    total_value = portfolio["current_cash"] + positions_value
+    savings = portfolio.get("savings", 0) or 0
+    total_value = portfolio["current_cash"] + savings + positions_value
     pnl = total_value - portfolio["starting_cash"]
 
     # Save snapshot for charting
@@ -260,6 +283,39 @@ async def get_snapshots(agent: str, request: Request, limit: int = 100):
     return {"snapshots": snapshots}
 
 
+# -- Savings ------------------------------------------------------------------
+
+@trading_router.get("/savings-rate")
+async def savings_rate():
+    """Return the current savings APY derived from BIL."""
+    apy = await fetch_savings_apy()
+    return {"apy": apy, "apy_pct": round(apy * 100, 2), "source": "BIL (1-3 Month T-Bill ETF)"}
+
+
+@trading_router.post("/portfolios/{agent}/savings/deposit")
+async def deposit_savings(agent: str, body: SavingsRequest, request: Request):
+    """Deposit cash into savings account."""
+    store = request.app.state.store
+    apy = await fetch_savings_apy()
+    try:
+        result = store.deposit_savings(agent, body.amount, apy)
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
+
+
+@trading_router.post("/portfolios/{agent}/savings/withdraw")
+async def withdraw_savings(agent: str, body: SavingsRequest, request: Request):
+    """Withdraw from savings account to cash."""
+    store = request.app.state.store
+    apy = await fetch_savings_apy()
+    try:
+        result = store.withdraw_savings(agent, body.amount, apy)
+    except ValueError as e:
+        return {"error": str(e)}
+    return result
+
+
 # -- Reset --------------------------------------------------------------------
 
 @trading_router.post("/portfolios/{agent}/reset")
@@ -270,6 +326,63 @@ async def reset_portfolio(agent: str, request: Request):
     if not existed:
         return {"error": f"No portfolio found for agent '{agent}'"}
     return {"status": "reset", "agent": agent}
+
+
+# -- Activity log -------------------------------------------------------------
+
+@trading_router.get("/activity")
+async def get_activity(request: Request, agent: str | None = None, limit: int = 100):
+    """Get activity log, optionally filtered by agent name."""
+    store = request.app.state.store
+    portfolio_id = None
+    if agent:
+        portfolio = store.get_portfolio(agent)
+        if not portfolio:
+            return {"error": f"No portfolio found for agent '{agent}'"}
+        portfolio_id = portfolio["id"]
+
+    events = store.get_activity_log(portfolio_id=portfolio_id, limit=limit)
+    return {"activity": events}
+
+
+# -- Agent Notes --------------------------------------------------------------
+
+@trading_router.get("/portfolios/{agent}/notes")
+async def get_notes(
+    agent: str, request: Request,
+    category: str | None = None, q: str | None = None, limit: int = 50,
+):
+    """List or search notes for an agent."""
+    store = request.app.state.store
+    if q:
+        notes = store.search_notes(agent, q, limit=limit)
+    else:
+        notes = store.get_notes(agent, category=category, limit=limit)
+    return {"notes": notes}
+
+
+@trading_router.post("/portfolios/{agent}/notes")
+async def save_note(agent: str, body: NoteRequest, request: Request):
+    """Create or update a note."""
+    store = request.app.state.store
+    try:
+        note = store.save_note(
+            agent, body.title, body.content,
+            category=body.category, note_id=body.note_id,
+        )
+    except ValueError as e:
+        return {"error": str(e)}
+    return {"note": note}
+
+
+@trading_router.delete("/portfolios/{agent}/notes/{note_id}")
+async def delete_note(agent: str, note_id: int, request: Request):
+    """Delete a note."""
+    store = request.app.state.store
+    deleted = store.delete_note(agent, note_id)
+    if not deleted:
+        return {"error": f"Note {note_id} not found for agent '{agent}'"}
+    return {"status": "deleted", "note_id": note_id}
 
 
 # -- Summary ------------------------------------------------------------------
@@ -285,15 +398,21 @@ async def trading_summary(request: Request):
             "agent_count": 0,
             "total_value": 0,
             "total_cash": 0,
+            "total_savings": 0,
             "total_invested": 0,
             "total_pnl": 0,
         }
 
+    apy = await fetch_savings_apy()
     total_value = 0.0
     total_cash = 0.0
+    total_savings = 0.0
     total_starting = 0.0
 
     for p in portfolios:
+        store.accrue_interest(p["id"], apy)
+        p = store.get_portfolio(p["agent_name"]) or p
+
         positions = store.get_positions(p["id"])
         positions_value = 0.0
         if positions:
@@ -304,8 +423,10 @@ async def trading_summary(request: Request):
                 if info:
                     positions_value += pos["quantity"] * info["price"]
 
-        total_value += p["current_cash"] + positions_value
+        savings = p.get("savings", 0) or 0
+        total_value += p["current_cash"] + savings + positions_value
         total_cash += p["current_cash"]
+        total_savings += savings
         total_starting += p["starting_cash"]
 
     total_pnl = total_value - total_starting
@@ -314,7 +435,8 @@ async def trading_summary(request: Request):
         "agent_count": len(portfolios),
         "total_value": round(total_value, 2),
         "total_cash": round(total_cash, 2),
-        "total_invested": round(total_value - total_cash, 2),
+        "total_savings": round(total_savings, 2),
+        "total_invested": round(total_value - total_cash - total_savings, 2),
         "total_pnl": round(total_pnl, 2),
         "total_pnl_pct": round((total_pnl / total_starting) * 100, 2) if total_starting else 0,
     }

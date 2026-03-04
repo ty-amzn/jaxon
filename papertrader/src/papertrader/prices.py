@@ -3,11 +3,19 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# -- Savings APY cache (module-level) ----------------------------------------
+
+_apy_cache: dict[str, float] = {}
+_apy_cache_time: float = 0.0
+_APY_CACHE_TTL = 3600  # 1 hour
+_APY_FALLBACK = 0.045  # 4.5%
 
 YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
 
@@ -62,6 +70,60 @@ async def fetch_price(symbol: str) -> dict[str, Any]:
         "currency": meta.get("currency", "USD"),
         "name": meta.get("shortName") or meta.get("longName") or symbol,
     }
+
+
+async def fetch_savings_apy() -> float:
+    """Fetch annualized yield from BIL (1-3 Month T-Bill ETF) trailing 1-year return.
+
+    Caches for 1 hour.  Falls back to 4.5% on any error.
+    """
+    global _apy_cache, _apy_cache_time
+
+    now = time.monotonic()
+    if _apy_cache and (now - _apy_cache_time) < _APY_CACHE_TTL:
+        return _apy_cache["apy"]
+
+    try:
+        async with httpx.AsyncClient(
+            timeout=15.0,
+            headers={"User-Agent": _USER_AGENT},
+        ) as client:
+            resp = await client.get(
+                YAHOO_CHART_URL.format(symbol="BIL"),
+                params={"interval": "1d", "range": "1y"},
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        results = data.get("chart", {}).get("result")
+        if not results:
+            raise ValueError("No chart data for BIL")
+
+        closes = results[0].get("indicators", {}).get("adjclose")
+        if closes:
+            adj = closes[0].get("adjclose", [])
+        else:
+            adj = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+
+        # Filter out None values
+        adj = [v for v in adj if v is not None]
+        if len(adj) < 2:
+            raise ValueError("Insufficient BIL price data")
+
+        first, last = adj[0], adj[-1]
+        apy = (last - first) / first  # trailing 1-year return ≈ annualized
+
+        if apy <= 0:
+            apy = _APY_FALLBACK
+
+        _apy_cache = {"apy": round(apy, 6)}
+        _apy_cache_time = now
+        logger.info("Fetched BIL savings APY: %.4f%%", apy * 100)
+        return _apy_cache["apy"]
+
+    except Exception:
+        logger.warning("Failed to fetch BIL APY, using fallback %.1f%%", _APY_FALLBACK * 100)
+        return _APY_FALLBACK
 
 
 async def fetch_prices(symbols: list[str]) -> dict[str, dict[str, Any]]:

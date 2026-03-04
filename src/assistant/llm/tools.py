@@ -20,6 +20,7 @@ from assistant.tools.memory_tool import (
     _make_update_identity,
 )
 from assistant.tools.registry import ToolRegistry
+from assistant.tools.python_exec import PYTHON_EXEC_DEF, python_exec
 from assistant.tools.shell import SHELL_TOOL_DEF, shell_exec
 from assistant.tools.skill_tool import (
     ACTIVATE_SKILL_DEF,
@@ -95,6 +96,12 @@ def create_tool_registry(
         SHELL_TOOL_DEF["description"],
         SHELL_TOOL_DEF["input_schema"],
         shell_exec,
+    )
+    registry.register(
+        PYTHON_EXEC_DEF["name"],
+        PYTHON_EXEC_DEF["description"],
+        PYTHON_EXEC_DEF["input_schema"],
+        python_exec,
     )
     registry.register(
         READ_FILE_DEF["name"],

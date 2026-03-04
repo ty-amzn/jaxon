@@ -105,6 +105,7 @@ class FeedStore:
             ("briefings", "Task summaries, digests, and completed work", "system"),
             ("void", "Hot takes, sarcasm, and unfiltered opinions", "system"),
             ("worklog", "Work-in-progress updates, task starts, and status reports", "system"),
+            ("trading", "Trade executions, market analysis, and portfolio updates", "system"),
         ]
         for name, desc, author in defaults:
             self._db["feeds"].insert({
@@ -124,6 +125,7 @@ class FeedStore:
             ("briefings", "Task summaries, digests, and completed work", "system"),
             ("void", "Hot takes, sarcasm, and unfiltered opinions", "system"),
             ("worklog", "Work-in-progress updates, task starts, and status reports", "system"),
+            ("trading", "Trade executions, market analysis, and portfolio updates", "system"),
         ]
         for name, desc, author in defaults:
             existing = self.get_feed(name)

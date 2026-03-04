@@ -30,6 +30,88 @@ function pnlBadge(n, pct) {
   return `<span class="pnl-badge ${cls}">${sign}${fmtUsd(n)} (${sign}${fmt(pct)}%)</span>`;
 }
 
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+const NOTE_CAT_COLORS = {
+  research: 'cat-research',
+  thesis: 'cat-thesis',
+  watchlist: 'cat-watchlist',
+  lesson: 'cat-lesson',
+  general: 'cat-general',
+};
+
+function renderNotesSection(notes, agent) {
+  if (notes.length === 0) {
+    return '<p style="color:var(--text-secondary);padding:12px 0">No notes yet</p>';
+  }
+  let html = '<div class="notes-list">';
+  for (const n of notes) {
+    const catCls = NOTE_CAT_COLORS[n.category] || 'cat-general';
+    const date = new Date(n.updated_at);
+    const timeStr = date.toLocaleString();
+    html += `
+      <div class="note-card">
+        <div class="note-header">
+          <span class="note-cat ${catCls}">${escapeHtml(n.category)}</span>
+          <button class="note-delete-btn" onclick="deleteNote('${escapeHtml(agent)}', ${n.id})" title="Delete note">&times;</button>
+        </div>
+        <div class="note-title">${escapeHtml(n.title)}</div>
+        <div class="note-content">${escapeHtml(n.content)}</div>
+        <div class="note-meta">Updated ${timeStr}</div>
+      </div>
+    `;
+  }
+  html += '</div>';
+  return html;
+}
+
+function eventTypeClass(type) {
+  if (['buy', 'deposit', 'interest'].includes(type)) return 'pnl-positive';
+  if (['sell', 'withdraw'].includes(type)) return 'pnl-negative';
+  return '';
+}
+
+function renderActivityTable(events) {
+  if (events.length === 0) {
+    return '<p style="color:var(--text-secondary);padding:12px 0">No activity yet</p>';
+  }
+  let html = `
+    <table>
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Agent</th>
+          <th>Event</th>
+          <th>Description</th>
+          <th class="number">Amount</th>
+          <th class="number">Balance After</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+  for (const e of events) {
+    const date = new Date(e.timestamp);
+    const timeStr = date.toLocaleString();
+    const cls = eventTypeClass(e.event_type);
+    html += `
+      <tr>
+        <td>${timeStr}</td>
+        <td>${e.agent_name}</td>
+        <td class="${cls}" style="text-transform:uppercase;font-weight:600">${e.event_type}</td>
+        <td>${e.description}</td>
+        <td class="number">${e.amount != null ? fmtUsd(e.amount) : '—'}</td>
+        <td class="number">${e.balance_after != null ? fmtUsd(e.balance_after) : '—'}</td>
+      </tr>
+    `;
+  }
+  html += '</tbody></table>';
+  return html;
+}
+
 // -- Theme -------------------------------------------------------------------
 
 function initTheme() {
@@ -52,13 +134,16 @@ async function loadOverview() {
   main.innerHTML = '<div class="loading">Loading portfolios...</div>';
 
   try {
-    const [summaryRes, portfoliosRes] = await Promise.all([
+    const [summaryRes, portfoliosRes, activityRes] = await Promise.all([
       fetch(`${API}/trading/summary`),
       fetch(`${API}/trading/portfolios`),
+      fetch(`${API}/trading/activity?limit=20`),
     ]);
     const summary = await summaryRes.json();
     const data = await portfoliosRes.json();
+    const activityData = await activityRes.json();
     const portfolios = data.portfolios || [];
+    const activity = activityData.activity || [];
 
     let html = `
       <div class="summary-row">
@@ -120,6 +205,9 @@ async function loadOverview() {
       html += '</div>';
     }
 
+    html += '<h3 class="section-title">Recent Activity</h3>';
+    html += renderActivityTable(activity);
+
     main.innerHTML = html;
   } catch (err) {
     main.innerHTML = `<div class="empty">Failed to load data: ${err.message}</div>`;
@@ -134,14 +222,16 @@ async function loadAgent(agent) {
   main.innerHTML = '<div class="loading">Loading portfolio...</div>';
 
   try {
-    const [portfolioRes, ordersRes, snapshotsRes] = await Promise.all([
+    const [portfolioRes, activityRes, snapshotsRes, notesRes] = await Promise.all([
       fetch(`${API}/trading/portfolios/${agent}`),
-      fetch(`${API}/trading/portfolios/${agent}/orders`),
+      fetch(`${API}/trading/activity?agent=${encodeURIComponent(agent)}&limit=50`),
       fetch(`${API}/trading/portfolios/${agent}/snapshots`),
+      fetch(`${API}/trading/portfolios/${agent}/notes?limit=50`),
     ]);
     const portfolioData = await portfolioRes.json();
-    const ordersData = await ordersRes.json();
+    const activityData = await activityRes.json();
     const snapshotsData = await snapshotsRes.json();
+    const notesData = await notesRes.json();
 
     if (portfolioData.error) {
       main.innerHTML = `<div class="empty">${portfolioData.error}</div>`;
@@ -150,8 +240,9 @@ async function loadAgent(agent) {
 
     const p = portfolioData.portfolio;
     const positions = portfolioData.positions || [];
-    const orders = ordersData.orders || [];
+    const agentActivity = activityData.activity || [];
     const snapshots = snapshotsData.snapshots || [];
+    const notes = notesData.notes || [];
 
     let html = `
       <div class="detail-panel">
@@ -217,41 +308,11 @@ async function loadAgent(agent) {
       html += '</tbody></table>';
     }
 
-    html += '<h3 class="section-title">Recent Orders</h3>';
-    if (orders.length === 0) {
-      html += '<p style="color:var(--text-secondary);padding:12px 0">No orders yet</p>';
-    } else {
-      html += `
-        <table>
-          <thead>
-            <tr>
-              <th>Time</th>
-              <th>Side</th>
-              <th>Symbol</th>
-              <th class="number">Qty</th>
-              <th class="number">Price</th>
-              <th class="number">Total</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-      for (const o of orders.slice(0, 20)) {
-        const date = new Date(o.executed_at);
-        const timeStr = date.toLocaleString();
-        const sideClass = o.side === 'buy' ? 'pnl-positive' : 'pnl-negative';
-        html += `
-          <tr>
-            <td>${timeStr}</td>
-            <td class="${sideClass}" style="text-transform:uppercase;font-weight:600">${o.side}</td>
-            <td><strong>${o.symbol}</strong></td>
-            <td class="number">${fmt(o.quantity, o.quantity % 1 === 0 ? 0 : 2)}</td>
-            <td class="number">${fmtUsd(o.price)}</td>
-            <td class="number">${fmtUsd(o.total)}</td>
-          </tr>
-        `;
-      }
-      html += '</tbody></table>';
-    }
+    html += '<h3 class="section-title">Activity</h3>';
+    html += renderActivityTable(agentActivity);
+
+    html += '<h3 class="section-title">Notes</h3>';
+    html += renderNotesSection(notes, agent);
 
     html += `
         <div class="chart-container">
@@ -350,6 +411,18 @@ async function resetAgent(agent) {
     loadAgent(agent);
   } catch (err) {
     alert('Reset failed: ' + err.message);
+  }
+}
+
+// -- Delete Note -------------------------------------------------------------
+
+async function deleteNote(agent, noteId) {
+  if (!confirm('Delete this note?')) return;
+  try {
+    await fetch(`${API}/trading/portfolios/${agent}/notes/${noteId}`, {method: 'DELETE'});
+    loadAgent(agent);
+  } catch (err) {
+    alert('Delete failed: ' + err.message);
   }
 }
 

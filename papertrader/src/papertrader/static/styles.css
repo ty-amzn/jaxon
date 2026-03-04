@@ -191,6 +191,38 @@ th.number{text-align:right}
 }
 .chart-container h3{font-size:1rem;font-weight:600;margin-bottom:12px}
 
+/* Notes */
+.notes-list{display:flex;flex-direction:column;gap:12px}
+.note-card{
+  background:var(--bg-secondary);
+  border:1px solid var(--border);
+  border-radius:var(--radius-xs);
+  padding:14px 16px;
+}
+.note-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.note-cat{
+  display:inline-block;padding:2px 8px;border-radius:4px;
+  font-size:.7rem;font-weight:600;text-transform:uppercase;letter-spacing:.04em;
+}
+.cat-research{background:rgba(59,130,246,.15);color:#3b82f6}
+.cat-thesis{background:rgba(168,85,247,.15);color:#a855f7}
+.cat-watchlist{background:rgba(245,158,11,.15);color:#f59e0b}
+.cat-lesson{background:rgba(239,68,68,.15);color:#ef4444}
+.cat-general{background:var(--accent-faint);color:var(--accent)}
+.note-title{font-weight:600;font-size:.95rem;margin-bottom:4px}
+.note-content{
+  color:var(--text-secondary);font-size:.85rem;
+  white-space:pre-wrap;word-break:break-word;
+  margin-bottom:6px;
+}
+.note-meta{color:var(--text-tertiary);font-size:.75rem}
+.note-delete-btn{
+  background:none;border:none;color:var(--text-tertiary);
+  cursor:pointer;font-size:1.1rem;line-height:1;padding:2px 6px;
+  border-radius:4px;
+}
+.note-delete-btn:hover{color:var(--red);background:var(--red-faint)}
+
 /* Section headings */
 .section-title{font-size:1rem;font-weight:600;margin:20px 0 12px;color:var(--text-primary)}
 

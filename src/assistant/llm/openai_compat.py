@@ -27,6 +27,48 @@ from assistant.llm.types import (
 logger = logging.getLogger(__name__)
 
 
+def _collapse_tool_calls(messages: list[dict]) -> list[dict]:
+    """Replace assistant tool_calls + tool results with text summaries.
+
+    Fallback for when a proxy (e.g. Ollama) loses provider-specific fields
+    like Gemini's thoughtSignature, causing the next API call to be rejected.
+    """
+    collapsed: list[dict[str, Any]] = []
+    i = 0
+    while i < len(messages):
+        msg = messages[i]
+        if msg.get("role") == "assistant" and "tool_calls" in msg:
+            parts: list[str] = []
+            if msg.get("content"):
+                parts.append(msg["content"])
+
+            tool_ids = set()
+            for tc in msg["tool_calls"]:
+                func = tc.get("function", {})
+                name = func.get("name", "unknown")
+                args = func.get("arguments", "{}")
+                tc_id = tc.get("id", "")
+                tool_ids.add(tc_id)
+                parts.append(f"[Called tool: {name}({args})]")
+
+            # Collect following tool result messages
+            j = i + 1
+            while j < len(messages) and messages[j].get("role") == "tool":
+                content = messages[j].get("content", "")
+                if len(content) > 2000:
+                    content = content[:2000] + "... (truncated)"
+                parts.append(f"[Tool result: {content}]")
+                j += 1
+
+            collapsed.append({"role": "assistant", "content": "\n".join(parts)})
+            i = j
+        else:
+            collapsed.append(msg)
+            i += 1
+
+    return collapsed
+
+
 class OpenAICompatibleClient(BaseLLMClient):
     """Base client for OpenAI-compatible chat completion APIs."""
 
@@ -190,6 +232,8 @@ class OpenAICompatibleClient(BaseLLMClient):
         total_output_tokens = 0
         last_stop_reason = ""
 
+        thought_sig_retried = False
+
         for _round in range(max_tool_rounds):
             tool_calls_in_round: list[ToolCall] = []
             text_parts: list[str] = []
@@ -213,9 +257,21 @@ class OpenAICompatibleClient(BaseLLMClient):
                 ) as response:
                     if response.status_code != 200:
                         error_text = await response.aread()
+                        error_str = error_text.decode()
+
+                        # Gemini thinking mode: thoughtSignature lost through proxy
+                        if not thought_sig_retried and "thought_signature" in error_str.lower():
+                            logger.warning(
+                                "%s: thought_signature error — collapsing tool call history and retrying",
+                                label,
+                            )
+                            current_messages = _collapse_tool_calls(current_messages)
+                            thought_sig_retried = True
+                            continue
+
                         yield StreamEvent(
                             type=StreamEventType.ERROR,
-                            error=f"{label} API error: {response.status_code} - {error_text.decode()}",
+                            error=f"{label} API error: {response.status_code} - {error_str}",
                             error_code=response.status_code,
                         )
                         return

@@ -106,6 +106,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"Execute: {cmd}",
             )
+        elif tool_name == "python_exec":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.READ,
+                details=tool_input,
+                description=f"Python exec ({tool_input.get('timeout', 30)}s timeout)",
+            )
         elif tool_name == "read_file":
             return PermissionRequest(
                 tool_name=tool_name,
