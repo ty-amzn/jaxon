@@ -7,6 +7,7 @@ The assistant can execute actions through a permission-gated tool system.
 | Tool | Description | Permission |
 |------|-------------|------------|
 | `shell_exec` | Execute shell commands | Read commands auto-approved; writes require approval |
+| `python_exec` | Execute Python code in an isolated temp directory | Auto-approved |
 | `read_file` | Read file contents | Auto-approved |
 | `write_file` | Write/create files | Requires approval |
 | `http_request` | Make HTTP requests | GET auto-approved; others require approval |

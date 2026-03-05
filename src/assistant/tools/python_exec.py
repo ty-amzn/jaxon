@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import shutil
+import sys
 import tempfile
 from typing import Any
 
@@ -25,7 +26,7 @@ async def python_exec(params: dict[str, Any]) -> str:
 
         try:
             proc = await asyncio.create_subprocess_exec(
-                "python3", script_path,
+                sys.executable, script_path,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
                 cwd=tmp_dir,

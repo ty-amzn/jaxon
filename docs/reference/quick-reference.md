@@ -70,6 +70,7 @@ Supports: PNG, JPEG, GIF, WebP (max 10MB)
 | Tool | Auto-approved? |
 |------|-----------------|
 | `shell_exec` (read commands) | Yes |
+| `python_exec` | Yes |
 | `read_file` | Yes |
 | `write_file` | No |
 | `http_request` (GET) | Yes |
