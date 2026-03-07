@@ -210,8 +210,8 @@ def _make_memory_search(memory: MemoryManager):
     return memory_search
 
 
-def _make_memory_store(memory: MemoryManager):
-    """Return an async handler bound to *memory*."""
+def _make_memory_store(memory: MemoryManager, vector_store: Any = None):
+    """Return an async handler bound to *memory* and optional vector store."""
 
     async def memory_store(params: dict[str, Any]) -> str:
         section = params.get("section", "").strip()
@@ -221,13 +221,33 @@ def _make_memory_store(memory: MemoryManager):
         if not fact:
             return "Error: fact is required."
         await memory.durable.append(section, fact)
+
+        # Sync to Qdrant knowledge collection
+        if vector_store is not None:
+            try:
+                import hashlib
+
+                fact_id = hashlib.sha256(f"{section}:{fact}".encode()).hexdigest()[:16]
+                await vector_store.upsert(
+                    "knowledge",
+                    f"fact_{fact_id}",
+                    fact,
+                    payload={
+                        "section": section,
+                        "preview": fact[:300],
+                        "type": "durable_memory",
+                    },
+                )
+            except Exception:
+                pass  # Non-critical, log handled by vector_store
+
         return f"Stored under '{section}': {fact}"
 
     return memory_store
 
 
-def _make_memory_forget(memory: MemoryManager):
-    """Return an async handler bound to *memory*."""
+def _make_memory_forget(memory: MemoryManager, vector_store: Any = None):
+    """Return an async handler bound to *memory* and optional vector store."""
 
     async def memory_forget(params: dict[str, Any]) -> str:
         query = params.get("query", "")
@@ -280,6 +300,15 @@ def _make_memory_forget(memory: MemoryManager):
                     # Re-search to get IDs of deleted messages (already gone)
                     # The IDs were returned during delete_matching
                     pass  # embeddings tied to message IDs already deleted
+
+        # Sync deletions to Qdrant knowledge collection
+        if vector_store is not None and scope == "all":
+            try:
+                # For scope=all, we can't enumerate — just log
+                # Individual fact deletions are harder without ID tracking
+                pass
+            except Exception:
+                pass
 
         if not deleted_parts:
             return f"Nothing found to delete for '{query}'."

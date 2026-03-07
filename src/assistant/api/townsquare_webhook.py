@@ -128,7 +128,7 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
         if agents:
             agent_catalog = [(a.name, a.description) for a in agents]
 
-    system_prompt = build_system_prompt(
+    system_prompt = await build_system_prompt(
         chat_interface._memory, agent_catalog=agent_catalog,
     )
 
@@ -226,7 +226,7 @@ async def _handle_mentioned_agent(
 
     task = "\n".join(task_parts)
 
-    base_system_prompt = build_system_prompt(chat_interface._memory)
+    base_system_prompt = await build_system_prompt(chat_interface._memory)
     auto_perms = PermissionManager(_auto_approve)
     runner = AgentRunner(chat_interface._llm, chat_interface._tool_registry)
 

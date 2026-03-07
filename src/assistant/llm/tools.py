@@ -56,6 +56,7 @@ from assistant.tools.feed_tool import (
     _make_post_to_feed,
 )
 from assistant.tools.paper_trading_tool import PAPER_TRADE_DEF, _make_paper_trade
+from assistant.tools.knowledge_tool import KNOWLEDGE_SEARCH_DEF, _make_knowledge_search
 
 
 def register_orchestrator_tools(
@@ -86,6 +87,7 @@ def create_tool_registry(
     dispatcher: Any | None = None,
     townsquare_url: str | None = None,
     tool_metrics: Any | None = None,
+    vector_store: Any | None = None,
 ) -> ToolRegistry:
     """Create and populate the tool registry with all available tools."""
     output_cap = settings.tool_output_cap if settings else 15_000
@@ -325,6 +327,15 @@ def create_tool_registry(
             web_search_wrapper,
         )
 
+    # Register knowledge_search tool if vector store is available
+    if vector_store is not None:
+        registry.register(
+            KNOWLEDGE_SEARCH_DEF["name"],
+            KNOWLEDGE_SEARCH_DEF["description"],
+            KNOWLEDGE_SEARCH_DEF["input_schema"],
+            _make_knowledge_search(vector_store),
+        )
+
     # Register memory tools (search + store + forget)
     if memory is not None:
         registry.register(
@@ -337,13 +348,13 @@ def create_tool_registry(
             MEMORY_STORE_DEF["name"],
             MEMORY_STORE_DEF["description"],
             MEMORY_STORE_DEF["input_schema"],
-            _make_memory_store(memory),
+            _make_memory_store(memory, vector_store=vector_store),
         )
         registry.register(
             MEMORY_FORGET_DEF["name"],
             MEMORY_FORGET_DEF["description"],
             MEMORY_FORGET_DEF["input_schema"],
-            _make_memory_forget(memory),
+            _make_memory_forget(memory, vector_store=vector_store),
         )
         registry.register(
             UPDATE_IDENTITY_DEF["name"],

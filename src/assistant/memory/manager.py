@@ -31,6 +31,7 @@ class MemoryManager:
         embedding_model: str = "nomic-embed-text",
         vector_search_enabled: bool = False,
         timezone: str = "UTC",
+        vector_store: Any = None,
     ) -> None:
         self.identity = IdentityLoader(identity_path)
         self._rules_path = identity_path.parent / "RULES.md"
@@ -40,6 +41,9 @@ class MemoryManager:
         self.skills = SkillLoader(skills_dir) if skills_dir else None
 
         self._timezone = timezone
+
+        # Qdrant vector store (optional)
+        self._vector_store = vector_store
 
         # Plugin skills (injected at runtime)
         self._plugin_skills: dict[str, str] = {}
@@ -55,11 +59,12 @@ class MemoryManager:
             )
             logger.info(f"Vector search enabled with model: {embedding_model}")
 
-    def get_system_prompt(
+    async def get_system_prompt(
         self,
         skill_names: list[str] | None = None,
         include_identity: bool = True,
         agent_catalog: list[tuple[str, str]] | None = None,
+        user_message: str = "",
     ) -> str:
         """Assemble system prompt from identity, durable memory, skills, and today's log.
 
@@ -124,6 +129,27 @@ class MemoryManager:
         recent = self.daily_log.read_recent()
         if recent:
             parts.append(f"# Recent Context\n{recent}")
+
+        # Add semantic context from Qdrant if available
+        if user_message and self._vector_store:
+            try:
+                hits = await self._vector_store.search(
+                    "conversations", user_message, limit=5
+                )
+                if hits:
+                    block = "## Relevant Past Context\n\n"
+                    for h in hits:
+                        payload = h.get("payload", {})
+                        created = payload.get("created_at", "")
+                        preview = payload.get("preview", "")
+                        role = payload.get("role", "")
+                        prefix = f"[{created}]" if created else ""
+                        if role:
+                            prefix += f" ({role})"
+                        block += f"- {prefix} {preview}\n"
+                    parts.append(block)
+            except Exception as e:
+                logger.warning("Failed to retrieve semantic context: %s", e)
 
         return "\n\n---\n\n".join(parts)
 

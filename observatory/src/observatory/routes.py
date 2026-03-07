@@ -180,9 +180,14 @@ async def get_event_raw(request: Request, event_id: int):
 # -- Statistics --------------------------------------------------------------
 
 @observe_router.get("/stats")
-async def get_stats(request: Request, period_hours: int = 24):
+async def get_stats(
+    request: Request,
+    period_hours: int = 24,
+    provider: str | None = None,
+    model: str | None = None,
+):
     store = request.app.state.observe_store
-    stats = store.get_stats(period_hours=period_hours)
+    stats = store.get_stats(period_hours=period_hours, provider=provider, model=model)
     return stats
 
 

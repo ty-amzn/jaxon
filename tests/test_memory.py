@@ -80,13 +80,13 @@ def test_search_index(tmp_data_dir: Path):
     assert len(results) >= 1
 
 
-def test_memory_manager_system_prompt(tmp_data_dir: Path):
+async def test_memory_manager_system_prompt(tmp_data_dir: Path):
     mm = MemoryManager(
         identity_path=tmp_data_dir / "memory" / "IDENTITY.md",
         memory_path=tmp_data_dir / "memory" / "MEMORY.md",
         daily_log_dir=tmp_data_dir / "memory" / "daily",
         search_db_path=tmp_data_dir / "db" / "search.db",
     )
-    prompt = mm.get_system_prompt()
+    prompt = await mm.get_system_prompt()
     assert "Test Identity" in prompt
     assert "Durable Memory" in prompt

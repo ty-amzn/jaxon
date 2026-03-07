@@ -76,7 +76,7 @@ class Orchestrator:
         _delegation_depth_var.set(depth + 1)
         prev_agent = current_agent_name.set(agent.name)
         try:
-            base_prompt = self._memory.get_system_prompt(
+            base_prompt = await self._memory.get_system_prompt(
                 skill_names=agent.allowed_skills,
                 include_identity=False,
             )
@@ -263,7 +263,7 @@ class Orchestrator:
                     await bt._deliver(f"Something went wrong — agent '{agent_name}' not found.")
                 return
 
-            base_prompt = self._memory.get_system_prompt(
+            base_prompt = await self._memory.get_system_prompt(
                 skill_names=agent.allowed_skills,
                 include_identity=False,
             )

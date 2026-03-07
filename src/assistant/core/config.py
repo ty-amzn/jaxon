@@ -72,6 +72,11 @@ class Settings(BaseSettings):
     vector_search_enabled: bool = False
     embedding_model: str = "nomic-embed-text"
 
+    # Qdrant Vector DB
+    qdrant_enabled: bool = False
+    qdrant_url: str = "http://localhost:6333"
+    embedding_provider: str = "ollama"  # "ollama" | "openai"
+
     # Vision — override auto-detection for the main model (True/False/None=auto)
     vision: bool | None = None
 

@@ -7,6 +7,7 @@ dist/
 build/
 .env
 data/
+qdrant_data/
 .mypy_cache/
 .pytest_cache/
 .ruff_cache/

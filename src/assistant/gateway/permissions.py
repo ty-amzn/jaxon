@@ -136,6 +136,13 @@ class PermissionManager:
                 details=tool_input,
                 description=f"{method} {tool_input.get('url', '')}",
             )
+        elif tool_name == "knowledge_search":
+            return PermissionRequest(
+                tool_name=tool_name,
+                action_category=ActionCategory.READ,
+                details=tool_input,
+                description=f"Knowledge search: {tool_input.get('query', '')}",
+            )
         elif tool_name == "memory_search":
             return PermissionRequest(
                 tool_name=tool_name,

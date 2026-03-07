@@ -181,81 +181,94 @@ class ObservatoryStore:
     # Statistics
     # ------------------------------------------------------------------
 
-    def get_stats(self, period_hours: int = 24) -> dict:
-        """Return aggregate statistics for the given period."""
+    def get_stats(
+        self,
+        period_hours: int = 24,
+        provider: str | None = None,
+        model: str | None = None,
+    ) -> dict:
+        """Return aggregate statistics for the given period, optionally filtered."""
         from datetime import timedelta
 
         cutoff_str = (datetime.now(timezone.utc) - timedelta(hours=period_hours)).isoformat()
 
+        # Build WHERE clause with optional provider/model filters
+        where = "WHERE timestamp >= ?"
+        params: list = [cutoff_str]
+        if provider:
+            where += " AND provider = ?"
+            params.append(provider)
+        if model:
+            where += " AND model = ?"
+            params.append(model)
+
         # Total calls
         total_row = self._db.execute(
-            "SELECT COUNT(*) FROM inference_events WHERE timestamp >= ?",
-            [cutoff_str],
+            f"SELECT COUNT(*) FROM inference_events {where}", params,
         ).fetchone()
         total_calls = total_row[0] if total_row else 0
 
         # Error rate
         error_row = self._db.execute(
-            "SELECT COUNT(*) FROM inference_events WHERE timestamp >= ? AND success = 0",
-            [cutoff_str],
+            f"SELECT COUNT(*) FROM inference_events {where} AND success = 0", params,
         ).fetchone()
         error_count = error_row[0] if error_row else 0
         error_rate = (error_count / total_calls * 100) if total_calls > 0 else 0
 
         # Average latency
         avg_row = self._db.execute(
-            "SELECT AVG(duration_ms) FROM inference_events WHERE timestamp >= ?",
-            [cutoff_str],
+            f"SELECT AVG(duration_ms) FROM inference_events {where}", params,
         ).fetchone()
         avg_latency_ms = round(avg_row[0]) if avg_row and avg_row[0] else 0
 
-        # Calls by provider
+        # Calls by provider (unfiltered by provider/model for dropdown population)
+        cutoff_only = [cutoff_str]
         provider_rows = self._db.execute(
             "SELECT provider, COUNT(*) as count FROM inference_events WHERE timestamp >= ? GROUP BY provider",
-            [cutoff_str],
+            cutoff_only,
         ).fetchall()
         calls_by_provider = {row[0]: row[1] for row in provider_rows}
 
-        # Calls by model
+        # Calls by model (unfiltered for dropdown population)
         model_rows = self._db.execute(
             "SELECT model, COUNT(*) as count FROM inference_events WHERE timestamp >= ? GROUP BY model",
-            [cutoff_str],
+            cutoff_only,
         ).fetchall()
         calls_by_model = {row[0]: row[1] for row in model_rows}
 
-        # Calls per hour (timeline)
+        # Calls per hour (timeline) — filtered
         hourly_rows = self._db.execute(
-            "SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour, COUNT(*) as count "
-            "FROM inference_events WHERE timestamp >= ? GROUP BY hour ORDER BY hour",
-            [cutoff_str],
+            f"SELECT strftime('%Y-%m-%d %H:00', timestamp) as hour, COUNT(*) as count "
+            f"FROM inference_events {where} GROUP BY hour ORDER BY hour",
+            params,
         ).fetchall()
         calls_per_hour = [{"hour": row[0], "count": row[1]} for row in hourly_rows]
 
-        # Total tokens
+        # Total tokens — filtered
         token_row = self._db.execute(
-            "SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
-            "FROM inference_events WHERE timestamp >= ?",
-            [cutoff_str],
+            f"SELECT COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
+            f"FROM inference_events {where}",
+            params,
         ).fetchone()
         total_input_tokens = token_row[0] if token_row else 0
         total_output_tokens = token_row[1] if token_row else 0
 
-        # Tokens by model
+        # Tokens by model — filtered
         tokens_by_model_rows = self._db.execute(
-            "SELECT model, COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
-            "FROM inference_events WHERE timestamp >= ? GROUP BY model",
-            [cutoff_str],
+            f"SELECT model, COALESCE(SUM(input_tokens), 0), COALESCE(SUM(output_tokens), 0) "
+            f"FROM inference_events {where} GROUP BY model",
+            params,
         ).fetchall()
         tokens_by_model = {
             row[0]: {"input": row[1], "output": row[2]}
             for row in tokens_by_model_rows
         }
 
-        # Calls by agent
+        # Calls by agent (unfiltered for dropdown population)
         agent_rows = self._db.execute(
             "SELECT COALESCE(agent_name, 'jax') as agent, COUNT(*) as count "
             "FROM inference_events WHERE timestamp >= ? GROUP BY agent",
-            [cutoff_str],
+            cutoff_only,
         ).fetchall()
         calls_by_agent = {row[0]: row[1] for row in agent_rows}
 

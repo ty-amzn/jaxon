@@ -63,6 +63,26 @@ class SearchIndex:
         self._db.execute(f"DELETE FROM messages WHERE id IN ({placeholders})", ids)
         return len(ids)
 
+    def get_messages_after(self, after_id: int, limit: int = 500) -> list[dict]:
+        """Return messages with id > after_id for incremental embedding sync."""
+        rows = list(
+            self._db.execute(
+                "SELECT id, timestamp, role, content, session_id "
+                "FROM messages WHERE id > ? ORDER BY id LIMIT ?",
+                [after_id, limit],
+            ).fetchall()
+        )
+        return [
+            {
+                "id": r[0],
+                "timestamp": r[1],
+                "role": r[2],
+                "content": r[3],
+                "session_id": r[4],
+            }
+            for r in rows
+        ]
+
     def clear_all(self) -> None:
         """Remove all rows from the messages table."""
         self._db.execute("DELETE FROM messages")

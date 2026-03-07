@@ -74,11 +74,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     )
     app.state.dispatcher = dispatcher
 
+    # Initialize Qdrant vector store if enabled
+    vector_store = None
+    embedding_worker_task = None
+    if settings.qdrant_enabled:
+        from assistant.memory.embedding_providers import create_embedder
+        from assistant.memory.vector_store import VectorStore
+
+        embedder = create_embedder(settings)
+        vector_store = VectorStore(settings, embedder)
+        app.state.vector_store = vector_store
+        logger.info("Qdrant vector store initialized (%s)", settings.qdrant_url)
+
     # Create ChatInterface for headless use (Telegram, scheduler)
     from assistant.cli.chat import ChatInterface
 
-    chat_interface = ChatInterface(settings)
+    chat_interface = ChatInterface(settings, vector_store=vector_store)
     app.state.chat_interface = chat_interface
+
+    # Start embedding worker if Qdrant is enabled
+    if settings.qdrant_enabled and vector_store is not None:
+        import asyncio
+        from assistant.memory.embedding_worker import EmbeddingWorker
+
+        worker = EmbeddingWorker(vector_store, chat_interface._memory.search)
+        embedding_worker_task = asyncio.create_task(worker.run())
+        logger.info("Embedding worker started")
 
     # Wire send_notification tool into the chat interface's registry
     from assistant.tools.notification_tool import SEND_NOTIFICATION_DEF, _make_send_notification
@@ -292,6 +313,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     # Shutdown
+    if embedding_worker_task:
+        embedding_worker_task.cancel()
+        try:
+            await embedding_worker_task
+        except Exception:
+            pass
+    if vector_store:
+        vector_store.close()
+
     if slack_bot:
         await slack_bot.stop()
     if whatsapp_bot:

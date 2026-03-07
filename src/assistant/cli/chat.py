@@ -38,7 +38,7 @@ logger = logging.getLogger(__name__)
 class ChatInterface:
     """Interactive CLI chat with streaming markdown rendering."""
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, vector_store: Any = None) -> None:
         self._settings = settings
         self._console = Console()
 
@@ -58,6 +58,7 @@ class ChatInterface:
             embedding_model=settings.embedding_model,
             vector_search_enabled=settings.vector_search_enabled,
             timezone=settings.scheduler_timezone,
+            vector_store=vector_store,
         )
 
         # Audit
@@ -78,6 +79,7 @@ class ChatInterface:
         self._tool_registry = create_tool_registry(
             self._permissions, self._audit, settings, self._memory,
             tool_metrics=self._tool_metrics_client,
+            vector_store=vector_store,
         )
 
         # LLM client (router between Ollama and Claude)
@@ -299,7 +301,7 @@ class ChatInterface:
                 images_token = current_images.set(None)
             session.clear_tool_calls()
 
-            system_prompt = build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
+            system_prompt = await build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
             messages = build_messages(
                 session.get_context_messages(self._settings.max_context_messages),
             )
@@ -326,7 +328,7 @@ class ChatInterface:
                         tools=self._tool_registry.definitions,
                         tool_executor=headless_tool_executor,
                         max_tool_rounds=self._settings.max_tool_rounds,
-                        session_id=uuid.uuid4().hex[:12],
+                        session_id=session.id,
                     ):
                         if event.type == StreamEventType.TEXT_DELTA:
                             full_response += event.text
@@ -519,7 +521,7 @@ class ChatInterface:
             images_token = current_images.set(None)
         session.clear_tool_calls()
 
-        system_prompt = build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
+        system_prompt = await build_system_prompt(self._memory, agent_catalog=self._get_agent_catalog())
         messages = build_messages(
             session.get_context_messages(self._settings.max_context_messages),
         )

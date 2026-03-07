@@ -29,7 +29,7 @@ MANIFEST_JSON = json.dumps(
 )
 
 SERVICE_WORKER_JS = """\
-const CACHE='observatory-v2';
+const CACHE='observatory-v3';
 const SHELL=['/observe/ui','/observe/icon-192.svg'];
 const API_RE=/\\/observe\\/(events|stats|tool-events|tool-stats|sessions|agent-summary)/;
 
@@ -430,6 +430,10 @@ DASHBOARD_HTML = """\
 
     <!-- ================= OVERVIEW TAB ================= -->
     <div class="tab-panel active" id="tab-overview">
+      <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">
+        <select id="overview-filter-provider" class="filter-input"><option value="">All Providers</option></select>
+        <select id="overview-filter-model" class="filter-input"><option value="">All Models</option></select>
+      </div>
       <div class="stats-grid" id="stats-grid">
         <div class="stat-card">
           <div class="stat-label">Total Calls</div>
@@ -680,7 +684,14 @@ DASHBOARD_HTML = """\
     const chartBucketSelect = document.getElementById('chart-bucket');
     const chartRangeLabel = document.getElementById('chart-range');
 
-    async function fetchStats() { return (await fetch('/observe/stats?period_hours=' + currentPeriod)).json(); }
+    const overviewProvider = document.getElementById('overview-filter-provider');
+    const overviewModel = document.getElementById('overview-filter-model');
+    async function fetchStats() {
+      let u = '/observe/stats?period_hours=' + currentPeriod;
+      if (overviewProvider.value) u += '&provider=' + overviewProvider.value;
+      if (overviewModel.value) u += '&model=' + encodeURIComponent(overviewModel.value);
+      return (await fetch(u)).json();
+    }
     async function fetchEvents(beforeId) {
       let u = '/observe/events?limit=50';
       if (beforeId) u += '&before_id=' + beforeId;
@@ -797,15 +808,32 @@ DASHBOARD_HTML = """\
       aSel.value = av;
     }
 
+    function updateOverviewFilters(s) {
+      // Populate overview provider/model dropdowns from stats (unfiltered values)
+      const pv = overviewProvider.value, mv = overviewModel.value;
+      overviewProvider.innerHTML = '<option value="">All Providers</option>';
+      Object.keys(s.calls_by_provider||{}).sort().forEach(p => {
+        overviewProvider.innerHTML += '<option value="'+p+'">'+p+' ('+s.calls_by_provider[p]+')</option>';
+      });
+      overviewProvider.value = pv;
+      overviewModel.innerHTML = '<option value="">All Models</option>';
+      Object.keys(s.calls_by_model||{}).sort().forEach(m => {
+        overviewModel.innerHTML += '<option value="'+m+'">'+m+' ('+s.calls_by_model[m]+')</option>';
+      });
+      overviewModel.value = mv;
+    }
     async function refreshOverview() {
       const s = await fetchStats();
       updateStats(s);
       updateProviderChart(s);
+      updateOverviewFilters(s);
       updateFilters(s);
       refreshTimeline();
       lastEventId = null;
       renderEvents(await fetchEvents());
     }
+    overviewProvider.addEventListener('change', refreshOverview);
+    overviewModel.addEventListener('change', refreshOverview);
 
     filterProvider.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });
     filterModel.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });

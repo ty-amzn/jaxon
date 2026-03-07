@@ -288,7 +288,7 @@ class TestPermissionManagerPluginCategory:
 
 
 class TestMemoryManagerPluginSkills:
-    def test_add_remove_plugin_skill(self, tmp_data_dir: Path):
+    async def test_add_remove_plugin_skill(self, tmp_data_dir: Path):
         from assistant.memory.manager import MemoryManager
 
         mm = MemoryManager(
@@ -299,10 +299,10 @@ class TestMemoryManagerPluginSkills:
         )
 
         mm.add_plugin_skill("test_skill", "Test skill content")
-        prompt = mm.get_system_prompt()
+        prompt = await mm.get_system_prompt()
         assert "test_skill" in prompt
         assert "Test skill content" in prompt
 
         mm.remove_plugin_skill("test_skill")
-        prompt2 = mm.get_system_prompt()
+        prompt2 = await mm.get_system_prompt()
         assert "test_skill" not in prompt2

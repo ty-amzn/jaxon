@@ -6,12 +6,15 @@ from assistant.llm.types import Message
 from assistant.memory.manager import MemoryManager
 
 
-def build_system_prompt(
+async def build_system_prompt(
     memory: MemoryManager,
     agent_catalog: list[tuple[str, str]] | None = None,
+    user_message: str = "",
 ) -> str:
     """Build the system prompt from all memory sources."""
-    return memory.get_system_prompt(agent_catalog=agent_catalog)
+    return await memory.get_system_prompt(
+        agent_catalog=agent_catalog, user_message=user_message
+    )
 
 
 def build_messages(
