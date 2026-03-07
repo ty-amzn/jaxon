@@ -3,6 +3,8 @@
 const API = '';  // same origin
 let refreshTimer = null;
 let currentAgent = null;
+let currentTab = 'overview';
+let currentDetailTab = 'positions';
 let perfChart = null;
 
 // -- Helpers -----------------------------------------------------------------
@@ -126,6 +128,101 @@ function toggleTheme() {
   localStorage.setItem('pt-theme', next);
 }
 
+// -- Tab navigation ----------------------------------------------------------
+
+function switchTab(tab) {
+  currentTab = tab;
+  currentAgent = null;
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  const tabEl = document.getElementById('tab-' + tab);
+  if (tabEl) tabEl.classList.add('active');
+
+  if (tab === 'leaderboard') {
+    loadLeaderboard();
+  } else {
+    loadOverview();
+  }
+}
+
+function updateActiveTab(tab) {
+  document.querySelectorAll('.nav-tab').forEach(el => el.classList.remove('active'));
+  const tabEl = document.getElementById('tab-' + tab);
+  if (tabEl) tabEl.classList.add('active');
+}
+
+// -- Leaderboard -------------------------------------------------------------
+
+async function loadLeaderboard() {
+  currentAgent = null;
+  currentTab = 'leaderboard';
+  updateActiveTab('leaderboard');
+  const main = document.getElementById('main');
+  main.innerHTML = '<div class="loading">Loading leaderboard...</div>';
+
+  try {
+    const res = await fetch(`${API}/trading/leaderboard`);
+    const data = await res.json();
+    const entries = data.leaderboard || [];
+
+    if (entries.length === 0) {
+      main.innerHTML = `
+        <div class="empty">
+          No agents yet
+          <div class="hint">Agents will appear on the leaderboard once they have a portfolio</div>
+        </div>
+      `;
+      return;
+    }
+
+    let html = '<div class="detail-panel"><h2 class="section-title" style="margin-top:0">Agent Leaderboard</h2>';
+    html += `
+      <table class="leaderboard-table">
+        <thead>
+          <tr>
+            <th>Rank</th>
+            <th>Agent</th>
+            <th class="number">Total Value</th>
+            <th class="number">P&L</th>
+            <th class="number">Return</th>
+            <th class="number">Positions</th>
+            <th class="number">Trades</th>
+            <th class="number">Cash</th>
+          </tr>
+        </thead>
+        <tbody>
+    `;
+
+    for (const e of entries) {
+      const rankCls = e.rank <= 3 ? `rank-${e.rank}` : 'rank-other';
+      const pnlCls = pnlClass(e.pnl);
+      const sign = e.pnl >= 0 ? '+' : '';
+      html += `
+        <tr onclick="loadAgentFromLeaderboard('${escapeHtml(e.agent_name)}')">
+          <td><span class="rank-badge ${rankCls}">${e.rank}</span></td>
+          <td class="agent-name-cell">${escapeHtml(e.agent_name)}</td>
+          <td class="number">${fmtUsd(e.total_value)}</td>
+          <td class="number ${pnlCls}">${fmtUsd(e.pnl)}</td>
+          <td class="number ${pnlCls}">${sign}${fmt(e.pnl_pct)}%</td>
+          <td class="number">${e.position_count}</td>
+          <td class="number">${e.trade_count}</td>
+          <td class="number">${fmtUsd(e.cash)}</td>
+        </tr>
+      `;
+    }
+
+    html += '</tbody></table></div>';
+    main.innerHTML = html;
+  } catch (err) {
+    main.innerHTML = `<div class="empty">Failed to load leaderboard: ${err.message}</div>`;
+  }
+}
+
+function loadAgentFromLeaderboard(agent) {
+  currentTab = 'overview';
+  updateActiveTab('overview');
+  loadAgent(agent);
+}
+
 // -- Overview ----------------------------------------------------------------
 
 async function loadOverview() {
@@ -244,6 +341,40 @@ async function loadAgent(agent) {
     const snapshots = snapshotsData.snapshots || [];
     const notes = notesData.notes || [];
 
+    // Build positions HTML
+    let positionsHtml = '';
+    if (positions.length === 0) {
+      positionsHtml = '<p style="color:var(--text-secondary);padding:12px 0">No open positions</p>';
+    } else {
+      positionsHtml = `
+        <table>
+          <thead>
+            <tr>
+              <th>Symbol</th>
+              <th class="number">Qty</th>
+              <th class="number">Avg Cost</th>
+              <th class="number">Price</th>
+              <th class="number">Value</th>
+              <th class="number">P&L</th>
+            </tr>
+          </thead>
+          <tbody>
+      `;
+      for (const pos of positions) {
+        positionsHtml += `
+          <tr>
+            <td><strong>${pos.symbol}</strong></td>
+            <td class="number">${fmt(pos.quantity, pos.quantity % 1 === 0 ? 0 : 2)}</td>
+            <td class="number">${fmtUsd(pos.avg_cost)}</td>
+            <td class="number">${fmtUsd(pos.current_price)}</td>
+            <td class="number">${fmtUsd(pos.market_value)}</td>
+            <td class="number ${pnlClass(pos.pnl)}">${fmtUsd(pos.pnl)} (${pos.pnl >= 0 ? '+' : ''}${fmt(pos.pnl_pct)}%)</td>
+          </tr>
+        `;
+      }
+      positionsHtml += '</tbody></table>';
+    }
+
     let html = `
       <div class="detail-panel">
         <div class="detail-header">
@@ -264,6 +395,10 @@ async function loadAgent(agent) {
             <div class="value">${fmtUsd(p.current_cash)}</div>
           </div>
           <div class="summary-card">
+            <div class="label">Savings</div>
+            <div class="value">${fmtUsd(p.savings || 0)}</div>
+          </div>
+          <div class="summary-card">
             <div class="label">Invested</div>
             <div class="value">${fmtUsd(p.positions_value)}</div>
           </div>
@@ -273,51 +408,24 @@ async function loadAgent(agent) {
           </div>
         </div>
 
-        <h3 class="section-title">Positions</h3>
-    `;
+        <div class="chart-container compact">
+          <canvas id="perfChart" height="120"></canvas>
+        </div>
 
-    if (positions.length === 0) {
-      html += '<p style="color:var(--text-secondary);padding:12px 0">No open positions</p>';
-    } else {
-      html += `
-        <table>
-          <thead>
-            <tr>
-              <th>Symbol</th>
-              <th class="number">Qty</th>
-              <th class="number">Avg Cost</th>
-              <th class="number">Price</th>
-              <th class="number">Value</th>
-              <th class="number">P&L</th>
-            </tr>
-          </thead>
-          <tbody>
-      `;
-      for (const pos of positions) {
-        html += `
-          <tr>
-            <td><strong>${pos.symbol}</strong></td>
-            <td class="number">${fmt(pos.quantity, pos.quantity % 1 === 0 ? 0 : 2)}</td>
-            <td class="number">${fmtUsd(pos.avg_cost)}</td>
-            <td class="number">${fmtUsd(pos.current_price)}</td>
-            <td class="number">${fmtUsd(pos.market_value)}</td>
-            <td class="number ${pnlClass(pos.pnl)}">${fmtUsd(pos.pnl)} (${pos.pnl >= 0 ? '+' : ''}${fmt(pos.pnl_pct)}%)</td>
-          </tr>
-        `;
-      }
-      html += '</tbody></table>';
-    }
+        <div class="detail-tabs">
+          <button class="detail-tab${currentDetailTab === 'positions' ? ' active' : ''}" onclick="showDetailTab('positions')">Positions (${positions.length})</button>
+          <button class="detail-tab${currentDetailTab === 'activity' ? ' active' : ''}" onclick="showDetailTab('activity')">Activity (${agentActivity.length})</button>
+          <button class="detail-tab${currentDetailTab === 'notes' ? ' active' : ''}" onclick="showDetailTab('notes')">Notes (${notes.length})</button>
+        </div>
 
-    html += '<h3 class="section-title">Activity</h3>';
-    html += renderActivityTable(agentActivity);
-
-    html += '<h3 class="section-title">Notes</h3>';
-    html += renderNotesSection(notes, agent);
-
-    html += `
-        <div class="chart-container">
-          <h3>Performance</h3>
-          <canvas id="perfChart" height="200"></canvas>
+        <div class="detail-tab-content${currentDetailTab === 'positions' ? ' active' : ''}" id="dtab-positions">
+          ${positionsHtml}
+        </div>
+        <div class="detail-tab-content${currentDetailTab === 'activity' ? ' active' : ''}" id="dtab-activity">
+          ${renderActivityTable(agentActivity)}
+        </div>
+        <div class="detail-tab-content${currentDetailTab === 'notes' ? ' active' : ''}" id="dtab-notes">
+          ${renderNotesSection(notes, agent)}
         </div>
       </div>
     `;
@@ -331,6 +439,21 @@ async function loadAgent(agent) {
   } catch (err) {
     main.innerHTML = `<div class="empty">Failed to load agent: ${err.message}</div>`;
   }
+}
+
+// -- Detail sub-tabs ---------------------------------------------------------
+
+function showDetailTab(tab) {
+  currentDetailTab = tab;
+  document.querySelectorAll('.detail-tab').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.detail-tab-content').forEach(el => el.classList.remove('active'));
+  // Activate the clicked tab button
+  const buttons = document.querySelectorAll('.detail-tab');
+  buttons.forEach(btn => {
+    if (btn.textContent.toLowerCase().startsWith(tab)) btn.classList.add('active');
+  });
+  const content = document.getElementById('dtab-' + tab);
+  if (content) content.classList.add('active');
 }
 
 // -- Chart -------------------------------------------------------------------
@@ -433,6 +556,8 @@ function startAutoRefresh() {
   refreshTimer = setInterval(() => {
     if (currentAgent) {
       loadAgent(currentAgent);
+    } else if (currentTab === 'leaderboard') {
+      loadLeaderboard();
     } else {
       loadOverview();
     }

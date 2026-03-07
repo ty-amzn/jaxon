@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import time
+
+import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 from pydantic import BaseModel, Field
@@ -9,6 +12,53 @@ from pydantic import BaseModel, Field
 from observatory.ui import APP_ICON_SVG, DASHBOARD_HTML, MANIFEST_JSON, SERVICE_WORKER_JS
 
 observe_router = APIRouter(prefix="/observe", tags=["observe"])
+
+
+@observe_router.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "observatory"}
+
+
+async def _ping(client: httpx.AsyncClient, url: str) -> dict:
+    """Ping a service health endpoint, return status and latency."""
+    if not url:
+        return {"status": "not_configured"}
+    try:
+        start = time.monotonic()
+        resp = await client.get(url)
+        latency_ms = round((time.monotonic() - start) * 1000)
+        if resp.status_code == 200:
+            return {"status": "ok", "latency_ms": latency_ms}
+        return {"status": "error", "http_status": resp.status_code, "latency_ms": latency_ms}
+    except httpx.ConnectError:
+        return {"status": "unreachable"}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)}
+
+
+@observe_router.get("/health/deep")
+async def deep_health(request: Request):
+    """Aggregate health across all services."""
+    settings = request.app.state.settings
+    service_urls = {
+        "observatory": "",  # self — always ok
+        "jaxon": f"{settings.jaxon_url}/health" if settings.jaxon_url else "",
+        "townsquare": f"{settings.townsquare_url}/feed/health" if settings.townsquare_url else "",
+        "papertrader": f"{settings.papertrader_url}/trading/health" if settings.papertrader_url else "",
+    }
+
+    results = {"observatory": {"status": "ok"}}
+    async with httpx.AsyncClient(timeout=5) as client:
+        for name, url in service_urls.items():
+            if name == "observatory":
+                continue
+            results[name] = await _ping(client, url)
+
+    all_ok = all(r["status"] in ("ok", "not_configured") for r in results.values())
+    return {
+        "status": "ok" if all_ok else "degraded",
+        "services": results,
+    }
 
 
 class ToolEventBody(BaseModel):

@@ -16,6 +16,11 @@ logger = logging.getLogger(__name__)
 feed_router = APIRouter(prefix="/feed", tags=["feed"])
 
 
+@feed_router.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "townsquare"}
+
+
 class CreatePostBody(BaseModel):
     content: str = Field(..., min_length=1, max_length=2000)
     reply_to: int | None = None
@@ -224,6 +229,24 @@ async def get_posts(
                 feeds_cache[f["id"]] = f["name"]
         p["feed_name"] = feeds_cache.get(fid) if fid else None
     return posts
+
+
+@feed_router.post("/posts/{post_id}/pin")
+async def pin_post(request: Request, post_id: int):
+    store = request.app.state.feed_store
+    post = store.pin_post(post_id)
+    if post is None:
+        return {"error": "Post not found or is a reply (only root posts can be pinned)."}
+    return {"ok": True, "pinned": True}
+
+
+@feed_router.post("/posts/{post_id}/unpin")
+async def unpin_post(request: Request, post_id: int):
+    store = request.app.state.feed_store
+    post = store.unpin_post(post_id)
+    if post is None:
+        return {"error": "Post not found."}
+    return {"ok": True, "pinned": False}
 
 
 @feed_router.patch("/posts/{post_id}")

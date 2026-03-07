@@ -189,7 +189,29 @@ th.number{text-align:right}
   border:1px solid var(--border);
   border-radius:var(--radius-sm);
 }
+.chart-container.compact{margin-top:0;margin-bottom:0}
 .chart-container h3{font-size:1rem;font-weight:600;margin-bottom:12px}
+
+/* Detail sub-tabs */
+.detail-tabs{
+  display:flex;gap:4px;
+  margin:16px 0 0;
+  border-bottom:1px solid var(--border);
+  padding-bottom:0;
+}
+.detail-tab{
+  background:none;border:none;color:var(--text-secondary);
+  padding:10px 16px;cursor:pointer;font-size:.85rem;
+  font-weight:500;transition:all .15s;
+  border-bottom:2px solid transparent;
+  margin-bottom:-1px;
+}
+.detail-tab:hover{color:var(--text-primary)}
+.detail-tab.active{
+  color:var(--accent);border-bottom-color:var(--accent);font-weight:600;
+}
+.detail-tab-content{display:none;padding-top:16px}
+.detail-tab-content.active{display:block}
 
 /* Notes */
 .notes-list{display:flex;flex-direction:column;gap:12px}
@@ -222,6 +244,42 @@ th.number{text-align:right}
   border-radius:4px;
 }
 .note-delete-btn:hover{color:var(--red);background:var(--red-faint)}
+
+/* Nav tabs */
+.nav-tabs{display:inline-flex;gap:4px;margin-right:8px}
+.nav-tab{
+  background:none;border:1px solid var(--border);color:var(--text-secondary);
+  border-radius:var(--radius-xs);padding:6px 14px;cursor:pointer;font-size:.85rem;
+  font-weight:500;transition:all .15s;
+}
+.nav-tab:hover{color:var(--text-primary);border-color:var(--border-light)}
+.nav-tab.active{
+  background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600;
+}
+
+/* Leaderboard */
+.leaderboard-table{width:100%;border-collapse:collapse;font-size:.9rem}
+.leaderboard-table th{
+  text-align:left;padding:10px 12px;font-size:.75rem;text-transform:uppercase;
+  letter-spacing:.05em;color:var(--text-secondary);border-bottom:1px solid var(--border);
+}
+.leaderboard-table td{padding:12px;border-bottom:1px solid var(--border);cursor:pointer}
+.leaderboard-table tr:last-child td{border-bottom:none}
+.leaderboard-table tbody tr{transition:background .15s}
+.leaderboard-table tbody tr:hover{background:var(--bg-hover)}
+.leaderboard-table td.number{text-align:right;font-variant-numeric:tabular-nums}
+.leaderboard-table th.number{text-align:right}
+
+.rank-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:50%;font-weight:700;font-size:.8rem;
+}
+.rank-1{background:linear-gradient(135deg,#fbbf24,#f59e0b);color:#78350f}
+.rank-2{background:linear-gradient(135deg,#d1d5db,#9ca3af);color:#374151}
+.rank-3{background:linear-gradient(135deg,#d97706,#b45309);color:#fff}
+.rank-other{background:var(--bg-tertiary);color:var(--text-secondary)}
+
+.agent-name-cell{font-weight:600}
 
 /* Section headings */
 .section-title{font-size:1rem;font-weight:600;margin:20px 0 12px;color:var(--text-primary)}

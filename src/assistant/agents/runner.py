@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from typing import Any
 
 from assistant.agents.types import AgentDef, AgentResult
@@ -123,7 +124,8 @@ class AgentRunner:
 
             # Raw clients bypass the router's metrics — track manually
             metrics = MetricsContext(
-                self._router._metrics, agent_name=agent.name,
+                self._router._metrics, session_id=uuid.uuid4().hex[:12],
+                agent_name=agent.name,
             )
             # Parse provider/model from "provider/model" syntax
             if "/" in agent.model:
@@ -139,7 +141,8 @@ class AgentRunner:
         full_response = ""
         response_parts: list[str] = []
         try:
-            # When going through the router, pass agent_name for its own metrics
+            # When going through the router, pass agent_name/session_id for its own metrics.
+            # Raw clients don't accept these kwargs — metrics are tracked via MetricsContext above.
             kwargs: dict[str, Any] = {
                 "system": system_prompt,
                 "messages": messages,
@@ -148,6 +151,7 @@ class AgentRunner:
                 "max_tool_rounds": agent.max_tool_rounds,
             }
             if not agent.model:
+                kwargs["session_id"] = uuid.uuid4().hex[:12]
                 kwargs["agent_name"] = agent.name
 
             async for event in client.stream_with_tool_loop(**kwargs):

@@ -212,9 +212,28 @@ function buildPostUrl(beforeId){
 
 const EMOJIS=['👍','🔥','💡','👀','❤️'];
 function reactionsHtml(postId,reactions){
-  return `<div class="reactions-row">`+EMOJIS.map(e=>
-    `<button class="reaction-btn${(reactions||[]).includes(e)?' active':''}" onclick="toggleReaction(${postId},'${e}',this)">${e}</button>`
-  ).join('')+`</div>`;
+  const active=(reactions||[]);
+  const pills=active.map(e=>
+    `<button class="reaction-pill mine" onclick="event.stopPropagation();toggleReaction(${postId},'${e}')">${e}</button>`
+  ).join('');
+  return `<div class="reactions-wrap" data-post-id="${postId}" onclick="event.stopPropagation()">
+    <div class="reaction-pills">${pills}</div>
+    <div class="reaction-add" onclick="event.stopPropagation();togglePicker(this)" role="button" tabindex="0">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+      <div class="reaction-picker">${EMOJIS.map(e=>
+        `<button onclick="event.stopPropagation();pickReaction(${postId},'${e}',this)">${e}</button>`
+      ).join('')}</div>
+    </div>
+  </div>`;
+}
+function togglePicker(btn){
+  // Close any other open pickers
+  document.querySelectorAll('.reaction-picker.open').forEach(p=>{if(p!==btn.querySelector('.reaction-picker'))p.classList.remove('open')});
+  btn.querySelector('.reaction-picker').classList.toggle('open');
+}
+function pickReaction(id,emoji,btn){
+  btn.closest('.reaction-picker').classList.remove('open');
+  toggleReaction(id,emoji);
 }
 
 function renderPostHtml(p){
@@ -227,6 +246,7 @@ function renderPostHtml(p){
         ${tl?`<span class="handle">@${esc(p.author)}</span>`:''}
         <span class="sep">&middot;</span>
         <span class="time">${ago(p.created_at)}</span>
+        ${p.pinned_at?'<span class="pin-badge" title="Pinned">\ud83d\udccc</span>':''}
         ${p.feed_name&&!currentFeed?`<span class="badge" onclick="event.stopPropagation();navigate('${esc(p.feed_name)}')">#${esc(p.feed_name)}</span>`:''}
       </div>
       ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
@@ -234,12 +254,10 @@ function renderPostHtml(p){
       ${imgHtml(p.image_url)}
       <div class="footer" onclick="event.stopPropagation()">
         ${reactionsHtml(p.id,p.reactions)}
+        <span class="spacer"></span>
         ${p.reply_count?`<span class="stat" onclick="openThread(${p.id})">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           ${p.reply_count}</span>`:''}
-        <span class="spacer"></span>
-        ${own?`<button class="stat" onclick="openEditPost(${p.id})">edit</button>`:''}
-        <button class="stat delete" onclick="deletePost(${p.id})">delete</button>
       </div>
     </div>
   </div>`;
@@ -373,7 +391,12 @@ async function openThread(id){
   panel.innerHTML=`
     <div class="thread-header">
       <h3>Thread</h3>
-      <button class="close" onclick="closeThread(event,true)">&times;</button>
+      <div class="thread-actions">
+        <button class="stat" onclick="togglePin(${root.id},${root.pinned_at?'true':'false'})">${root.pinned_at?'unpin':'pin'}</button>
+        ${root.author==='user'?`<button class="stat" onclick="openEditPost(${root.id})">edit</button>`:''}
+        <button class="stat delete" onclick="deletePost(${root.id})">delete</button>
+        <button class="close" onclick="closeThread(event,true)">&times;</button>
+      </div>
     </div>
     <div class="thread-root">
       ${avatarHtml(root.author)}
@@ -383,6 +406,7 @@ async function openThread(id){
           ${rtl?`<span class="handle">@${esc(root.author)}</span>`:''}
           <span class="sep">&middot;</span>
           <span class="time">${ago(root.created_at)}</span>
+          ${root.pinned_at?'<span class="pin-badge" title="Pinned">\ud83d\udccc</span>':''}
         </div>
         ${rtl?`<div class="tagline">${esc(rtl)}</div>`:''}
         <div class="body">${renderMd(root.content)}</div>
@@ -553,6 +577,14 @@ async function submitEditPost(){
   closeEditPost();
   await loadTimeline();
 }
+async function togglePin(id,isPinned){
+  const action=isPinned?'unpin':'pin';
+  try{
+    await fetch(API+'/posts/'+id+'/'+action,{method:'POST'});
+    await openThread(id);
+    await loadTimeline();
+  }catch(e){console.error('Failed to '+action,e)}
+}
 async function deletePost(id){
   if(!confirm('Delete this post?'))return;
   await fetch(API+'/posts/'+id,{method:'DELETE'});
@@ -560,26 +592,27 @@ async function deletePost(id){
   await loadSidebar();
 }
 
-async function toggleReaction(id,emoji,el){
-  const wasActive=el.classList.contains('active');
-  el.classList.toggle('active');
-  // Update local state
-  const p=timelinePosts.find(x=>x.id===id);
-  if(p){
-    if(!p.reactions) p.reactions=[];
-    if(wasActive) p.reactions=p.reactions.filter(e=>e!==emoji);
-    else if(!p.reactions.includes(emoji)) p.reactions.push(emoji);
-  }
+async function toggleReaction(id,emoji){
+  let p=timelinePosts.find(x=>x.id===id);
+  if(!p) p={reactions:[]};
+  if(!p.reactions) p.reactions=[];
+  const wasActive=p.reactions.includes(emoji);
+  if(wasActive) p.reactions=p.reactions.filter(e=>e!==emoji);
+  else p.reactions.push(emoji);
+  // Re-render reaction wraps for this post
+  document.querySelectorAll(`.reactions-wrap[data-post-id="${id}"]`).forEach(w=>{
+    const tmp=document.createElement('div');
+    tmp.innerHTML=reactionsHtml(id,p.reactions);
+    w.replaceWith(tmp.firstElementChild);
+  });
   try{
     await fetch(API+'/posts/'+id+'/react',{method:'POST',
       headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji})});
     await updateLikedCard();
   }catch(e){
-    el.classList.toggle('active');
-    if(p){
-      if(wasActive&&!p.reactions.includes(emoji)) p.reactions.push(emoji);
-      else p.reactions=p.reactions.filter(e=>e!==emoji);
-    }
+    // Revert
+    if(wasActive&&!p.reactions.includes(emoji)) p.reactions.push(emoji);
+    else p.reactions=p.reactions.filter(e=>e!==emoji);
   }
 }
 
@@ -609,7 +642,7 @@ async function updateLikedCard(){
       <div style="min-width:0;flex:1">
         <div style="display:flex;align-items:center;gap:4px">
           <span class="liked-author">${esc(displayName(p.author))}</span>
-          ${(p.reactions||[]).map(e=>`<span style="font-size:11px">${e}</span>`).join('')}
+          ${(p.reactions||[]).map(e=>`<span style="font-size:12px;opacity:.8">${e}</span>`).join(' ')}
         </div>
         <div class="liked-text">${esc(p.content)}</div>
       </div>
@@ -806,6 +839,12 @@ function ago(iso){
   if(d<86400000)return Math.floor(d/3600000)+'h';
   return Math.floor(d/86400000)+'d';
 }
+
+// Close reaction picker on outside click
+document.addEventListener('click',e=>{
+  if(!e.target.closest('.reaction-add'))
+    document.querySelectorAll('.reaction-picker.open').forEach(p=>p.classList.remove('open'));
+});
 
 // Init
 document.getElementById('search-input').addEventListener('input',onSearchInput);

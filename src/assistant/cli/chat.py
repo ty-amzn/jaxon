@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 from typing import Any
 
 from prompt_toolkit import PromptSession
@@ -325,7 +326,7 @@ class ChatInterface:
                         tools=self._tool_registry.definitions,
                         tool_executor=headless_tool_executor,
                         max_tool_rounds=self._settings.max_tool_rounds,
-                        session_id=session.id,
+                        session_id=uuid.uuid4().hex[:12],
                     ):
                         if event.type == StreamEventType.TEXT_DELTA:
                             full_response += event.text

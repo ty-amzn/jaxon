@@ -389,6 +389,13 @@ class PaperTradingStore:
     # Order history
     # ------------------------------------------------------------------
 
+    def count_orders(self, portfolio_id: int) -> int:
+        """Return total number of orders for a portfolio."""
+        row = self._db.execute(
+            "SELECT COUNT(*) FROM orders WHERE portfolio_id = ?", [portfolio_id]
+        ).fetchone()
+        return row[0] if row else 0
+
     def get_orders(self, portfolio_id: int, limit: int = 50) -> list[dict]:
         """Return recent orders for a portfolio, newest first."""
         rows = self._db.execute(

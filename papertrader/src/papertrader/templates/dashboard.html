@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Paper Trading</title>
-  <link rel="stylesheet" href="/trading/static/styles.css">
+  <link rel="stylesheet" href="/trading/static/styles.css?v=5">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 </head>
 <body>
@@ -14,6 +14,10 @@
       <span class="subtitle">Simulated portfolios with live prices</span>
     </h1>
     <div class="header-actions">
+      <div class="nav-tabs">
+        <button class="nav-tab active" id="tab-overview" onclick="switchTab('overview')">Overview</button>
+        <button class="nav-tab" id="tab-leaderboard" onclick="switchTab('leaderboard')">Leaderboard</button>
+      </div>
       <button class="theme-toggle" onclick="toggleTheme()">Theme</button>
     </div>
   </div>
@@ -22,6 +26,6 @@
     <div class="loading">Loading...</div>
   </div>
 
-  <script src="/trading/static/app.js"></script>
+  <script src="/trading/static/app.js?v=5"></script>
 </body>
 </html>

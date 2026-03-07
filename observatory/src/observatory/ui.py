@@ -72,7 +72,7 @@ APP_ICON_SVG = """\
 
 DASHBOARD_HTML = """\
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -82,7 +82,7 @@ DASHBOARD_HTML = """\
   <meta name="theme-color" content="#0f1419">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root {
+    :root, html[data-theme="dark"] {
       --bg: #0f1419;
       --card: #161b22;
       --border: #30363d;
@@ -93,6 +93,26 @@ DASHBOARD_HTML = """\
       --error: #f85149;
       --warning: #d29922;
       --purple: #d299ff;
+      --hover: var(--hover);
+      --chart-grid: #30363d;
+      --chart-text: #7d8590;
+      --chart-label: #e6edf3;
+    }
+    html[data-theme="light"] {
+      --bg: #f0f2f5;
+      --card: #ffffff;
+      --border: #d0d7de;
+      --fg: #1f2328;
+      --muted: #656d76;
+      --accent: #0969da;
+      --success: #1a7f37;
+      --error: #cf222e;
+      --warning: #9a6700;
+      --purple: #8250df;
+      --hover: rgba(0,0,0,0.03);
+      --chart-grid: #d0d7de;
+      --chart-text: #656d76;
+      --chart-label: #1f2328;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body {
@@ -227,7 +247,7 @@ DASHBOARD_HTML = """\
     th, td { padding: 10px 16px; text-align: left; border-bottom: 1px solid var(--border); }
     th { color: var(--muted); font-weight: 500; font-size: 12px; text-transform: uppercase; }
     td { font-size: 14px; }
-    tr:hover { background: rgba(255,255,255,0.02); }
+    tr:hover { background: var(--hover); }
     .badge {
       display: inline-block;
       padding: 2px 8px;
@@ -250,7 +270,7 @@ DASHBOARD_HTML = """\
       cursor: pointer;
       font-size: 14px;
     }
-    .load-more:hover { background: rgba(255,255,255,0.02); }
+    .load-more:hover { background: var(--hover); }
     .error-row td { color: var(--error); }
     .error-message {
       display: none;
@@ -397,6 +417,7 @@ DASHBOARD_HTML = """\
           </select>
         </div>
         <button id="refresh-btn" class="period-select" style="cursor:pointer;" title="Refresh">&#x21bb; Refresh</button>
+        <button class="period-select" style="cursor:pointer;" onclick="toggleTheme()" title="Toggle theme">Theme</button>
       </div>
     </header>
 
@@ -404,6 +425,7 @@ DASHBOARD_HTML = """\
       <button class="tab-btn active" onclick="switchTab('overview')">Overview</button>
       <button class="tab-btn" onclick="switchTab('sessions')">Sessions</button>
       <button class="tab-btn" onclick="switchTab('agents')">Agents</button>
+      <button class="tab-btn" onclick="switchTab('health')">Health</button>
     </div>
 
     <!-- ================= OVERVIEW TAB ================= -->
@@ -461,6 +483,7 @@ DASHBOARD_HTML = """\
           <div class="table-title">Recent Events</div>
           <div class="filters">
             <select id="filter-provider" class="filter-input"><option value="">All Providers</option></select>
+            <select id="filter-model" class="filter-input"><option value="">All Models</option></select>
             <select id="filter-agent" class="filter-input"><option value="">All Agents</option></select>
             <select id="filter-success" class="filter-input">
               <option value="">All Status</option>
@@ -544,9 +567,39 @@ DASHBOARD_HTML = """\
     <div class="tab-panel" id="tab-agents">
       <div class="agent-grid" id="agent-grid"></div>
     </div>
+
+    <!-- ================= HEALTH TAB ================= -->
+    <div class="tab-panel" id="tab-health">
+      <div class="stats-grid" id="health-grid" style="grid-template-columns:repeat(auto-fit,minmax(200px,1fr))"></div>
+      <div class="table-card" style="margin-top:16px">
+        <div class="table-header"><div class="table-title">Service Details</div></div>
+        <table>
+          <thead><tr><th>Service</th><th>Status</th><th>Latency</th><th>Details</th></tr></thead>
+          <tbody id="health-body"></tbody>
+        </table>
+      </div>
+    </div>
   </div>
 
   <script>
+    /* ====== Theme ====== */
+    function initTheme() {
+      const saved = localStorage.getItem('obs-theme') || 'dark';
+      document.documentElement.setAttribute('data-theme', saved);
+    }
+    function toggleTheme() {
+      const cur = document.documentElement.getAttribute('data-theme');
+      const next = cur === 'dark' ? 'light' : 'dark';
+      document.documentElement.setAttribute('data-theme', next);
+      localStorage.setItem('obs-theme', next);
+      refreshAll();
+    }
+    function isDark() { return document.documentElement.getAttribute('data-theme') !== 'light'; }
+    function chartGridColor() { return isDark() ? '#30363d' : '#d0d7de'; }
+    function chartTextColor() { return isDark() ? '#7d8590' : '#656d76'; }
+    function chartLabelColor() { return isDark() ? '#e6edf3' : '#1f2328'; }
+    initTheme();
+
     /* ====== Shared state ====== */
     let timelineChart = null, providerChart = null, toolChart = null;
     let lastEventId = null, lastToolEventId = null;
@@ -557,15 +610,17 @@ DASHBOARD_HTML = """\
     const COLORS = ['#58a6ff','#3fb950','#f0883e','#a371f7','#f85149','#d29922','#79c0ff','#56d364','#ffa657','#bc8cff','#ff7b72','#e3b341','#a5d6ff','#7ee787','#ffc680'];
 
     /* ====== Tab switching ====== */
+    const TAB_NAMES = ['overview','sessions','agents','health'];
     function switchTab(name) {
       activeTab = name;
       document.querySelectorAll('.tab-btn').forEach((b,i) => {
-        b.classList.toggle('active', ['overview','sessions','agents'][i] === name);
+        b.classList.toggle('active', TAB_NAMES[i] === name);
       });
       document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
       document.getElementById('tab-' + name).classList.add('active');
       if (name === 'sessions') refreshSessions();
       if (name === 'agents') refreshAgents();
+      if (name === 'health') refreshHealth();
     }
 
     /* ====== Utilities ====== */
@@ -614,10 +669,12 @@ DASHBOARD_HTML = """\
       refreshTools();
       if (activeTab === 'sessions') refreshSessions();
       if (activeTab === 'agents') refreshAgents();
+      if (activeTab === 'health') refreshHealth();
     }
 
     /* ====== OVERVIEW TAB ====== */
     const filterProvider = document.getElementById('filter-provider');
+    const filterModel = document.getElementById('filter-model');
     const filterAgent = document.getElementById('filter-agent');
     const filterSuccess = document.getElementById('filter-success');
     const chartBucketSelect = document.getElementById('chart-bucket');
@@ -628,6 +685,7 @@ DASHBOARD_HTML = """\
       let u = '/observe/events?limit=50';
       if (beforeId) u += '&before_id=' + beforeId;
       if (filterProvider.value) u += '&provider=' + filterProvider.value;
+      if (filterModel.value) u += '&model=' + encodeURIComponent(filterModel.value);
       if (filterAgent.value) u += '&agent_name=' + filterAgent.value;
       if (filterSuccess.value) u += '&success=' + filterSuccess.value;
       return (await fetch(u)).json();
@@ -661,7 +719,7 @@ DASHBOARD_HTML = """\
       timelineChart = new Chart(ctx, {
         type:'line',
         data:{labels:data.map(d=>formatChartLabel(d.bucket,chartBucket)),datasets:[{label:'Calls',data:data.map(d=>d.count),borderColor:'#58a6ff',backgroundColor:'rgba(88,166,255,0.1)',fill:true,tension:.3}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#30363d'},ticks:{color:'#7d8590',maxTicksLimit:16}},y:{grid:{color:'#30363d'},ticks:{color:'#7d8590'},beginAtZero:true}}}
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:chartGridColor()},ticks:{color:chartTextColor(),maxTicksLimit:16}},y:{grid:{color:chartGridColor()},ticks:{color:chartTextColor()},beginAtZero:true}}}
       });
     }
     function updateProviderChart(s) {
@@ -671,7 +729,7 @@ DASHBOARD_HTML = """\
       providerChart = new Chart(ctx, {
         type:'doughnut',
         data:{labels,datasets:[{data,backgroundColor:COLORS.slice(0,labels.length)}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:'#e6edf3'}}}}
+        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:chartLabelColor()}}}}
       });
     }
 
@@ -726,11 +784,14 @@ DASHBOARD_HTML = """\
     }
 
     function updateFilters(stats) {
-      const pSel = filterProvider, aSel = filterAgent;
-      const pv = pSel.value, av = aSel.value;
+      const pSel = filterProvider, mSel = filterModel, aSel = filterAgent;
+      const pv = pSel.value, mv = mSel.value, av = aSel.value;
       pSel.innerHTML = '<option value="">All Providers</option>';
       Object.keys(stats.calls_by_provider).sort().forEach(p => { pSel.innerHTML += '<option value="'+p+'">'+p+'</option>'; });
       pSel.value = pv;
+      mSel.innerHTML = '<option value="">All Models</option>';
+      if (stats.calls_by_model) Object.keys(stats.calls_by_model).sort().forEach(m => { mSel.innerHTML += '<option value="'+m+'">'+m+' ('+stats.calls_by_model[m]+')</option>'; });
+      mSel.value = mv;
       aSel.innerHTML = '<option value="">All Agents</option>';
       if (stats.calls_by_agent) Object.keys(stats.calls_by_agent).sort().forEach(a => { aSel.innerHTML += '<option value="'+a+'">'+a+' ('+stats.calls_by_agent[a]+')</option>'; });
       aSel.value = av;
@@ -747,6 +808,7 @@ DASHBOARD_HTML = """\
     }
 
     filterProvider.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });
+    filterModel.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });
     filterSuccess.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });
     filterAgent.addEventListener('change', () => { lastEventId=null; fetchEvents().then(e=>renderEvents(e)); });
     document.getElementById('load-more').addEventListener('click', async () => { if(lastEventId){renderEvents(await fetchEvents(lastEventId),true);} });
@@ -787,7 +849,7 @@ DASHBOARD_HTML = """\
       toolChart = new Chart(ctx, {
         type:'bar',
         data:{labels:entries.map(e=>e[0]),datasets:[{label:'Calls',data:entries.map(e=>e[1]),backgroundColor:COLORS.slice(0,entries.length)}]},
-        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:'#30363d'},ticks:{color:'#7d8590'},beginAtZero:true},y:{grid:{display:false},ticks:{color:'#e6edf3',font:{size:11}}}}}
+        options:{indexAxis:'y',responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{grid:{color:chartGridColor()},ticks:{color:chartTextColor()},beginAtZero:true},y:{grid:{display:false},ticks:{color:chartLabelColor(),font:{size:11}}}}}
       });
     }
     function updateToolNameFilter(s) {
@@ -994,6 +1056,49 @@ DASHBOARD_HTML = """\
         html += '</div></div>';
       });
       grid.innerHTML = html;
+    }
+
+    /* ====== HEALTH TAB ====== */
+    async function refreshHealth() {
+      try {
+        const resp = await fetch('/observe/health/deep');
+        const data = await resp.json();
+        const services = data.services || {};
+        const names = Object.keys(services);
+
+        // Summary cards
+        const grid = document.getElementById('health-grid');
+        const ok = names.filter(n => services[n].status === 'ok').length;
+        const degraded = names.filter(n => services[n].status !== 'ok' && services[n].status !== 'not_configured').length;
+        const unconfigured = names.filter(n => services[n].status === 'not_configured').length;
+        grid.innerHTML = `
+          <div class="stat-card">
+            <div class="stat-label">Overall</div>
+            <div class="stat-value" style="color:${data.status==='ok'?'var(--success)':'var(--warning)'}">${data.status.toUpperCase()}</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Services Up</div>
+            <div class="stat-value" style="color:var(--success)">${ok}</div>
+          </div>
+          ${degraded ? `<div class="stat-card"><div class="stat-label">Degraded</div><div class="stat-value" style="color:var(--error)">${degraded}</div></div>` : ''}
+          ${unconfigured ? `<div class="stat-card"><div class="stat-label">Not Configured</div><div class="stat-value" style="color:var(--muted)">${unconfigured}</div></div>` : ''}
+        `;
+
+        // Detail table
+        const tbody = document.getElementById('health-body');
+        let html = '';
+        for (const name of names) {
+          const s = services[name];
+          const statusColor = s.status === 'ok' ? 'var(--success)' : s.status === 'not_configured' ? 'var(--muted)' : 'var(--error)';
+          const badge = `<span class="badge" style="background:${statusColor};color:#fff">${s.status}</span>`;
+          const latency = s.latency_ms != null ? s.latency_ms + 'ms' : '—';
+          const detail = s.detail || (s.http_status ? 'HTTP ' + s.http_status : '');
+          html += `<tr><td style="font-weight:600">${escapeHtml(name)}</td><td>${badge}</td><td>${latency}</td><td style="color:var(--muted)">${escapeHtml(detail)}</td></tr>`;
+        }
+        tbody.innerHTML = html;
+      } catch (e) {
+        document.getElementById('health-grid').innerHTML = '<div class="stat-card"><div class="stat-label">Error</div><div class="stat-value" style="color:var(--error)">Failed to fetch</div></div>';
+      }
     }
 
     /* ====== Initial load ====== */

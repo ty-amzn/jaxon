@@ -16,6 +16,12 @@ logger = logging.getLogger(__name__)
 
 trading_router = APIRouter(prefix="/trading", tags=["trading"])
 
+
+@trading_router.get("/health")
+async def health_check():
+    return {"status": "ok", "service": "papertrader"}
+
+
 # US Eastern timezone (ET) — NYSE/NASDAQ hours
 _ET = timezone(timedelta(hours=-5))
 _EDT = timezone(timedelta(hours=-4))
@@ -383,6 +389,55 @@ async def delete_note(agent: str, note_id: int, request: Request):
     if not deleted:
         return {"error": f"Note {note_id} not found for agent '{agent}'"}
     return {"status": "deleted", "note_id": note_id}
+
+
+# -- Leaderboard --------------------------------------------------------------
+
+@trading_router.get("/leaderboard")
+async def get_leaderboard(request: Request):
+    """Ranked leaderboard of all agents by total portfolio value."""
+    store = request.app.state.store
+    portfolios = store.list_portfolios()
+    apy = await fetch_savings_apy()
+
+    entries = []
+    for p in portfolios:
+        store.accrue_interest(p["id"], apy)
+        p = store.get_portfolio(p["agent_name"]) or p
+
+        positions = store.get_positions(p["id"])
+        positions_value = 0.0
+        if positions:
+            prices = await fetch_prices([pos["symbol"] for pos in positions])
+            for pos in positions:
+                info = prices.get(pos["symbol"])
+                if info:
+                    positions_value += pos["quantity"] * info["price"]
+
+        savings = p.get("savings", 0) or 0
+        total_value = p["current_cash"] + savings + positions_value
+        pnl = total_value - p["starting_cash"]
+        trade_count = store.count_orders(p["id"])
+
+        entries.append({
+            "agent_name": p["agent_name"],
+            "starting_cash": p["starting_cash"],
+            "total_value": round(total_value, 2),
+            "pnl": round(pnl, 2),
+            "pnl_pct": round((pnl / p["starting_cash"]) * 100, 2) if p["starting_cash"] else 0,
+            "cash": round(p["current_cash"], 2),
+            "savings": round(savings, 2),
+            "positions_value": round(positions_value, 2),
+            "position_count": len(positions),
+            "trade_count": trade_count,
+            "created_at": p["created_at"],
+        })
+
+    entries.sort(key=lambda e: e["total_value"], reverse=True)
+    for i, e in enumerate(entries):
+        e["rank"] = i + 1
+
+    return {"leaderboard": entries}
 
 
 # -- Summary ------------------------------------------------------------------

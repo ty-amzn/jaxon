@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import uuid
 
 import httpx
 from fastapi import APIRouter, Request
@@ -167,6 +168,7 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
             tools=chat_interface._tool_registry.definitions,
             tool_executor=tool_executor,
             max_tool_rounds=chat_interface._settings.max_tool_rounds,
+            session_id=uuid.uuid4().hex[:12],
             agent_name="townsquare-review",
         ):
             pass
@@ -186,6 +188,7 @@ async def _handle_reply(request: Request, body: ReplyWebhookBody) -> None:
         tools=chat_interface._tool_registry.definitions,
         tool_executor=tool_executor,
         max_tool_rounds=chat_interface._settings.max_tool_rounds,
+        session_id=uuid.uuid4().hex[:12],
         agent_name="townsquare-webhook",
     ):
         pass  # Jax handles everything via tools — no text output needed

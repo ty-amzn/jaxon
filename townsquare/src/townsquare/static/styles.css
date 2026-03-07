@@ -235,12 +235,29 @@ a{color:var(--accent);text-decoration:none}
 .post .footer .spacer{flex:1}
 
 /* Reactions */
-.reactions-row{display:flex;gap:3px;flex-wrap:wrap}
-.reaction-btn{background:none;border:1px solid transparent;border-radius:14px;
-  padding:2px 6px;cursor:pointer;font-size:13px;line-height:1.4;
-  transition:all .15s;opacity:.35}
-.reaction-btn:hover{opacity:.7;background:var(--bg-hover)}
-.reaction-btn.active{opacity:1;background:var(--accent-faint);border-color:var(--accent)}
+.reactions-wrap{display:flex;align-items:center;gap:6px;flex-wrap:wrap;min-height:24px}
+.reaction-pills{display:flex;gap:4px;flex-wrap:wrap}
+.reaction-pill{display:inline-flex;align-items:center;gap:3px;background:var(--bg-tertiary);
+  border:1px solid var(--border);border-radius:10px;padding:1px 8px 1px 5px;
+  cursor:pointer;font-size:12px;line-height:1.5;transition:all .15s;
+  color:var(--text-secondary)}
+.reaction-pill:hover{background:var(--bg-hover);border-color:var(--border-light)}
+.reaction-pill.mine{background:var(--accent-faint);border-color:var(--accent);color:var(--accent)}
+.reaction-pill .r-count{font-size:11px;font-weight:500}
+.reaction-add{display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:24px;border-radius:10px;border:1px dashed var(--border);
+  background:none;cursor:pointer;position:relative;opacity:0;
+  transition:opacity .15s;color:var(--text-tertiary);font-size:13px}
+.reactions-wrap:hover .reaction-add,.reaction-add:focus-within,
+.post:hover .reaction-add{opacity:1}
+.reaction-picker{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;
+  transform:translateX(-50%);background:var(--card-bg);border:1px solid var(--border);
+  border-radius:12px;padding:4px;box-shadow:var(--glass-shadow);z-index:5;
+  flex-direction:row;gap:2px}
+.reaction-picker.open{display:flex}
+.reaction-picker button{background:none;border:none;cursor:pointer;font-size:16px;
+  padding:4px 6px;border-radius:8px;transition:background .12s;line-height:1}
+.reaction-picker button:hover{background:var(--bg-hover)}
 
 /* Thread overlay */
 .thread-overlay{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.65);
@@ -254,6 +271,7 @@ a{color:var(--accent);text-decoration:none}
 .thread-panel .thread-header{display:flex;justify-content:space-between;align-items:center;
   padding:16px 20px;border-bottom:1px solid var(--border)}
 .thread-panel .thread-header h3{font-size:16px;font-weight:700}
+.thread-actions{display:flex;align-items:center;gap:4px}
 .thread-panel .close{background:none;border:none;color:var(--text-secondary);font-size:20px;
   cursor:pointer;width:32px;height:32px;border-radius:50%;display:flex;align-items:center;
   justify-content:center;transition:all .15s}
@@ -353,6 +371,9 @@ a{color:var(--accent);text-decoration:none}
   min-width:16px;height:16px;padding:0 5px;border-radius:8px;
   margin-left:6px;vertical-align:middle;line-height:1;
   text-transform:none;letter-spacing:0}
+
+/* Pin badge */
+.pin-badge{font-size:13px;margin-left:2px;cursor:default}
 
 .loading{text-align:center;color:var(--text-tertiary);padding:40px 20px;font-size:14px;column-span:all}
 

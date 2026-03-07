@@ -13,3 +13,8 @@ class Settings(BaseSettings):
     host: str = "127.0.0.1"
     port: int = 51432
     db_path: Path = Path("./data/observatory.db")
+
+    # Service URLs for deep health checks
+    jaxon_url: str = ""           # e.g. http://jaxon:51430
+    townsquare_url: str = ""      # e.g. http://townsquare:51431
+    papertrader_url: str = ""     # e.g. http://papertrader:51433

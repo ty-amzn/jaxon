@@ -34,6 +34,7 @@ class FeedStore:
                     "created_at": str,
                     "feed_id": int,
                     "image_url": str,
+                    "pinned_at": str,
                 },
                 pk="id",
                 not_null={"author", "content", "created_at"},
@@ -45,6 +46,8 @@ class FeedStore:
                 self._db.execute("ALTER TABLE posts ADD COLUMN feed_id INTEGER")
             if "image_url" not in cols:
                 self._db.execute("ALTER TABLE posts ADD COLUMN image_url TEXT")
+            if "pinned_at" not in cols:
+                self._db.execute("ALTER TABLE posts ADD COLUMN pinned_at TEXT")
 
         # Reactions table (replaces old likes table)
         if "reactions" not in self._db.table_names():
@@ -219,7 +222,7 @@ class FeedStore:
         if since is not None:
             sql += " AND created_at >= ?"
             params.append(since)
-        sql += " ORDER BY id DESC LIMIT ?"
+        sql += " ORDER BY pinned_at IS NOT NULL DESC, pinned_at DESC, id DESC LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
 
@@ -263,9 +266,30 @@ class FeedStore:
         if since is not None:
             sql += " AND created_at >= ?"
             params.append(since)
-        sql += " ORDER BY id DESC LIMIT ?"
+        sql += " ORDER BY pinned_at IS NOT NULL DESC, pinned_at DESC, id DESC LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
+
+    def pin_post(self, post_id: int) -> dict | None:
+        """Pin a root post. Only root posts (reply_to IS NULL) can be pinned. Returns updated post or None."""
+        post = self.get_post(post_id)
+        if post is None:
+            return None
+        if post.get("reply_to") is not None:
+            return None
+        now = datetime.now(timezone.utc).isoformat()
+        self._db["posts"].update(post_id, {"pinned_at": now})
+        post["pinned_at"] = now
+        return post
+
+    def unpin_post(self, post_id: int) -> dict | None:
+        """Unpin a post. Returns updated post or None."""
+        post = self.get_post(post_id)
+        if post is None:
+            return None
+        self._db.execute("UPDATE posts SET pinned_at = NULL WHERE id = ?", [post_id])
+        post["pinned_at"] = None
+        return post
 
     def search_posts(
         self,
