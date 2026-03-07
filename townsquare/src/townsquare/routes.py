@@ -36,6 +36,10 @@ class CreateFeedBody(BaseModel):
     created_by: str = "user"
 
 
+class ReactBody(BaseModel):
+    emoji: str = Field(..., min_length=1, max_length=4)
+
+
 class AgentEntry(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     display_name: str = Field(..., min_length=1, max_length=100)
@@ -153,28 +157,33 @@ async def delete_channel(request: Request, name: str):
     return {"ok": True}
 
 
-# -- Likes ------------------------------------------------------------------
+# -- Reactions ---------------------------------------------------------------
 
-@feed_router.post("/posts/{post_id}/like")
-async def like_post(request: Request, post_id: int):
+@feed_router.post("/posts/{post_id}/react")
+async def react_post(request: Request, post_id: int, body: ReactBody):
     store = request.app.state.feed_store
-    store.like_post(post_id)
-    return {"ok": True}
+    try:
+        active = store.toggle_reaction(post_id, body.emoji)
+    except ValueError as e:
+        return {"error": str(e)}
+    return {"ok": True, "active": active, "emoji": body.emoji}
 
 
-@feed_router.delete("/posts/{post_id}/like")
-async def unlike_post(request: Request, post_id: int):
+@feed_router.get("/posts/{post_id}/reactions")
+async def get_post_reactions(request: Request, post_id: int):
     store = request.app.state.feed_store
-    store.unlike_post(post_id)
-    return {"ok": True}
+    return {"reactions": store.get_post_reactions(post_id)}
 
 
 @feed_router.get("/posts/liked")
 async def get_liked_posts(request: Request, limit: int = 50):
+    """Return posts with any reaction (backward-compat name)."""
     store = request.app.state.feed_store
-    posts = store.get_liked_posts(limit=limit)
+    posts = store.get_reacted_posts(limit=limit)
+    post_ids = [p["id"] for p in posts]
+    bulk = store.get_bulk_reactions(post_ids)
     for p in posts:
-        p["liked"] = True
+        p["reactions"] = bulk.get(p["id"], [])
     return posts
 
 
@@ -201,13 +210,14 @@ async def get_posts(
     else:
         posts = store.get_timeline(limit=limit, before_id=before_id, since=since)
 
-    # Attach reply counts, feed name, and liked status
+    # Attach reply counts, feed name, and reactions
     feeds_cache: dict[int, str] = {}
-    liked_ids = store.get_liked_post_ids()
+    post_ids = [p["id"] for p in posts]
+    bulk_reactions = store.get_bulk_reactions(post_ids)
     for p in posts:
         thread = store.get_thread(p["id"])
         p["reply_count"] = len(thread) - 1
-        p["liked"] = p["id"] in liked_ids
+        p["reactions"] = bulk_reactions.get(p["id"], [])
         fid = p.get("feed_id")
         if fid and fid not in feeds_cache:
             for f in store.list_feeds():
@@ -262,9 +272,10 @@ async def get_engaged_threads(request: Request, author: str = "user", since: str
 async def get_thread(request: Request, post_id: int):
     store = request.app.state.feed_store
     posts = store.get_thread(post_id)
-    liked_ids = store.get_liked_post_ids()
+    post_ids = [p["id"] for p in posts]
+    bulk_reactions = store.get_bulk_reactions(post_ids)
     for p in posts:
-        p["liked"] = p["id"] in liked_ids
+        p["reactions"] = bulk_reactions.get(p["id"], [])
     return posts
 
 

@@ -1,14 +1,30 @@
-"""Yahoo Finance price fetcher for paper trading."""
+"""Finnhub price fetcher for paper trading.
+
+Uses the Finnhub /quote endpoint for real-time stock prices.
+Free tier: 60 calls/min with an API key.
+"""
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import time
 from typing import Any
 
 import httpx
 
 logger = logging.getLogger(__name__)
+
+# -- Config ------------------------------------------------------------------
+
+FINNHUB_API_KEY = os.environ.get("FINNHUB_API_KEY", "")
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
+
+# -- Price cache (module-level) ----------------------------------------------
+
+_price_cache: dict[str, tuple[float, dict[str, Any]]] = {}  # symbol -> (timestamp, data)
+_PRICE_CACHE_TTL = 60  # 60 seconds
 
 # -- Savings APY cache (module-level) ----------------------------------------
 
@@ -17,65 +33,97 @@ _apy_cache_time: float = 0.0
 _APY_CACHE_TTL = 3600  # 1 hour
 _APY_FALLBACK = 0.045  # 4.5%
 
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 1.0  # seconds
 
-_USER_AGENT = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-)
+
+def _finnhub_headers() -> dict[str, str]:
+    return {"X-Finnhub-Token": FINNHUB_API_KEY}
 
 
 async def fetch_price(symbol: str) -> dict[str, Any]:
-    """Fetch current price for a single symbol.
+    """Fetch current price for a single symbol via Finnhub.
 
-    Returns dict with keys: symbol, price, currency, name.
+    Returns dict with keys: symbol, price, currency, name,
+    plus open, high, low, prev_close, change_pct.
     Raises ValueError if symbol not found or API error.
+    Uses a 60-second cache to stay within rate limits.
     """
     symbol = symbol.strip().upper()
     if not symbol:
         raise ValueError("Empty symbol")
 
-    try:
-        async with httpx.AsyncClient(
-            timeout=15.0,
-            headers={"User-Agent": _USER_AGENT},
-        ) as client:
-            resp = await client.get(
-                YAHOO_CHART_URL.format(symbol=symbol),
-                params={"interval": "1d", "range": "1d"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise ValueError(f"Ticker not found: {symbol}")
-        raise ValueError(f"Yahoo Finance API error: {e.response.status_code}")
-    except httpx.HTTPError as e:
-        raise ValueError(f"Yahoo Finance API error: {e}")
+    if not FINNHUB_API_KEY:
+        raise ValueError("FINNHUB_API_KEY not set. Get a free key at https://finnhub.io/")
 
-    chart = data.get("chart", {})
-    results = chart.get("result")
-    if not results:
-        error = chart.get("error", {})
-        raise ValueError(f"Could not find ticker: {symbol}. {error.get('description', '')}")
+    # Check cache
+    now = time.monotonic()
+    cached = _price_cache.get(symbol)
+    if cached and (now - cached[0]) < _PRICE_CACHE_TTL:
+        return cached[1]
 
-    meta = results[0].get("meta", {})
-    price = meta.get("regularMarketPrice")
-    if price is None:
-        raise ValueError(f"No price available for {symbol}")
+    last_error: Exception | None = None
+    for attempt in range(_MAX_RETRIES):
+        try:
+            async with httpx.AsyncClient(
+                timeout=10.0,
+                headers=_finnhub_headers(),
+            ) as client:
+                resp = await client.get(
+                    f"{FINNHUB_BASE_URL}/quote",
+                    params={"symbol": symbol},
+                )
+                resp.raise_for_status()
+                data = resp.json()
+            break  # success
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 429 and attempt < _MAX_RETRIES - 1:
+                delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                logger.warning("Finnhub 429 for %s, retrying in %.0fs (attempt %d)", symbol, delay, attempt + 1)
+                await asyncio.sleep(delay)
+                last_error = e
+                continue
+            if e.response.status_code == 401:
+                raise ValueError("Invalid FINNHUB_API_KEY. Check your key at https://finnhub.io/")
+            raise ValueError(f"Finnhub API error: {e.response.status_code}")
+        except httpx.HTTPError as e:
+            if attempt < _MAX_RETRIES - 1:
+                await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                last_error = e
+                continue
+            raise ValueError(f"Finnhub API error: {e}")
+    else:
+        raise ValueError(f"Finnhub API error: rate limited (after {_MAX_RETRIES} retries)")
 
-    return {
+    # Finnhub returns {"c": current, "h": high, "l": low, "o": open, "pc": prevClose, "dp": pctChange, "d": change}
+    # A price of 0 means the symbol was not found
+    price = data.get("c", 0)
+    if not price:
+        raise ValueError(f"No price available for {symbol}. Check if the ticker is valid on US exchanges.")
+
+    result = {
         "symbol": symbol,
         "price": float(price),
-        "currency": meta.get("currency", "USD"),
-        "name": meta.get("shortName") or meta.get("longName") or symbol,
+        "currency": "USD",
+        "name": symbol,  # Finnhub /quote doesn't return name; callers can use /profile2 if needed
+        "open": data.get("o"),
+        "high": data.get("h"),
+        "low": data.get("l"),
+        "prev_close": data.get("pc"),
+        "change": data.get("d"),
+        "change_pct": data.get("dp"),
     }
+
+    # Store in cache
+    _price_cache[symbol] = (now, result)
+    return result
 
 
 async def fetch_savings_apy() -> float:
-    """Fetch annualized yield from BIL (1-3 Month T-Bill ETF) trailing 1-year return.
+    """Fetch annualized yield from BIL (1-3 Month T-Bill ETF).
 
-    Caches for 1 hour.  Falls back to 4.5% on any error.
+    Uses Finnhub quote to compare current vs previous close as a rough proxy.
+    Caches for 1 hour. Falls back to 4.5% on any error.
     """
     global _apy_cache, _apy_cache_time
 
@@ -84,41 +132,25 @@ async def fetch_savings_apy() -> float:
         return _apy_cache["apy"]
 
     try:
-        async with httpx.AsyncClient(
-            timeout=15.0,
-            headers={"User-Agent": _USER_AGENT},
-        ) as client:
-            resp = await client.get(
-                YAHOO_CHART_URL.format(symbol="BIL"),
-                params={"interval": "1d", "range": "1y"},
-            )
-            resp.raise_for_status()
-            data = resp.json()
-
-        results = data.get("chart", {}).get("result")
-        if not results:
-            raise ValueError("No chart data for BIL")
-
-        closes = results[0].get("indicators", {}).get("adjclose")
-        if closes:
-            adj = closes[0].get("adjclose", [])
+        info = await fetch_price("BIL")
+        # BIL is a T-Bill ETF; its annualized return is approximately the T-Bill rate.
+        # Use a rough estimate from price: prevClose vs current over 1 day → annualize.
+        # This is very approximate; fallback is fine for paper trading.
+        price = info["price"]
+        prev = info.get("prev_close") or price
+        if prev > 0 and price > 0:
+            daily_return = (price - prev) / prev
+            # Annualize: (1 + daily)^252 - 1
+            apy = (1 + daily_return) ** 252 - 1
+            if apy <= 0 or apy > 0.20:
+                # Unreasonable → use fallback
+                apy = _APY_FALLBACK
         else:
-            adj = results[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
-
-        # Filter out None values
-        adj = [v for v in adj if v is not None]
-        if len(adj) < 2:
-            raise ValueError("Insufficient BIL price data")
-
-        first, last = adj[0], adj[-1]
-        apy = (last - first) / first  # trailing 1-year return ≈ annualized
-
-        if apy <= 0:
             apy = _APY_FALLBACK
 
         _apy_cache = {"apy": round(apy, 6)}
         _apy_cache_time = now
-        logger.info("Fetched BIL savings APY: %.4f%%", apy * 100)
+        logger.info("Estimated BIL savings APY: %.4f%%", apy * 100)
         return _apy_cache["apy"]
 
     except Exception:
@@ -129,13 +161,16 @@ async def fetch_savings_apy() -> float:
 async def fetch_prices(symbols: list[str]) -> dict[str, dict[str, Any]]:
     """Fetch current prices for multiple symbols.
 
-    Returns {symbol: {symbol, price, currency, name}} for successful lookups.
-    Failed symbols are silently skipped.
+    Returns {symbol: {symbol, price, currency, name, ...}} for successful lookups.
+    Failed symbols are silently skipped. Uses cache so repeated lookups are free.
     """
-    results: dict[str, dict[str, Any]] = {}
-    for sym in symbols:
+
+    async def _fetch_one(sym: str) -> tuple[str, dict[str, Any] | None]:
         try:
-            results[sym.upper()] = await fetch_price(sym)
+            return sym.upper(), await fetch_price(sym)
         except ValueError:
             logger.warning("Failed to fetch price for %s", sym)
-    return results
+            return sym.upper(), None
+
+    pairs = await asyncio.gather(*[_fetch_one(s) for s in symbols])
+    return {sym: data for sym, data in pairs if data is not None}

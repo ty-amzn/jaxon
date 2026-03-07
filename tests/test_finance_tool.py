@@ -33,52 +33,49 @@ def _mock_client(*responses):
 
 @pytest.mark.asyncio
 async def test_stock_quote_success():
-    data = {
-        "chart": {
-            "result": [
-                {
-                    "meta": {
-                        "regularMarketPrice": 189.84,
-                        "previousClose": 187.50,
-                        "currency": "USD",
-                        "shortName": "Apple Inc.",
-                        "fiftyTwoWeekLow": 140.0,
-                        "fiftyTwoWeekHigh": 199.62,
-                    },
-                    "indicators": {
-                        "quote": [{"volume": [None, None, None, None, 52_300_000]}]
-                    },
-                }
-            ]
-        }
-    }
-    client = _mock_client(_mock_response(data))
+    # Finnhub /quote response
+    quote_data = {"c": 189.84, "d": 2.34, "dp": 1.25, "h": 190.50, "l": 187.00, "o": 188.00, "pc": 187.50}
+    # Finnhub /stock/profile2 response
+    profile_data = {"name": "Apple Inc", "ticker": "AAPL"}
 
-    with patch("assistant.tools.finance_tool.make_httpx_client", return_value=client):
+    quote_resp = _mock_response(quote_data)
+    profile_resp = _mock_response(profile_data)
+
+    call_count = 0
+
+    def mock_make_client(**kwargs):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return _mock_client(quote_resp)
+        return _mock_client(profile_resp)
+
+    with (
+        patch("assistant.tools.finance_tool.make_httpx_client", side_effect=mock_make_client),
+        patch.dict("os.environ", {"FINNHUB_API_KEY": "test_key"}),
+    ):
         result = await finance({"action": "stock", "symbol": "AAPL"})
 
-    assert "Apple Inc." in result
+    assert "Apple Inc" in result
     assert "AAPL" in result
     assert "189.84" in result
     assert "+2.34" in result
     assert "+1.25%" in result
-    assert "52" in result  # 52-week
 
 
 @pytest.mark.asyncio
 async def test_stock_quote_not_found():
-    data = {
-        "chart": {
-            "result": None,
-            "error": {"description": "No data found"},
-        }
-    }
+    # Finnhub returns c=0 for unknown symbols
+    data = {"c": 0, "d": None, "dp": None, "h": 0, "l": 0, "o": 0, "pc": 0}
     client = _mock_client(_mock_response(data))
 
-    with patch("assistant.tools.finance_tool.make_httpx_client", return_value=client):
+    with (
+        patch("assistant.tools.finance_tool.make_httpx_client", return_value=client),
+        patch.dict("os.environ", {"FINNHUB_API_KEY": "test_key"}),
+    ):
         result = await finance({"action": "stock", "symbol": "XYZXYZ"})
 
-    assert "Could not find ticker" in result
+    assert "not found" in result
 
 
 @pytest.mark.asyncio
@@ -88,14 +85,28 @@ async def test_stock_no_symbol():
 
 
 @pytest.mark.asyncio
+async def test_stock_no_api_key():
+    with patch.dict("os.environ", {"FINNHUB_API_KEY": ""}, clear=False):
+        result = await finance({"action": "stock", "symbol": "AAPL"})
+    assert "FINNHUB_API_KEY" in result
+
+
+@pytest.mark.asyncio
 async def test_stock_api_error():
+    # Clear cache so the error path is actually hit
+    from assistant.tools.finance_tool import _quote_cache
+    _quote_cache.clear()
+
     client = _mock_client()
     client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
 
-    with patch("assistant.tools.finance_tool.make_httpx_client", return_value=client):
+    with (
+        patch("assistant.tools.finance_tool.make_httpx_client", return_value=client),
+        patch.dict("os.environ", {"FINNHUB_API_KEY": "test_key"}),
+    ):
         result = await finance({"action": "stock", "symbol": "AAPL"})
 
-    assert "API error" in result
+    assert "API error" in result or "Finnhub" in result
 
 
 # --- Crypto tests ---

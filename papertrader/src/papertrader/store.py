@@ -14,6 +14,11 @@ class PaperTradingStore:
     def __init__(self, db_path: Path, default_starting_cash: float = 100_000.0) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite_utils.Database(str(db_path))
+        self._db.execute("PRAGMA journal_mode=WAL")
+        # Autocommit: without this, Python's sqlite3 holds writes in an
+        # uncommitted transaction that is rolled back if the process is killed
+        # (e.g. Docker container restart), losing all data.
+        self._db.conn.isolation_level = None
         self._default_cash = default_starting_cash
         self._ensure_tables()
 

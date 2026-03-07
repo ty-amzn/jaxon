@@ -136,6 +136,22 @@ async def get_stats(request: Request, period_hours: int = 24):
     return stats
 
 
+@observe_router.get("/timeline")
+async def get_timeline(
+    request: Request,
+    period_hours: int = 24,
+    offset_hours: int = 0,
+    bucket_hours: int = 1,
+):
+    store = request.app.state.observe_store
+    data = store.get_timeline(
+        period_hours=period_hours,
+        offset_hours=offset_hours,
+        bucket_hours=bucket_hours,
+    )
+    return data
+
+
 # -- Tool Events -------------------------------------------------------------
 
 @observe_router.post("/tool-events")
@@ -168,3 +184,33 @@ async def get_tool_events(
 async def get_tool_stats(request: Request, period_hours: int = 24):
     store = request.app.state.observe_store
     return store.get_tool_stats(period_hours=period_hours)
+
+
+# -- Sessions ----------------------------------------------------------------
+
+@observe_router.get("/sessions")
+async def get_sessions(
+    request: Request,
+    limit: int = 50,
+    offset: int = 0,
+    agent_name: str | None = None,
+):
+    store = request.app.state.observe_store
+    return store.get_sessions(limit=limit, offset=offset, agent_name=agent_name)
+
+
+@observe_router.get("/sessions/{session_id}")
+async def get_session_trace(request: Request, session_id: str):
+    store = request.app.state.observe_store
+    trace = store.get_session_trace(session_id)
+    if not trace:
+        return {"error": "Session not found or has no events."}
+    return trace
+
+
+# -- Agents ------------------------------------------------------------------
+
+@observe_router.get("/agent-summary")
+async def get_agent_summary(request: Request, period_hours: int = 24):
+    store = request.app.state.observe_store
+    return store.get_agent_summary(period_hours=period_hours)

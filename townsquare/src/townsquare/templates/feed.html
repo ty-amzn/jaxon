@@ -14,7 +14,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dompurify/dist/purify.min.js"></script>
-<link rel="stylesheet" href="/feed/static/styles.css?v=4">
+<link rel="stylesheet" href="/feed/static/styles.css?v=6">
 </head>
 <body>
 <!-- Top bar: logo + search + theme toggle -->
@@ -156,6 +156,72 @@
     <div id="replied-overlay-list" style="max-height:60vh;overflow-y:auto"></div>
   </div>
 </div>
-<script src="/feed/static/app.js?v=2"></script>
+<!-- Mobile bottom nav -->
+<nav class="mobile-nav" id="mobile-nav">
+  <div class="mobile-nav-inner">
+    <button class="mobile-nav-btn active" id="mnav-home" onclick="closeMobileDrawer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+      <span>Home</span>
+    </button>
+    <button class="mobile-nav-btn" id="mnav-channels" onclick="openMobileDrawer()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="4" y1="9" x2="20" y2="9"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="10" y1="3" x2="8" y2="21"/><line x1="16" y1="3" x2="14" y2="21"/></svg>
+      <span>Channels</span>
+    </button>
+    <button class="mobile-nav-btn" id="mnav-post" onclick="openMobileCompose()">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Post</span>
+    </button>
+  </div>
+</nav>
+<!-- Mobile drawer -->
+<div class="mobile-drawer-backdrop" id="mobile-drawer-backdrop" onclick="closeMobileDrawer()"></div>
+<div class="mobile-drawer" id="mobile-drawer">
+  <div class="mobile-drawer-header">
+    <h3>Channels &amp; People</h3>
+    <button class="close-drawer" onclick="closeMobileDrawer()">&times;</button>
+  </div>
+  <div class="mobile-drawer-section">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      <span class="right-section" style="margin-bottom:0;flex-shrink:0">Time</span>
+      <select id="m-period-filter" class="period-filter" onchange="changePeriod(this.value)" style="display:block;flex:1">
+        <option value="7" selected>1 week</option>
+        <option value="30">1 month</option>
+        <option value="180">6 months</option>
+        <option value="all">All time</option>
+      </select>
+    </div>
+    <div class="right-section">Feeds</div>
+    <div class="feed-nav">
+      <div class="feed-item active" id="m-all-posts-item" onclick="navigate('');closeMobileDrawer()">
+        <span>All Posts</span>
+      </div>
+      <div id="m-feed-list"></div>
+    </div>
+  </div>
+  <div class="mobile-drawer-section">
+    <div class="right-section">People</div>
+    <div class="author-nav" id="m-author-list"></div>
+  </div>
+  <div class="mobile-drawer-section">
+    <div class="right-section">Palette</div>
+    <div class="palette-row" id="m-palette-row"></div>
+  </div>
+</div>
+<!-- Mobile compose modal -->
+<div class="mobile-compose-modal" id="mobile-compose-modal" onclick="if(event.target===this)closeMobileCompose()">
+  <div class="mobile-compose-panel">
+    <div class="mc-header">
+      <h3>New Post</h3>
+      <button style="background:none;border:none;color:var(--text-secondary);font-size:22px;cursor:pointer;padding:4px" onclick="closeMobileCompose()">&times;</button>
+    </div>
+    <textarea id="m-compose-text" placeholder="What's happening?" rows="3"></textarea>
+    <div class="bar">
+      <select id="m-compose-feed" class="compose" style="background:var(--bg-primary);border:1px solid var(--border);border-radius:20px;color:var(--text-secondary);padding:6px 12px;font-size:12px;outline:none;font-family:inherit;cursor:pointer;max-width:120px"><option value="">Global</option></select>
+      <input id="m-compose-image" type="url" placeholder="Image URL" style="flex:1;background:var(--bg-tertiary);border:1px solid var(--border);border-radius:20px;padding:6px 12px;color:var(--text-primary);font-size:12px;outline:none;font-family:inherit;min-width:0">
+      <button class="btn btn-sm" id="m-compose-btn" onclick="mobileCreatePost()">Post</button>
+    </div>
+  </div>
+</div>
+<script src="/feed/static/app.js?v=4"></script>
 </body>
 </html>

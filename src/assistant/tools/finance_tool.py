@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
+import time
 from typing import Any
 
 import httpx
@@ -11,10 +14,16 @@ from assistant.core.http import make_httpx_client
 
 logger = logging.getLogger(__name__)
 
-YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+FINNHUB_BASE_URL = "https://finnhub.io/api/v1"
 COINGECKO_PRICE_URL = "https://api.coingecko.com/api/v3/simple/price"
 COINGECKO_SEARCH_URL = "https://api.coingecko.com/api/v3/search"
 FRANKFURTER_URL = "https://api.frankfurter.dev/v1/latest"
+
+# -- Finnhub price cache -----------------------------------------------------
+_quote_cache: dict[str, tuple[float, dict]] = {}  # symbol -> (monotonic_ts, data)
+_QUOTE_CACHE_TTL = 60  # seconds
+_MAX_RETRIES = 3
+_RETRY_BASE_DELAY = 1.0
 
 
 def _fmt_number(n: float | int | None, prefix: str = "", suffix: str = "") -> str:
@@ -33,70 +42,94 @@ def _fmt_number(n: float | int | None, prefix: str = "", suffix: str = "") -> st
 
 
 async def _stock_quote(params: dict[str, Any]) -> str:
-    """Fetch stock quote from Yahoo Finance."""
+    """Fetch stock quote from Finnhub."""
     symbol = params.get("symbol", "").strip().upper()
     if not symbol:
         return "Error: No ticker symbol provided. Use the `symbol` parameter (e.g. 'AAPL')."
 
+    api_key = os.environ.get("FINNHUB_API_KEY", "")
+    if not api_key:
+        return "Error: FINNHUB_API_KEY not set. Get a free key at https://finnhub.io/"
+
+    # Check cache
+    now = time.monotonic()
+    cached = _quote_cache.get(symbol)
+    if cached and (now - cached[0]) < _QUOTE_CACHE_TTL:
+        quote = cached[1]
+    else:
+        headers = {"X-Finnhub-Token": api_key}
+        for attempt in range(_MAX_RETRIES):
+            try:
+                async with make_httpx_client(timeout=10.0) as client:
+                    resp = await client.get(
+                        f"{FINNHUB_BASE_URL}/quote",
+                        params={"symbol": symbol},
+                        headers=headers,
+                    )
+                    resp.raise_for_status()
+                    quote = resp.json()
+                break
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 401:
+                    return "Error: Invalid FINNHUB_API_KEY."
+                if e.response.status_code == 429 and attempt < _MAX_RETRIES - 1:
+                    delay = _RETRY_BASE_DELAY * (2 ** attempt)
+                    logger.warning("Finnhub 429 for %s, retrying in %.0fs", symbol, delay)
+                    await asyncio.sleep(delay)
+                    continue
+                return f"Finnhub API error: {e.response.status_code}"
+            except httpx.HTTPError as e:
+                if attempt < _MAX_RETRIES - 1:
+                    await asyncio.sleep(_RETRY_BASE_DELAY * (2 ** attempt))
+                    continue
+                return f"Finnhub API error: {e}"
+        else:
+            return "Finnhub API error: rate limited. Try again in a minute."
+
+        # Finnhub returns c=0 for unknown symbols
+        if not quote.get("c"):
+            return f"Ticker symbol not found: {symbol}. Check if it trades on US exchanges."
+
+        _quote_cache[symbol] = (now, quote)
+
+    price = quote.get("c")
+    change = quote.get("d")
+    change_pct = quote.get("dp")
+    high = quote.get("h")
+    low = quote.get("l")
+    open_price = quote.get("o")
+    prev_close = quote.get("pc")
+
+    # Fetch company name from /profile2 (cached along with quote)
+    name = symbol
     try:
-        async with make_httpx_client(timeout=15.0) as client:
-            resp = await client.get(
-                YAHOO_CHART_URL.format(symbol=symbol),
-                params={"interval": "1d", "range": "5d"},
+        async with make_httpx_client(timeout=5.0) as client:
+            profile_resp = await client.get(
+                f"{FINNHUB_BASE_URL}/stock/profile2",
+                params={"symbol": symbol},
+                headers={"X-Finnhub-Token": api_key},
             )
-            resp.raise_for_status()
-            data = resp.json()
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            return f"Ticker symbol not found: {symbol}"
-        return f"Yahoo Finance API error: {e.response.status_code}"
-    except httpx.HTTPError as e:
-        return f"Yahoo Finance API error: {e}"
+            if profile_resp.status_code == 200:
+                profile = profile_resp.json()
+                name = profile.get("name") or symbol
+    except httpx.HTTPError:
+        pass  # name stays as symbol
 
-    chart = data.get("chart", {})
-    results = chart.get("result")
-    if not results:
-        error = chart.get("error", {})
-        return f"Could not find ticker: {symbol}. {error.get('description', '')}"
-
-    result = results[0]
-    meta = result.get("meta", {})
-    indicators = result.get("indicators", {})
-    quotes = indicators.get("quote", [{}])[0]
-
-    price = meta.get("regularMarketPrice")
-    prev_close = meta.get("previousClose") or meta.get("chartPreviousClose")
-    currency = meta.get("currency", "USD")
-    name = meta.get("shortName") or meta.get("longName") or symbol
-
-    # Calculate change
-    change = None
-    change_pct = None
-    if price is not None and prev_close is not None and prev_close != 0:
-        change = price - prev_close
-        change_pct = (change / prev_close) * 100
-
-    # Volume from latest quote data
-    volumes = quotes.get("volume", [])
-    volume = volumes[-1] if volumes else None
-
-    # 52-week range from meta
-    fifty_two_low = meta.get("fiftyTwoWeekLow")
-    fifty_two_high = meta.get("fiftyTwoWeekHigh")
-
-    sign = "+" if change and change >= 0 else ""
+    sign = "+" if change is not None and change >= 0 else ""
     lines = [
         f"# {name} ({symbol})",
         "",
-        f"- **Price:** {_fmt_number(price, prefix=currency + ' ')}",
+        f"- **Price:** {_fmt_number(price, prefix='USD ')}",
     ]
-    if change is not None:
+    if change is not None and change_pct is not None:
         lines.append(f"- **Change:** {sign}{_fmt_number(change)} ({sign}{change_pct:.2f}%)")
-    if volume is not None:
-        lines.append(f"- **Volume:** {_fmt_number(volume)}")
-    if fifty_two_low is not None and fifty_two_high is not None:
-        lines.append(f"- **52-Week Range:** {_fmt_number(fifty_two_low)} – {_fmt_number(fifty_two_high)}")
-    lines.append(f"- **Currency:** {currency}")
+    if open_price is not None:
+        lines.append(f"- **Open:** {_fmt_number(open_price)}")
+    if high is not None and low is not None:
+        lines.append(f"- **Day Range:** {_fmt_number(low)} – {_fmt_number(high)}")
+    if prev_close is not None:
+        lines.append(f"- **Previous Close:** {_fmt_number(prev_close)}")
+    lines.append("- **Currency:** USD")
 
     return "\n".join(lines)
 
@@ -257,7 +290,7 @@ FINANCE_TOOL_DEF = {
     "name": "finance",
     "description": (
         "Get financial data: stock quotes, cryptocurrency prices, or currency conversion. "
-        "All data comes from free public APIs (Yahoo Finance, CoinGecko, Frankfurter)."
+        "All data comes from free public APIs (Finnhub, CoinGecko, Frankfurter)."
     ),
     "input_schema": {
         "type": "object",

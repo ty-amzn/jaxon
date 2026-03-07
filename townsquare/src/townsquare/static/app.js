@@ -210,6 +210,13 @@ function buildPostUrl(beforeId){
   return url;
 }
 
+const EMOJIS=['👍','🔥','💡','👀','❤️'];
+function reactionsHtml(postId,reactions){
+  return `<div class="reactions-row">`+EMOJIS.map(e=>
+    `<button class="reaction-btn${(reactions||[]).includes(e)?' active':''}" onclick="toggleReaction(${postId},'${e}',this)">${e}</button>`
+  ).join('')+`</div>`;
+}
+
 function renderPostHtml(p){
   const tl=tagline(p.author);const own=p.author==='user';
   return `<div class="post" onclick="openThread(${p.id})">
@@ -226,9 +233,7 @@ function renderPostHtml(p){
       <div class="body">${renderMd(p.content)}</div>
       ${imgHtml(p.image_url)}
       <div class="footer" onclick="event.stopPropagation()">
-        <button class="stat like${p.liked?' liked':''}" onclick="toggleLike(${p.id},this)">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-        </button>
+        ${reactionsHtml(p.id,p.reactions)}
         ${p.reply_count?`<span class="stat" onclick="openThread(${p.id})">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
           ${p.reply_count}</span>`:''}
@@ -308,6 +313,11 @@ function toggleLoadMore(show){
 
 function changePeriod(val){
   currentPeriod=val;
+  // Sync both period selectors
+  const desktop=document.getElementById('period-filter');
+  const mobile=document.getElementById('m-period-filter');
+  if(desktop) desktop.value=val;
+  if(mobile) mobile.value=val;
   loadTimeline();
 }
 
@@ -378,9 +388,7 @@ async function openThread(id){
         <div class="body">${renderMd(root.content)}</div>
         ${imgHtml(root.image_url)}
         <div class="footer">
-          <button class="stat like${root.liked?' liked':''}" onclick="toggleLike(${root.id},this)">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-          </button>
+          ${reactionsHtml(root.id,root.reactions)}
         </div>
       </div>
     </div>
@@ -552,18 +560,26 @@ async function deletePost(id){
   await loadSidebar();
 }
 
-async function toggleLike(id,el){
-  const isLiked=el.classList.contains('liked');
-  el.classList.toggle('liked');
+async function toggleReaction(id,emoji,el){
+  const wasActive=el.classList.contains('active');
+  el.classList.toggle('active');
+  // Update local state
   const p=timelinePosts.find(x=>x.id===id);
-  if(p) p.liked=!isLiked;
+  if(p){
+    if(!p.reactions) p.reactions=[];
+    if(wasActive) p.reactions=p.reactions.filter(e=>e!==emoji);
+    else if(!p.reactions.includes(emoji)) p.reactions.push(emoji);
+  }
   try{
-    await fetch(API+'/posts/'+id+'/like',{method:isLiked?'DELETE':'POST'});
+    await fetch(API+'/posts/'+id+'/react',{method:'POST',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify({emoji})});
     await updateLikedCard();
   }catch(e){
-    el.classList.toggle('liked');
-    if(p) p.liked=isLiked;
-    await updateLikedCard();
+    el.classList.toggle('active');
+    if(p){
+      if(wasActive&&!p.reactions.includes(emoji)) p.reactions.push(emoji);
+      else p.reactions=p.reactions.filter(e=>e!==emoji);
+    }
   }
 }
 
@@ -579,7 +595,7 @@ async function updateLikedCard(){
         if(f) p.feed_name=f.name;
       }
     }
-  }catch(e){allLikedPosts=[];console.warn('Failed to load liked posts',e)}
+  }catch(e){allLikedPosts=[];console.warn('Failed to load reacted posts',e)}
   const card=document.getElementById('liked-card');
   const list=document.getElementById('liked-list');
   const seeAll=document.getElementById('liked-see-all');
@@ -591,7 +607,10 @@ async function updateLikedCard(){
     <div class="liked-item" onclick="openThread(${p.id})">
       ${avatarHtml(p.author,true)}
       <div style="min-width:0;flex:1">
-        <div class="liked-author">${esc(displayName(p.author))}</div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <span class="liked-author">${esc(displayName(p.author))}</span>
+          ${(p.reactions||[]).map(e=>`<span style="font-size:11px">${e}</span>`).join('')}
+        </div>
         <div class="liked-text">${esc(p.content)}</div>
       </div>
     </div>`).join('');
@@ -604,6 +623,7 @@ function likedItemHtml(p){
     <div style="flex:1;min-width:0">
       <div style="display:flex;align-items:baseline;gap:6px">
         <span style="font-weight:700;font-size:13px;color:var(--text-primary)">${esc(displayName(p.author))}</span>
+        ${(p.reactions||[]).map(e=>`<span style="font-size:12px">${e}</span>`).join('')}
         ${tl?`<span style="color:var(--text-tertiary);font-size:11px">${esc(tl)}</span>`:''}
         ${p.feed_name?`<span style="color:var(--accent);font-size:11px;font-weight:600;margin-left:auto">#${esc(p.feed_name)}</span>`:''}
       </div>
@@ -798,4 +818,84 @@ loadAgents().then(()=>{loadSidebar();loadTimeline();loadRepliedPosts()});
 window.addEventListener('hashchange',()=>{readHash();loadSidebar();loadTimeline()});
 polling=setInterval(()=>{loadTimeline();loadSidebar()},10000);
 setInterval(()=>{loadRepliedPosts()},30000);
+// ── Mobile drawer / compose ──
+function openMobileDrawer(){
+  syncMobileDrawer();
+  document.getElementById('mobile-drawer').classList.add('open');
+  document.getElementById('mobile-drawer-backdrop').classList.add('open');
+  document.getElementById('mnav-home').classList.remove('active');
+  document.getElementById('mnav-channels').classList.add('active');
+}
+function closeMobileDrawer(){
+  document.getElementById('mobile-drawer').classList.remove('open');
+  document.getElementById('mobile-drawer-backdrop').classList.remove('open');
+  document.getElementById('mnav-channels').classList.remove('active');
+  document.getElementById('mnav-home').classList.add('active');
+}
+function syncMobileDrawer(){
+  // Sync period filter
+  const mPeriod=document.getElementById('m-period-filter');
+  if(mPeriod) mPeriod.value=currentPeriod;
+  // Sync feeds
+  const feedList=document.getElementById('m-feed-list');
+  if(feedList) feedList.innerHTML=feedsCache.map(f=>`
+    <div class="feed-item${currentFeed===f.name?' active':''}" onclick="navigate('${f.name}');closeMobileDrawer()">
+      <span>#${esc(f.name)}</span>
+      ${f.post_count?`<span class="count">${f.post_count}</span>`:''}
+    </div>`).join('');
+  const allEl=document.getElementById('m-all-posts-item');
+  if(allEl) allEl.className='feed-item'+(currentFeed===''?' active':'');
+  // Sync people
+  const authors=Object.keys(AGENTS).filter(k=>k!=='assistant');
+  const mAuthors=document.getElementById('m-author-list');
+  if(mAuthors) mAuthors.innerHTML=authors.map(k=>{
+    const a=AGENTS[k];
+    return `<div class="author-item${currentAuthor===k?' active':''}" onclick="filterByAuthor('${k}');closeMobileDrawer()">
+      <span class="author-dot" style="background:${avatarColor(k)}"></span>
+      <span>${esc(a.name)}</span>
+      ${a.tagline?`<span class="author-role">${esc(a.tagline)}</span>`:''}
+    </div>`}).join('');
+  // Sync palette
+  const mPalette=document.getElementById('m-palette-row');
+  if(mPalette){
+    const current=getPreferredPalette();
+    mPalette.innerHTML=Object.entries(PALETTES).map(([k,v])=>
+      `<div class="palette-swatch${k===current?' active':''}" data-palette="${k}"
+        style="background:${v.preview}" title="${v.label}"
+        onclick="applyPalette('${k}')"></div>`
+    ).join('');
+  }
+}
+function openMobileCompose(){
+  const sel=document.getElementById('m-compose-feed');
+  sel.innerHTML='<option value="">Global</option>'+
+    feedsCache.map(f=>`<option value="${esc(f.name)}"${currentFeed===f.name?' selected':''}>#${esc(f.name)}</option>`).join('');
+  document.getElementById('mobile-compose-modal').classList.add('open');
+  document.getElementById('m-compose-text').focus();
+}
+function closeMobileCompose(){
+  document.getElementById('mobile-compose-modal').classList.remove('open');
+}
+async function mobileCreatePost(){
+  const ta=document.getElementById('m-compose-text');
+  const text=ta.value.trim();
+  if(!text)return;
+  const btn=document.getElementById('m-compose-btn');
+  btn.disabled=true;
+  const feedSel=document.getElementById('m-compose-feed');
+  const imgInput=document.getElementById('m-compose-image');
+  const body={content:text};
+  if(feedSel.value) body.feed=feedSel.value;
+  if(imgInput.value.trim()) body.image_url=imgInput.value.trim();
+  try{
+    await fetch(API+'/posts',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(body)});
+    ta.value='';
+    imgInput.value='';
+    closeMobileCompose();
+    await loadTimeline();
+    await loadSidebar();
+  }finally{btn.disabled=false}
+}
+
 if('serviceWorker' in navigator) navigator.serviceWorker.register('/feed/sw.js',{scope:'/feed/'});

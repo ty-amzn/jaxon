@@ -189,15 +189,17 @@ class ToolRegistry:
         """Fire-and-forget tool metrics logging to Observatory."""
         if self._tool_metrics is None:
             return
+        from assistant.agents.background import current_agent_name
         from assistant.llm.metrics import ToolEvent
 
+        agent = current_agent_name.get("assistant")
         event = ToolEvent(
             tool_name=tool_name,
             duration_ms=duration_ms,
             success=success,
             error_message=error_message,
             session_id=session_id or None,
-            agent_name=None,
+            agent_name=agent if agent != "assistant" else None,
             action_category=action_category,
         )
         asyncio.create_task(self._tool_metrics.log_tool_call(event))

@@ -21,6 +21,8 @@ class ObservatoryStore:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite_utils.Database(str(db_path))
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.conn.isolation_level = None
         self._ensure_table()
 
     _NEW_COLUMNS = {
@@ -272,6 +274,35 @@ class ObservatoryStore:
             "tokens_by_model": tokens_by_model,
         }
 
+    def get_timeline(
+        self,
+        period_hours: int = 24,
+        offset_hours: int = 0,
+        bucket_hours: int = 1,
+    ) -> list[dict]:
+        """Return call counts grouped by time bucket.
+
+        Args:
+            period_hours: Width of the time window.
+            offset_hours: How many hours back from now the window ends.
+            bucket_hours: Grouping size (1, 6, 24, etc.).
+        """
+        from datetime import timedelta
+
+        now = datetime.now(timezone.utc)
+        end = now - timedelta(hours=offset_hours)
+        start = end - timedelta(hours=period_hours)
+
+        bucket_secs = bucket_hours * 3600
+        rows = self._db.execute(
+            "SELECT datetime((CAST(strftime('%s', timestamp) AS INTEGER) / ?) * ?, 'unixepoch') AS bucket, "
+            "COUNT(*) AS count "
+            "FROM inference_events WHERE timestamp >= ? AND timestamp < ? "
+            "GROUP BY bucket ORDER BY bucket",
+            [bucket_secs, bucket_secs, start.isoformat(), end.isoformat()],
+        ).fetchall()
+        return [{"bucket": row[0], "count": row[1]} for row in rows]
+
     def cleanup(self, raw_retention_days: int = 30, event_retention_days: int = 180) -> tuple[int, int]:
         """Clean up old data. Returns (raw_cleaned, events_deleted)."""
         from datetime import timedelta
@@ -352,6 +383,153 @@ class ObservatoryStore:
         sql += " ORDER BY id DESC LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
+
+    # ------------------------------------------------------------------
+    # Sessions
+    # ------------------------------------------------------------------
+
+    def get_sessions(
+        self,
+        limit: int = 50,
+        offset: int = 0,
+        agent_name: str | None = None,
+    ) -> list[dict]:
+        """Return distinct sessions with aggregated stats, newest first."""
+        where = "WHERE e.session_id IS NOT NULL"
+        params: list = []
+        if agent_name:
+            where += " AND e.agent_name = ?"
+            params.append(agent_name)
+
+        sql = (
+            "SELECT e.session_id, "
+            "  COALESCE(e.agent_name, 'jax') AS agent, "
+            "  COUNT(*) AS call_count, "
+            "  SUM(e.duration_ms) AS total_duration_ms, "
+            "  COALESCE(SUM(e.input_tokens), 0) AS total_input_tokens, "
+            "  COALESCE(SUM(e.output_tokens), 0) AS total_output_tokens, "
+            "  SUM(CASE WHEN e.success = 0 THEN 1 ELSE 0 END) AS error_count, "
+            "  MIN(e.timestamp) AS first_event, "
+            "  MAX(e.timestamp) AS last_event, "
+            "  SUM(e.tool_rounds) AS total_tool_rounds "
+            f"FROM inference_events e {where} "
+            "GROUP BY e.session_id "
+            "ORDER BY MAX(e.id) DESC LIMIT ? OFFSET ?"
+        )
+        params.extend([limit, offset])
+        rows = self._db.execute(sql, params).fetchall()
+
+        sessions = []
+        for r in rows:
+            sid = r[0]
+            # Count tool events for this session
+            tool_row = self._db.execute(
+                "SELECT COUNT(*) FROM tool_events WHERE session_id = ?", [sid]
+            ).fetchone()
+            sessions.append({
+                "session_id": r[0],
+                "agent": r[1],
+                "call_count": r[2],
+                "total_duration_ms": r[3],
+                "total_input_tokens": r[4],
+                "total_output_tokens": r[5],
+                "error_count": r[6],
+                "first_event": r[7],
+                "last_event": r[8],
+                "total_tool_rounds": r[9],
+                "tool_event_count": tool_row[0] if tool_row else 0,
+            })
+        return sessions
+
+    def get_session_trace(self, session_id: str) -> list[dict]:
+        """Return all inference + tool events for a session, merged chronologically."""
+        # Inference events
+        inf_rows = _rows_to_dicts(self._db.execute(
+            "SELECT *, 'inference' AS event_type FROM inference_events WHERE session_id = ? ORDER BY id ASC",
+            [session_id],
+        ))
+        # Tool events
+        tool_rows = _rows_to_dicts(self._db.execute(
+            "SELECT *, 'tool' AS event_type FROM tool_events WHERE session_id = ? ORDER BY id ASC",
+            [session_id],
+        ))
+        # Merge and sort by timestamp
+        combined = inf_rows + tool_rows
+        combined.sort(key=lambda x: x.get("timestamp", ""))
+        return combined
+
+    # ------------------------------------------------------------------
+    # Agent summaries
+    # ------------------------------------------------------------------
+
+    def get_agent_summary(self, period_hours: int = 24) -> list[dict]:
+        """Return per-agent aggregated stats for the given period."""
+        from datetime import timedelta
+
+        cutoff = (datetime.now(timezone.utc) - timedelta(hours=period_hours)).isoformat()
+
+        rows = self._db.execute(
+            "SELECT COALESCE(agent_name, 'jax') AS agent, "
+            "  COUNT(*) AS call_count, "
+            "  SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END) AS error_count, "
+            "  AVG(duration_ms) AS avg_latency_ms, "
+            "  COALESCE(SUM(input_tokens), 0) AS total_input_tokens, "
+            "  COALESCE(SUM(output_tokens), 0) AS total_output_tokens, "
+            "  SUM(tool_rounds) AS total_tool_rounds, "
+            "  COUNT(DISTINCT session_id) AS session_count, "
+            "  COUNT(DISTINCT model) AS model_count, "
+            "  MIN(timestamp) AS first_seen, "
+            "  MAX(timestamp) AS last_seen "
+            "FROM inference_events WHERE timestamp >= ? "
+            "GROUP BY agent ORDER BY call_count DESC",
+            [cutoff],
+        ).fetchall()
+
+        agents = []
+        for r in rows:
+            agent_name = r[0]
+            # Get tool stats for this agent
+            tool_row = self._db.execute(
+                "SELECT COUNT(*), SUM(CASE WHEN success = 0 THEN 1 ELSE 0 END), "
+                "AVG(duration_ms) FROM tool_events "
+                "WHERE COALESCE(agent_name, 'jax') = ? AND timestamp >= ?",
+                [agent_name, cutoff],
+            ).fetchone()
+            # Get top models for this agent
+            model_rows = self._db.execute(
+                "SELECT model, COUNT(*) AS cnt FROM inference_events "
+                "WHERE COALESCE(agent_name, 'jax') = ? AND timestamp >= ? "
+                "GROUP BY model ORDER BY cnt DESC LIMIT 5",
+                [agent_name, cutoff],
+            ).fetchall()
+            # Get top tools for this agent
+            top_tools = self._db.execute(
+                "SELECT tool_name, COUNT(*) AS cnt FROM tool_events "
+                "WHERE COALESCE(agent_name, 'jax') = ? AND timestamp >= ? "
+                "GROUP BY tool_name ORDER BY cnt DESC LIMIT 5",
+                [agent_name, cutoff],
+            ).fetchall()
+
+            agents.append({
+                "agent": agent_name,
+                "call_count": r[1],
+                "error_count": r[2],
+                "error_rate": round(r[2] / r[1] * 100, 2) if r[1] > 0 else 0,
+                "avg_latency_ms": round(r[3]) if r[3] else 0,
+                "total_input_tokens": r[4],
+                "total_output_tokens": r[5],
+                "total_tool_rounds": r[6],
+                "session_count": r[7],
+                "model_count": r[8],
+                "first_seen": r[9],
+                "last_seen": r[10],
+                "top_models": {m[0]: m[1] for m in model_rows},
+                "tool_calls": tool_row[0] if tool_row and tool_row[0] else 0,
+                "tool_errors": tool_row[1] if tool_row and tool_row[1] else 0,
+                "tool_avg_latency_ms": round(tool_row[2]) if tool_row and tool_row[2] else 0,
+                "top_tools": {t[0]: t[1] for t in top_tools},
+            })
+        return agents
 
     def get_tool_stats(self, period_hours: int = 24) -> dict:
         """Return aggregate tool call statistics for the given period."""

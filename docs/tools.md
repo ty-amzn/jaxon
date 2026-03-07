@@ -7,7 +7,7 @@ The assistant can execute actions through a permission-gated tool system.
 | Tool | Description | Permission |
 |------|-------------|------------|
 | `shell_exec` | Execute shell commands | Read commands auto-approved; writes require approval |
-| `python_exec` | Execute Python code in an isolated temp directory | Auto-approved |
+| `python_exec` | Execute Python code in an isolated temp directory (numpy, pandas available) | Auto-approved |
 | `read_file` | Read file contents | Auto-approved |
 | `write_file` | Write/create files | Requires approval |
 | `http_request` | Make HTTP requests | GET auto-approved; others require approval |
@@ -38,7 +38,7 @@ The assistant can execute actions through a permission-gated tool system.
 | `google_maps` | Get directions, find nearby places, or geocode addresses | Auto-approved (if enabled) |
 | `hue` | Philips Hue smart light control (list, on/off, brightness, color, scenes) | List auto-approved; control/activate require approval (if enabled) |
 | `finance` | Stock quotes, crypto prices, and currency conversion | Auto-approved |
-| `stock_trade` | Paper trading — agents see it as a real brokerage (buy, sell, portfolio, history, market_status) | Auto-approved (if enabled) |
+| `stock_trade` | Paper trading — agents see it as a real brokerage (buy, sell, portfolio, history, market_status, savings, notes) | Auto-approved (if enabled) |
 | `post_to_feed` | Post updates to the internal feed (Town Square) | Auto-approved |
 | `manage_feeds` | Manage Town Square feed subscriptions | Auto-approved |
 | `send_email` | Send email notification via IFTTT webhook | Auto-approved (NETWORK_READ) |

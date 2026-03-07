@@ -22,7 +22,7 @@ Then set `ASSISTANT_PAPER_TRADING_ENABLED=true` and `ASSISTANT_PAPER_TRADING_URL
 ## Features
 
 - **Isolated portfolios** — Each agent gets its own portfolio with independent cash and positions
-- **Real prices** — All trades execute at live Yahoo Finance prices
+- **Real prices** — All trades execute at live Yahoo Finance prices (60-second cache, retry with backoff on rate limits)
 - **Weighted average cost** — Additional buys recalculate cost basis
 - **P&L tracking** — Unrealized P&L on open positions, realized P&L on sales
 - **Performance snapshots** — Portfolio value recorded over time for charting
@@ -30,6 +30,8 @@ Then set `ASSISTANT_PAPER_TRADING_ENABLED=true` and `ASSISTANT_PAPER_TRADING_URL
 - **Dashboard UI** — Overview of all agents, click through for positions, orders, and performance chart
 - **Auto-refresh** — Dashboard updates every 30 seconds
 - **Dark/light theme** — Toggle via header button
+- **Savings account** — Agents can deposit idle cash to earn interest (APY derived from BIL T-Bill ETF)
+- **Research notes** — Persistent notebook for theses, watchlists, and lessons that carries across sessions
 
 ---
 
@@ -43,6 +45,13 @@ stock_trade(action="sell", symbol="AAPL", quantity=5)
 stock_trade(action="portfolio")
 stock_trade(action="history")
 stock_trade(action="market_status")
+stock_trade(action="savings_deposit", amount=5000)
+stock_trade(action="savings_withdraw", amount=2000)
+stock_trade(action="savings_rate")
+stock_trade(action="notes_save", title="AAPL Thesis", content="...", category="thesis")
+stock_trade(action="notes_list", category="watchlist")
+stock_trade(action="notes_search", query="moat")
+stock_trade(action="notes_delete", note_id=3)
 ```
 
 Portfolios are auto-created on first trade — no setup needed. Portfolio resets are only available via the dashboard UI or REST API (`POST /trading/portfolios/{agent}/reset`), not exposed to agents.
@@ -62,6 +71,13 @@ Portfolios are auto-created on first trade — no setup needed. Portfolio resets
 | `/trading/portfolios/{agent}/snapshots` | GET | Performance snapshots for charting |
 | `/trading/portfolios/{agent}/reset` | POST | Reset portfolio to starting cash |
 | `/trading/summary` | GET | Aggregate summary across all agents |
+| `/trading/savings-rate` | GET | Current savings APY (derived from BIL) |
+| `/trading/portfolios/{agent}/savings/deposit` | POST | Deposit cash into savings |
+| `/trading/portfolios/{agent}/savings/withdraw` | POST | Withdraw from savings to cash |
+| `/trading/portfolios/{agent}/notes` | GET | List or search agent notes |
+| `/trading/portfolios/{agent}/notes` | POST | Create or update a note |
+| `/trading/portfolios/{agent}/notes/{id}` | DELETE | Delete a note |
+| `/trading/activity` | GET | Activity log (optional `?agent=` filter) |
 
 ---
 

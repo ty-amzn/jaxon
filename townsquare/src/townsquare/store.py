@@ -19,6 +19,8 @@ class FeedStore:
     def __init__(self, db_path: Path) -> None:
         db_path.parent.mkdir(parents=True, exist_ok=True)
         self._db = sqlite_utils.Database(str(db_path))
+        self._db.execute("PRAGMA journal_mode=WAL")
+        self._db.conn.isolation_level = None
         self._ensure_table()
 
     def _ensure_table(self) -> None:
@@ -44,15 +46,23 @@ class FeedStore:
             if "image_url" not in cols:
                 self._db.execute("ALTER TABLE posts ADD COLUMN image_url TEXT")
 
-        # Likes table
-        if "likes" not in self._db.table_names():
+        # Reactions table (replaces old likes table)
+        if "reactions" not in self._db.table_names():
             self._db.execute(
-                "CREATE TABLE likes ("
+                "CREATE TABLE reactions ("
                 "  id INTEGER PRIMARY KEY,"
-                "  post_id INTEGER NOT NULL UNIQUE,"
-                "  created_at TEXT NOT NULL"
+                "  post_id INTEGER NOT NULL,"
+                "  emoji TEXT NOT NULL,"
+                "  created_at TEXT NOT NULL,"
+                "  UNIQUE(post_id, emoji)"
                 ")"
             )
+            # Migrate existing likes → ❤️ reactions
+            if "likes" in self._db.table_names():
+                self._db.execute(
+                    "INSERT OR IGNORE INTO reactions (post_id, emoji, created_at) "
+                    "SELECT post_id, '❤️', created_at FROM likes"
+                )
 
         # Feeds table
         if "feeds" not in self._db.table_names():
@@ -330,50 +340,71 @@ class FeedStore:
             return False
         # Delete replies first
         self._db.execute("DELETE FROM posts WHERE reply_to = ?", [post_id])
-        self._db.execute("DELETE FROM likes WHERE post_id = ?", [post_id])
+        self._db.execute("DELETE FROM reactions WHERE post_id = ?", [post_id])
         self._db["posts"].delete(post_id)
         return True
 
     # ------------------------------------------------------------------
-    # Likes
+    # Reactions
     # ------------------------------------------------------------------
 
-    def like_post(self, post_id: int) -> bool:
-        """Like a post. Returns True if newly liked."""
-        try:
-            self._db.execute(
-                "INSERT OR IGNORE INTO likes (post_id, created_at) VALUES (?, ?)",
-                [post_id, datetime.now(timezone.utc).isoformat()],
-            )
-            return self._db.execute("SELECT changes()").fetchone()[0] > 0
-        except Exception:
-            return False
+    EMOJI_SET = ("👍", "🔥", "💡", "👀", "❤️")
 
-    def unlike_post(self, post_id: int) -> bool:
-        """Unlike a post. Returns True if was liked."""
-        self._db.execute("DELETE FROM likes WHERE post_id = ?", [post_id])
-        return self._db.execute("SELECT changes()").fetchone()[0] > 0
-
-    def is_liked(self, post_id: int) -> bool:
-        """Check if a post is liked."""
-        row = self._db.execute(
-            "SELECT 1 FROM likes WHERE post_id = ?", [post_id]
+    def toggle_reaction(self, post_id: int, emoji: str) -> bool:
+        """Toggle a reaction on a post. Returns True if now active, False if removed."""
+        if emoji not in self.EMOJI_SET:
+            raise ValueError(f"Unsupported emoji: {emoji}")
+        existing = self._db.execute(
+            "SELECT id FROM reactions WHERE post_id = ? AND emoji = ?",
+            [post_id, emoji],
         ).fetchone()
-        return row is not None
+        if existing:
+            self._db.execute("DELETE FROM reactions WHERE id = ?", [existing[0]])
+            return False
+        self._db.execute(
+            "INSERT INTO reactions (post_id, emoji, created_at) VALUES (?, ?, ?)",
+            [post_id, emoji, datetime.now(timezone.utc).isoformat()],
+        )
+        return True
 
-    def get_liked_post_ids(self) -> set[int]:
-        """Return all liked post IDs."""
-        rows = self._db.execute("SELECT post_id FROM likes").fetchall()
+    def get_post_reactions(self, post_id: int) -> list[str]:
+        """Return list of active emoji for a post."""
+        rows = self._db.execute(
+            "SELECT emoji FROM reactions WHERE post_id = ?", [post_id]
+        ).fetchall()
+        return [r[0] for r in rows]
+
+    def get_bulk_reactions(self, post_ids: list[int]) -> dict[int, list[str]]:
+        """Return {post_id: [emoji, ...]} for a batch of posts."""
+        if not post_ids:
+            return {}
+        placeholders = ",".join("?" for _ in post_ids)
+        rows = self._db.execute(
+            f"SELECT post_id, emoji FROM reactions WHERE post_id IN ({placeholders})",
+            post_ids,
+        ).fetchall()
+        result: dict[int, list[str]] = {pid: [] for pid in post_ids}
+        for pid, emoji in rows:
+            result[pid].append(emoji)
+        return result
+
+    def get_reacted_post_ids(self) -> set[int]:
+        """Return all post IDs that have at least one reaction."""
+        rows = self._db.execute("SELECT DISTINCT post_id FROM reactions").fetchall()
         return {r[0] for r in rows}
 
-    def get_liked_posts(self, limit: int = 20) -> list[dict]:
-        """Return liked posts, newest-liked first."""
+    def get_reacted_posts(self, limit: int = 50) -> list[dict]:
+        """Return posts with any reaction, newest-reacted first."""
         sql = (
-            "SELECT p.* FROM posts p "
-            "JOIN likes l ON l.post_id = p.id "
-            "ORDER BY l.created_at DESC LIMIT ?"
+            "SELECT p.*, MAX(r.created_at) AS last_reacted "
+            "FROM posts p JOIN reactions r ON r.post_id = p.id "
+            "GROUP BY p.id ORDER BY last_reacted DESC LIMIT ?"
         )
-        return _rows_to_dicts(self._db.execute(sql, [limit]))
+        posts = _rows_to_dicts(self._db.execute(sql, [limit]))
+        # Strip the extra column
+        for p in posts:
+            p.pop("last_reacted", None)
+        return posts
 
     # ------------------------------------------------------------------
     # Read state (unread reply tracking)

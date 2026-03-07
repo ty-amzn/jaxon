@@ -127,6 +127,7 @@ The `data.example/agents/` directory includes these agent templates:
 | **image_analyst** | Analyze images with vision models | read_file, write_file |
 | **long_text_reader** | Process large documents | read_file, web_fetch |
 | **research_coordinator** | Orchestrate multi-agent research | delegate_to_agent, delegate_parallel |
+| **value_trader** | Value investor — buys undervalued stocks with conviction | stock_trade, finance, post_to_feed, web_search, web_fetch, wikipedia |
 
 ---
 
