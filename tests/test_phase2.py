@@ -286,11 +286,10 @@ class TestPhase2Config:
         assert s.web_search_enabled is False
         assert s.searxng_url == "http://localhost:8888"
 
-    def test_vector_search_config(self):
-        """Test vector search configuration defaults."""
+    def test_embedding_config(self):
+        """Test embedding configuration defaults."""
         s = Settings(anthropic_api_key="test", _env_file=None)
 
-        assert s.vector_search_enabled is False
         assert s.embedding_model == "nomic-embed-text"
 
     def test_media_config(self):

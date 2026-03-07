@@ -53,10 +53,6 @@ class ChatInterface:
             daily_log_dir=settings.daily_log_dir,
             search_db_path=settings.search_db_path,
             skills_dir=settings.skills_dir,
-            embeddings_db_path=settings.embeddings_db_path if settings.vector_search_enabled else None,
-            ollama_base_url=settings.ollama_base_url,
-            embedding_model=settings.embedding_model,
-            vector_search_enabled=settings.vector_search_enabled,
             timezone=settings.scheduler_timezone,
             vector_store=vector_store,
         )

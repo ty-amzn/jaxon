@@ -8,7 +8,6 @@ from typing import Any
 
 from assistant.memory.daily_log import DailyLog
 from assistant.memory.durable import DurableMemory
-from assistant.memory.embeddings import EmbeddingService
 from assistant.memory.identity import IdentityLoader
 from assistant.memory.search import SearchIndex
 from assistant.memory.skills import SkillLoader
@@ -26,10 +25,6 @@ class MemoryManager:
         daily_log_dir: Path,
         search_db_path: Path,
         skills_dir: Path | None = None,
-        embeddings_db_path: Path | None = None,
-        ollama_base_url: str = "http://localhost:11434",
-        embedding_model: str = "nomic-embed-text",
-        vector_search_enabled: bool = False,
         timezone: str = "UTC",
         vector_store: Any = None,
     ) -> None:
@@ -47,17 +42,6 @@ class MemoryManager:
 
         # Plugin skills (injected at runtime)
         self._plugin_skills: dict[str, str] = {}
-
-        # Embedding service (optional) — skipped when Qdrant is enabled
-        self._vector_search_enabled = vector_search_enabled
-        self.embeddings: EmbeddingService | None = None
-        if vector_search_enabled and embeddings_db_path and not vector_store:
-            self.embeddings = EmbeddingService(
-                db_path=embeddings_db_path,
-                ollama_base_url=ollama_base_url,
-                embedding_model=embedding_model,
-            )
-            logger.info(f"Vector search enabled with model: {embedding_model}")
 
     async def get_system_prompt(
         self,
@@ -166,24 +150,8 @@ class MemoryManager:
         )
 
         # Index in FTS5
-        user_msg_id = self.search.index_message("user", user_message, session_id)
-        asst_msg_id = self.search.index_message("assistant", assistant_response, session_id)
-
-        # Store embeddings if enabled
-        if self.embeddings:
-            try:
-                if user_msg_id:
-                    await self.embeddings.store_embedding(user_msg_id, user_message)
-                if asst_msg_id:
-                    await self.embeddings.store_embedding(asst_msg_id, assistant_response)
-            except Exception as e:
-                logger.warning(f"Failed to store embeddings: {e}")
-
-    async def search_similar(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
-        """Semantic search using embeddings."""
-        if not self.embeddings:
-            return []
-        return await self.embeddings.search_similar(query, limit)
+        self.search.index_message("user", user_message, session_id)
+        self.search.index_message("assistant", assistant_response, session_id)
 
     def add_plugin_skill(self, name: str, content: str) -> None:
         """Add a skill contributed by a plugin."""
@@ -192,8 +160,3 @@ class MemoryManager:
     def remove_plugin_skill(self, name: str) -> None:
         """Remove a plugin-contributed skill."""
         self._plugin_skills.pop(name, None)
-
-    async def close(self) -> None:
-        """Close any open resources."""
-        if self.embeddings:
-            await self.embeddings.close()

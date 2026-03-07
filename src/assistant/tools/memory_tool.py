@@ -272,10 +272,6 @@ def _make_memory_forget(memory: MemoryManager, vector_store: Any = None):
             memory.search.clear_all()
             deleted_parts.append("Cleared FTS5 search index")
 
-            if memory.embeddings:
-                memory.embeddings.clear_all()
-                deleted_parts.append("Cleared embeddings")
-
             memory.daily_log.clear_all()
             deleted_parts.append("Cleared all daily logs")
 
@@ -297,12 +293,6 @@ def _make_memory_forget(memory: MemoryManager, vector_store: Any = None):
                 deleted_parts.append(
                     f"Deleted {fts_deleted} row(s) from search index"
                 )
-
-                # Also delete related embeddings
-                if memory.embeddings:
-                    # Re-search to get IDs of deleted messages (already gone)
-                    # The IDs were returned during delete_matching
-                    pass  # embeddings tied to message IDs already deleted
 
         # Sync deletions to Qdrant knowledge collection
         if vector_store is not None and scope == "all":

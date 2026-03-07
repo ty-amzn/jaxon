@@ -28,7 +28,6 @@ def test_settings_phase2_paths():
     s = Settings(anthropic_api_key="test", _env_file=None)
     assert s.skills_dir == s.data_dir / "skills"
     assert s.threads_dir == s.data_dir / "threads"
-    assert s.embeddings_db_path == s.data_dir / "db" / "embeddings.db"
 
 
 def test_settings_phase2_defaults():
@@ -43,8 +42,7 @@ def test_settings_phase2_defaults():
     # Web Search
     assert s.web_search_enabled is False
     assert s.searxng_url == "http://localhost:8888"
-    # Vector Search
-    assert s.vector_search_enabled is False
+    # Embedding model
     assert s.embedding_model == "nomic-embed-text"
     # Media
     assert s.max_media_size_mb == 10

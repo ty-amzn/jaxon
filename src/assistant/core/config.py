@@ -68,8 +68,7 @@ class Settings(BaseSettings):
     web_search_enabled: bool = False
     searxng_url: str = "http://localhost:8888"
 
-    # Vector Search (Phase 2)
-    vector_search_enabled: bool = False
+    # Embedding model (used by Qdrant embedding providers)
     embedding_model: str = "nomic-embed-text"
 
     # Qdrant Vector DB
@@ -269,9 +268,6 @@ class Settings(BaseSettings):
     def threads_dir(self) -> Path:
         return self.data_dir / "threads"
 
-    @property
-    def embeddings_db_path(self) -> Path:
-        return self.data_dir / "db" / "embeddings.db"
 
     @property
     def plugins_dir(self) -> Path:
