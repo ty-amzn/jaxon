@@ -24,12 +24,18 @@ class VectorStore:
         from qdrant_client.models import Distance, VectorParams
 
         self._embedder = embedder
-        self._dimensions = embedder.dimensions
         self._enabled = getattr(config, "qdrant_enabled", False)
 
         if not self._enabled:
             self._client = None
+            self._dimensions = embedder.dimensions
             return
+
+        # Probe actual dimensions if the embedder supports it
+        if hasattr(embedder, "probe_dimensions"):
+            self._dimensions = embedder.probe_dimensions()
+        else:
+            self._dimensions = embedder.dimensions
 
         url = getattr(config, "qdrant_url", "http://localhost:6333")
         self._client = QdrantClient(url=url, timeout=30)
@@ -40,13 +46,27 @@ class VectorStore:
         self._ensure_collections()
 
     def _ensure_collections(self) -> None:
-        """Create collections if they don't exist."""
+        """Create collections if they don't exist, or recreate if dimensions changed."""
         if not self._client:
             return
         from qdrant_client.models import VectorParams, Distance
 
         existing = {c.name for c in self._client.get_collections().collections}
         for name in _COLLECTIONS:
+            if name in existing:
+                # Check if dimensions match
+                info = self._client.get_collection(name)
+                current_dim = info.config.params.vectors.size
+                if current_dim != self._dimensions:
+                    points = info.points_count or 0
+                    logger.warning(
+                        "Collection %s has dim=%d but embedder needs %d "
+                        "(%d points will be lost). Recreating.",
+                        name, current_dim, self._dimensions, points,
+                    )
+                    self._client.delete_collection(name)
+                    existing.discard(name)
+
             if name not in existing:
                 self._client.create_collection(
                     collection_name=name,
@@ -54,12 +74,12 @@ class VectorStore:
                         size=self._dimensions, distance=Distance.COSINE
                     ),
                 )
-                logger.info("Created Qdrant collection: %s", name)
+                logger.info("Created Qdrant collection: %s (dim=%d)", name, self._dimensions)
 
     async def upsert(
         self,
         collection: str,
-        id: str,
+        id: str | int,
         text: str,
         payload: dict[str, Any] | None = None,
     ) -> bool:

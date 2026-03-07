@@ -26,6 +26,14 @@ class EmbeddingProvider(Protocol):
 class OllamaEmbedder:
     """Embedding provider using Ollama's /api/embeddings endpoint."""
 
+    # Known dimensions for common models to avoid a probe call
+    _KNOWN_DIMS: dict[str, int] = {
+        "nomic-embed-text": 768,
+        "mxbai-embed-large": 1024,
+        "all-minilm": 384,
+        "snowflake-arctic-embed": 1024,
+    }
+
     def __init__(
         self,
         base_url: str = "http://localhost:11434",
@@ -34,10 +42,37 @@ class OllamaEmbedder:
         self._base_url = base_url.rstrip("/")
         self._model = model
         self._client = make_httpx_client(timeout=60.0)
-        self._dimensions = 768  # nomic-embed-text default
+        self._dimensions = self._KNOWN_DIMS.get(model, 0)
+        self._probed = self._dimensions > 0
 
     @property
     def dimensions(self) -> int:
+        return self._dimensions
+
+    def probe_dimensions(self) -> int:
+        """Synchronously probe the model for its embedding dimensions."""
+        if self._probed:
+            return self._dimensions
+        import httpx
+
+        try:
+            resp = httpx.post(
+                f"{self._base_url}/api/embeddings",
+                json={"model": self._model, "prompt": "dimension probe"},
+                timeout=30.0,
+            )
+            if resp.status_code == 200:
+                vec = resp.json().get("embedding", [])
+                if vec:
+                    self._dimensions = len(vec)
+                    self._probed = True
+                    logger.info(
+                        "Probed %s dimensions: %d", self._model, self._dimensions
+                    )
+        except Exception as e:
+            logger.warning("Failed to probe embedding dimensions: %s", e)
+        if self._dimensions == 0:
+            self._dimensions = 768  # fallback
         return self._dimensions
 
     async def embed(self, texts: list[str]) -> list[list[float]]:

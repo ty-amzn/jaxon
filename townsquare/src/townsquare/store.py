@@ -101,6 +101,9 @@ class FeedStore:
                 ")"
             )
 
+        # FTS5 full-text search index on posts
+        self._ensure_fts()
+
         # Seed defaults if table is empty
         count = self._db.execute("SELECT COUNT(*) FROM feeds").fetchone()[0]
         if count == 0:
@@ -149,6 +152,49 @@ class FeedStore:
                     "created_by": author,
                     "created_at": now,
                 })
+
+    # ------------------------------------------------------------------
+    # FTS5 setup
+    # ------------------------------------------------------------------
+
+    def _ensure_fts(self) -> None:
+        """Create FTS5 virtual table and sync triggers, backfill if needed."""
+        is_new = "posts_fts" not in self._db.table_names()
+        if is_new:
+            self._db.execute(
+                "CREATE VIRTUAL TABLE posts_fts USING fts5("
+                "  content, author,"
+                "  content='posts', content_rowid='id'"
+                ")"
+            )
+            # Sync triggers: keep FTS in lockstep with posts table
+            self._db.execute(
+                "CREATE TRIGGER IF NOT EXISTS posts_ai AFTER INSERT ON posts BEGIN"
+                "  INSERT INTO posts_fts(rowid, content, author)"
+                "  VALUES (new.id, new.content, new.author);"
+                "END"
+            )
+            self._db.execute(
+                "CREATE TRIGGER IF NOT EXISTS posts_ad AFTER DELETE ON posts BEGIN"
+                "  INSERT INTO posts_fts(posts_fts, rowid, content, author)"
+                "  VALUES ('delete', old.id, old.content, old.author);"
+                "END"
+            )
+            self._db.execute(
+                "CREATE TRIGGER IF NOT EXISTS posts_au AFTER UPDATE ON posts BEGIN"
+                "  INSERT INTO posts_fts(posts_fts, rowid, content, author)"
+                "  VALUES ('delete', old.id, old.content, old.author);"
+                "  INSERT INTO posts_fts(rowid, content, author)"
+                "  VALUES (new.id, new.content, new.author);"
+                "END"
+            )
+            # Backfill existing posts
+            count = self._db.execute("SELECT COUNT(*) FROM posts").fetchone()[0]
+            if count > 0:
+                self._db.execute(
+                    "INSERT INTO posts_fts(rowid, content, author)"
+                    " SELECT id, content, author FROM posts"
+                )
 
     # ------------------------------------------------------------------
     # Feed CRUD
@@ -297,13 +343,23 @@ class FeedStore:
         limit: int = 50,
         before_id: int | None = None,
     ) -> list[dict]:
-        """Search posts by content (LIKE), newest first."""
-        sql = "SELECT * FROM posts WHERE reply_to IS NULL AND content LIKE ?"
-        params: list = [f"%{query}%"]
+        """Search posts using FTS5 full-text search, ranked by relevance."""
+        # Build FTS5 query: quote each term and prefix-match for partial words
+        terms = query.strip().split()
+        if not terms:
+            return []
+        fts_query = " ".join(f'"{t}"*' for t in terms)
+
+        sql = (
+            "SELECT p.* FROM posts p"
+            " JOIN posts_fts ON posts_fts.rowid = p.id"
+            " WHERE posts_fts MATCH ? AND p.reply_to IS NULL"
+        )
+        params: list = [fts_query]
         if before_id is not None:
-            sql += " AND id < ?"
+            sql += " AND p.id < ?"
             params.append(before_id)
-        sql += " ORDER BY id DESC LIMIT ?"
+        sql += " ORDER BY bm25(posts_fts) LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
 

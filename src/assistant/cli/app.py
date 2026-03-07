@@ -209,6 +209,32 @@ def youtube_auth_cmd() -> None:
     ctx.invoke(youtube_auth)
 
 
+@cli.command("backfill-embeddings")
+def backfill_embeddings() -> None:
+    """Backfill all past messages into Qdrant vector store."""
+    import asyncio
+
+    settings = get_settings()
+    if not settings.qdrant_enabled:
+        click.echo("Error: ASSISTANT_QDRANT_ENABLED is not set to true.")
+        raise SystemExit(1)
+
+    from assistant.memory.embedding_providers import create_embedder
+    from assistant.memory.embedding_worker import EmbeddingWorker
+    from assistant.memory.search import SearchIndex
+    from assistant.memory.vector_store import VectorStore
+
+    embedder = create_embedder(settings)
+    vector_store = VectorStore(settings, embedder)
+    search_index = SearchIndex(settings.search_db_path)
+    worker = EmbeddingWorker(vector_store, search_index)
+
+    click.echo("Starting backfill...")
+    asyncio.run(worker.backfill())
+    vector_store.close()
+    click.echo("Done.")
+
+
 @cli.command()
 @click.option("--host", default=None, help="Host to bind to")
 @click.option("--port", default=None, type=int, help="Port to bind to")

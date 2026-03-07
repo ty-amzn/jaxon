@@ -43,19 +43,15 @@ class EmbeddingWorker:
 
     def _get_high_water_mark(self) -> int:
         """Get the highest message ID already in Qdrant."""
-        ids = self._store.scroll_ids(CONVERSATIONS, limit=1)
-        if not ids:
-            return 0
-        # IDs are stored as "msg_{id}" strings
-        max_id = 0
         all_ids = self._store.scroll_ids(CONVERSATIONS, limit=10000)
+        if not all_ids:
+            return 0
+        max_id = 0
         for point_id in all_ids:
-            if isinstance(point_id, str) and point_id.startswith("msg_"):
-                try:
-                    num = int(point_id.split("_", 1)[1])
-                    max_id = max(max_id, num)
-                except (ValueError, IndexError):
-                    pass
+            try:
+                max_id = max(max_id, int(point_id))
+            except (ValueError, TypeError):
+                pass
         return max_id
 
     async def _sync_conversations(self) -> None:
@@ -74,7 +70,7 @@ class EmbeddingWorker:
             preview = content[:300]
             items.append(
                 {
-                    "id": f"msg_{msg['id']}",
+                    "id": msg["id"],
                     "text": embed_text,
                     "payload": {
                         "source_id": msg["id"],
@@ -110,7 +106,7 @@ class EmbeddingWorker:
                 preview = content[:300]
                 items.append(
                     {
-                        "id": f"msg_{msg['id']}",
+                        "id": msg["id"],
                         "text": embed_text,
                         "payload": {
                             "source_id": msg["id"],

@@ -250,7 +250,7 @@ function renderPostHtml(p){
         ${p.feed_name&&!currentFeed?`<span class="badge" onclick="event.stopPropagation();navigate('${esc(p.feed_name)}')">#${esc(p.feed_name)}</span>`:''}
       </div>
       ${tl?`<div class="tagline">${esc(tl)}</div>`:''}
-      <div class="body">${renderMd(p.content)}</div>
+      <div class="body" data-post-body="${p.id}">${renderMd(p.content)}</div>
       ${imgHtml(p.image_url)}
       <div class="footer" onclick="event.stopPropagation()">
         ${reactionsHtml(p.id,p.reactions)}
@@ -261,6 +261,23 @@ function renderPostHtml(p){
       </div>
     </div>
   </div>`;
+}
+
+function clampPostBodies(container){
+  container.querySelectorAll('.body[data-post-body]:not(.clamped):not(.expanded)').forEach(body=>{
+    if(body.scrollHeight>300){
+      body.classList.add('clamped');
+      const btn=document.createElement('button');
+      btn.className='show-more';btn.textContent='Show more';
+      btn.onclick=function(e){
+        e.stopPropagation();
+        const expanded=body.classList.toggle('expanded');
+        body.classList.toggle('clamped',!expanded);
+        btn.textContent=expanded?'Show less':'Show more';
+      };
+      body.parentElement.insertBefore(btn,body.nextSibling);
+    }
+  });
 }
 
 async function loadTimeline(){
@@ -295,6 +312,7 @@ async function loadTimeline(){
     const emptyMsg=currentSearch?'No posts match your search.':'No posts yet. Be the first!';
     if(!posts.length){el.innerHTML=`<div class="loading">${emptyMsg}</div>`;timelinePosts=[];lastPostId=null;updateLikedCard();toggleLoadMore(false);return}
     el.innerHTML=posts.map(renderPostHtml).join('');
+    clampPostBodies(el);
     timelinePosts=posts;
     lastPostId=posts[posts.length-1].id;
     updateLikedCard();
@@ -316,6 +334,7 @@ async function loadMore(){
     if(posts.length){
       const el=document.getElementById('timeline');
       el.insertAdjacentHTML('beforeend',posts.map(renderPostHtml).join(''));
+      clampPostBodies(el);
       timelinePosts=timelinePosts.concat(posts);
       lastPostId=posts[posts.length-1].id;
     }

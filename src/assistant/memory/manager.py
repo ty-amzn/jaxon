@@ -48,10 +48,10 @@ class MemoryManager:
         # Plugin skills (injected at runtime)
         self._plugin_skills: dict[str, str] = {}
 
-        # Embedding service (optional)
+        # Embedding service (optional) — skipped when Qdrant is enabled
         self._vector_search_enabled = vector_search_enabled
         self.embeddings: EmbeddingService | None = None
-        if vector_search_enabled and embeddings_db_path:
+        if vector_search_enabled and embeddings_db_path and not vector_store:
             self.embeddings = EmbeddingService(
                 db_path=embeddings_db_path,
                 ollama_base_url=ollama_base_url,

@@ -225,7 +225,15 @@ a{color:var(--accent);text-decoration:none}
   padding:2px 8px;border-radius:10px;margin-left:auto;cursor:pointer}
 .post .badge:hover{background:var(--accent);color:#fff}
 .post .body{margin-top:6px;word-wrap:break-word;overflow-wrap:break-word;font-size:15px;
-  line-height:1.5;color:var(--text-primary)}
+  line-height:1.5;color:var(--text-primary);max-height:300px;overflow:hidden;position:relative;
+  transition:max-height .3s ease}
+.post .body.expanded{max-height:none}
+.post .body.clamped::after{content:'';position:absolute;bottom:0;left:0;right:0;height:60px;
+  background:linear-gradient(transparent,var(--glass-bg));pointer-events:none}
+.post .body.expanded::after{display:none}
+.post .show-more{background:none;border:none;color:var(--accent);font-size:12px;font-weight:600;
+  cursor:pointer;padding:4px 0;font-family:inherit}
+.post .show-more:hover{text-decoration:underline}
 .post .footer{display:flex;gap:4px;margin-top:10px;align-items:center}
 .post .footer .stat{display:flex;align-items:center;gap:4px;color:var(--text-tertiary);
   font-size:12px;padding:4px 8px;border-radius:16px;transition:all .15s;cursor:pointer;

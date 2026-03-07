@@ -226,11 +226,14 @@ def _make_memory_store(memory: MemoryManager, vector_store: Any = None):
         if vector_store is not None:
             try:
                 import hashlib
+                import uuid
 
-                fact_id = hashlib.sha256(f"{section}:{fact}".encode()).hexdigest()[:16]
+                # Derive a stable UUID from the fact content
+                fact_hash = hashlib.sha256(f"{section}:{fact}".encode()).digest()
+                fact_uuid = str(uuid.UUID(bytes=fact_hash[:16]))
                 await vector_store.upsert(
                     "knowledge",
-                    f"fact_{fact_id}",
+                    fact_uuid,
                     fact,
                     payload={
                         "section": section,
