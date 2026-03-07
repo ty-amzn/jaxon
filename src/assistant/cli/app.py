@@ -219,6 +219,7 @@ def backfill_embeddings() -> None:
         click.echo("Error: ASSISTANT_QDRANT_ENABLED is not set to true.")
         raise SystemExit(1)
 
+    from assistant.memory.durable import DurableMemory
     from assistant.memory.embedding_providers import create_embedder
     from assistant.memory.embedding_worker import EmbeddingWorker
     from assistant.memory.search import SearchIndex
@@ -227,7 +228,13 @@ def backfill_embeddings() -> None:
     embedder = create_embedder(settings)
     vector_store = VectorStore(settings, embedder)
     search_index = SearchIndex(settings.search_db_path)
-    worker = EmbeddingWorker(vector_store, search_index)
+    durable = DurableMemory(settings.memory_path)
+    worker = EmbeddingWorker(
+        vector_store,
+        search_index,
+        townsquare_url=settings.townsquare_url or None,
+        durable_memory=durable,
+    )
 
     click.echo("Starting backfill...")
     asyncio.run(worker.backfill())

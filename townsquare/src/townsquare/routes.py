@@ -199,6 +199,7 @@ async def get_posts(
     request: Request,
     limit: int = 50,
     before_id: int | None = None,
+    after_id: int | None = None,
     feed: str | None = None,
     since: str | None = None,
     q: str | None = None,
@@ -213,7 +214,7 @@ async def get_posts(
             return []
         posts = store.get_feed_posts(feed_obj["id"], limit=limit, before_id=before_id, since=since)
     else:
-        posts = store.get_timeline(limit=limit, before_id=before_id, since=since)
+        posts = store.get_timeline(limit=limit, before_id=before_id, since=since, after_id=after_id)
 
     # Attach reply counts, feed name, and reactions
     feeds_cache: dict[int, str] = {}

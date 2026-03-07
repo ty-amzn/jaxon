@@ -302,6 +302,7 @@ class FeedStore:
         limit: int = 50,
         before_id: int | None = None,
         since: str | None = None,
+        after_id: int | None = None,
     ) -> list[dict]:
         """Return top-level posts (reply_to IS NULL), newest first."""
         sql = "SELECT * FROM posts WHERE reply_to IS NULL"
@@ -309,10 +310,16 @@ class FeedStore:
         if before_id is not None:
             sql += " AND id < ?"
             params.append(before_id)
+        if after_id is not None:
+            sql += " AND id > ?"
+            params.append(after_id)
         if since is not None:
             sql += " AND created_at >= ?"
             params.append(since)
-        sql += " ORDER BY pinned_at IS NOT NULL DESC, pinned_at DESC, id DESC LIMIT ?"
+        if after_id is not None:
+            sql += " ORDER BY id ASC LIMIT ?"
+        else:
+            sql += " ORDER BY pinned_at IS NOT NULL DESC, pinned_at DESC, id DESC LIMIT ?"
         params.append(limit)
         return _rows_to_dicts(self._db.execute(sql, params))
 

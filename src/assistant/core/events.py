@@ -97,7 +97,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         import asyncio
         from assistant.memory.embedding_worker import EmbeddingWorker
 
-        worker = EmbeddingWorker(vector_store, chat_interface._memory.search)
+        worker = EmbeddingWorker(
+            vector_store,
+            chat_interface._memory.search,
+            townsquare_url=settings.townsquare_url or None,
+            durable_memory=chat_interface._memory.durable,
+        )
         embedding_worker_task = asyncio.create_task(worker.run())
         logger.info("Embedding worker started")
 
