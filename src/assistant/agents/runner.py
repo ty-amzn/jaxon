@@ -95,6 +95,10 @@ class AgentRunner:
         # Track tool calls
         tool_calls_made: list[dict] = []
 
+        # Generate a session ID for this agent run so inference and tool
+        # events can be correlated in Observatory.
+        agent_session_id = uuid.uuid4().hex[:12]
+
         # Create scoped tool executor
         allowed_tool_names = {t["name"] for t in tools}
 
@@ -107,6 +111,7 @@ class AgentRunner:
                 )
             result = await self._tool_registry.execute(
                 tool_call, permission_override=permission_override,
+                session_id=agent_session_id,
             )
             tool_calls_made.append({
                 "name": tool_call.name,
@@ -124,7 +129,7 @@ class AgentRunner:
 
             # Raw clients bypass the router's metrics — track manually
             metrics = MetricsContext(
-                self._router._metrics, session_id=uuid.uuid4().hex[:12],
+                self._router._metrics, session_id=agent_session_id,
                 agent_name=agent.name,
             )
             # Parse provider/model from "provider/model" syntax
@@ -151,7 +156,7 @@ class AgentRunner:
                 "max_tool_rounds": agent.max_tool_rounds,
             }
             if not agent.model:
-                kwargs["session_id"] = uuid.uuid4().hex[:12]
+                kwargs["session_id"] = agent_session_id
                 kwargs["agent_name"] = agent.name
 
             async for event in client.stream_with_tool_loop(**kwargs):
