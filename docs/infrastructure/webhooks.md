@@ -86,11 +86,41 @@ curl -X POST http://localhost:51430/webhooks/deploy-notify \
 
 ## Authentication
 
-When `ASSISTANT_WEBHOOK_SECRET` is set, every request must include a valid `Authorization` header. The token is compared using constant-time comparison to prevent timing attacks.
+Authentication uses bearer tokens, validated with constant-time comparison to prevent timing attacks.
 
-Accepted formats:
+Accepted header formats:
 - `Authorization: Bearer <token>` (standard)
 - `Authorization: <token>` (raw — for callers that can't set the Bearer prefix)
+
+### Per-workflow API keys (recommended)
+
+Each workflow can have its own `webhook_key`. This way, each external service only has access to its own webhook — a compromised key doesn't affect other workflows.
+
+```yaml
+# data/workflows/github-deploy.yaml
+name: github-deploy
+trigger: webhook
+webhook_key: "a1b2c3d4..."   # only this key works for this webhook
+steps:
+  - name: notify
+    tool: shell_exec
+    args:
+      command: "echo deployed"
+```
+
+Generate a key per workflow:
+
+```bash
+openssl rand -hex 32
+```
+
+### Auth priority
+
+1. **Per-workflow key** (`webhook_key` in YAML) — checked first
+2. **Global secret** (`ASSISTANT_WEBHOOK_SECRET`) — fallback if no per-workflow key
+3. **No auth** — if neither is set, requests are accepted without validation (local dev only)
+
+This means you can use per-workflow keys for external-facing webhooks while keeping the global secret as a catch-all for internal or less sensitive workflows.
 
 ### Why bearer token instead of HMAC?
 
@@ -98,7 +128,7 @@ Bearer tokens work with every HTTP client — IFTTT, iOS Shortcuts, Zapier, curl
 
 ### No secret configured
 
-If `ASSISTANT_WEBHOOK_SECRET` is empty (the default), token validation is skipped entirely. This is fine for local development but not recommended for production.
+If neither `webhook_key` nor `ASSISTANT_WEBHOOK_SECRET` is set, token validation is skipped entirely. This is fine for local development but not recommended for production.
 
 ---
 
@@ -121,7 +151,7 @@ This gives you defense in depth: Cloudflare Access authenticates the caller, HTT
 openssl rand -hex 32
 ```
 
-Rotate tokens periodically. When you change the secret, update all callers.
+Rotate tokens periodically. With per-workflow keys, you can rotate one service's key without touching the others.
 
 ---
 
@@ -217,9 +247,11 @@ Webhook 'deploy-notify' triggered workflow:
 | Variable | Default | Description |
 |----------|---------|-------------|
 | `ASSISTANT_WEBHOOK_ENABLED` | `false` | Enable webhook endpoints |
-| `ASSISTANT_WEBHOOK_SECRET` | `""` | Bearer token (empty = no validation) |
+| `ASSISTANT_WEBHOOK_SECRET` | `""` | Global bearer token fallback (empty = no validation) |
 | `ASSISTANT_HOST` | `127.0.0.1` | API server bind address |
 | `ASSISTANT_PORT` | `51430` | API server port |
+
+Per-workflow keys are set in the workflow YAML (`webhook_key` field), not in `.env`.
 
 ---
 
@@ -233,7 +265,8 @@ Webhook 'deploy-notify' triggered workflow:
 
 ### Webhook returns 401/403
 
-- Check that `ASSISTANT_WEBHOOK_SECRET` matches the token sent in the `Authorization` header
+- If the workflow has a `webhook_key`, the token must match that key (not the global secret)
+- If no `webhook_key` is set, the token must match `ASSISTANT_WEBHOOK_SECRET`
 - The header format should be `Authorization: Bearer <token>`
 
 ### Webhook returns 503

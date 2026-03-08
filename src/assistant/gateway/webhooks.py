@@ -42,6 +42,13 @@ def verify_bearer_token(token: str, secret: str) -> bool:
     return secrets.compare_digest(token, secret)
 
 
+def _extract_token(authorization: str | None) -> str | None:
+    """Extract bearer token from Authorization header."""
+    if not authorization:
+        return None
+    return authorization.removeprefix("Bearer ").strip()
+
+
 @router.post("/{name}")
 async def receive_webhook(
     name: str,
@@ -49,31 +56,31 @@ async def receive_webhook(
     authorization: str | None = Header(default=None),
 ) -> dict[str, Any]:
     """Receive a webhook and trigger the matching workflow."""
-    # Validate bearer token if secret is configured
-    if _webhook_secret:
-        if not authorization:
+    if _workflow_manager is None or _workflow_runner is None:
+        raise HTTPException(status_code=503, detail="Workflow system not initialized")
+
+    # Look up workflow first (needed for per-workflow key check)
+    workflow = _workflow_manager.get(name)
+    if not workflow:
+        raise HTTPException(status_code=404, detail=f"No workflow named '{name}'")
+
+    # Auth: per-workflow key takes priority, then global secret
+    required_secret = workflow.webhook_key or _webhook_secret
+    if required_secret:
+        token = _extract_token(authorization)
+        if not token:
             raise HTTPException(status_code=401, detail="Missing Authorization header")
-        # Accept "Bearer <token>" or raw token
-        token = authorization.removeprefix("Bearer ").strip()
-        if not verify_bearer_token(token, _webhook_secret):
+        if not verify_bearer_token(token, required_secret):
             raise HTTPException(status_code=403, detail="Invalid token")
+
+    if not workflow.enabled:
+        raise HTTPException(status_code=409, detail=f"Workflow '{name}' is disabled")
 
     # Parse JSON payload
     try:
         payload = await request.json()
     except Exception:
         payload = {}
-
-    if _workflow_manager is None or _workflow_runner is None:
-        raise HTTPException(status_code=503, detail="Workflow system not initialized")
-
-    # Look up workflow by name
-    workflow = _workflow_manager.get(name)
-    if not workflow:
-        raise HTTPException(status_code=404, detail=f"No workflow named '{name}'")
-
-    if not workflow.enabled:
-        raise HTTPException(status_code=409, detail=f"Workflow '{name}' is disabled")
 
     # Run the workflow with the webhook payload as context
     results = await _workflow_runner.run(workflow, context=payload)

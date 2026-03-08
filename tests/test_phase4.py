@@ -206,6 +206,46 @@ def test_verify_bearer_token_invalid():
     assert verify_bearer_token("wrong-token", "my-secret-token") is False
 
 
+def test_workflow_definition_webhook_key():
+    """WorkflowDefinition parses webhook_key from YAML."""
+    data = {
+        "name": "keyed-workflow",
+        "trigger": "webhook",
+        "webhook_key": "per-workflow-secret-123",
+        "steps": [{"name": "s1", "tool": "echo"}],
+    }
+    wf = WorkflowDefinition.from_dict(data)
+    assert wf.webhook_key == "per-workflow-secret-123"
+
+
+def test_workflow_definition_no_webhook_key():
+    """WorkflowDefinition defaults to empty webhook_key."""
+    data = {
+        "name": "no-key",
+        "trigger": "webhook",
+        "steps": [{"name": "s1", "tool": "echo"}],
+    }
+    wf = WorkflowDefinition.from_dict(data)
+    assert wf.webhook_key == ""
+
+
+def test_workflow_manager_list_shows_has_webhook_key(tmp_path: Path):
+    """list_workflows reports whether a workflow has a per-webhook key."""
+    wf_dir = tmp_path / "workflows"
+    wf_dir.mkdir()
+    (wf_dir / "keyed.yaml").write_text(
+        "name: keyed\ntrigger: webhook\nwebhook_key: secret123\nsteps:\n  - name: s1\n    tool: echo\n"
+    )
+    (wf_dir / "plain.yaml").write_text(
+        "name: plain\ntrigger: webhook\nsteps:\n  - name: s1\n    tool: echo\n"
+    )
+    mgr = WorkflowManager(wf_dir)
+    mgr.load()
+    listing = {w["name"]: w for w in mgr.list_workflows()}
+    assert listing["keyed"]["has_webhook_key"] is True
+    assert listing["plain"]["has_webhook_key"] is False
+
+
 # --- DND ---
 
 

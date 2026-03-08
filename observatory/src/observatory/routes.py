@@ -45,6 +45,7 @@ async def deep_health(request: Request):
         "jaxon": f"{settings.jaxon_url}/health" if settings.jaxon_url else "",
         "townsquare": f"{settings.townsquare_url}/feed/health" if settings.townsquare_url else "",
         "papertrader": f"{settings.papertrader_url}/trading/health" if settings.papertrader_url else "",
+        "qdrant": f"{settings.qdrant_url}/healthz" if settings.qdrant_url else "",
     }
 
     results = {"observatory": {"status": "ok"}}

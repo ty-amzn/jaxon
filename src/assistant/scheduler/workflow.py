@@ -31,6 +31,7 @@ class WorkflowDefinition:
     trigger: str  # "manual", "webhook", "schedule"
     steps: list[WorkflowStep] = field(default_factory=list)
     enabled: bool = True
+    webhook_key: str = ""  # per-workflow API key (takes priority over global secret)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> WorkflowDefinition:
@@ -49,6 +50,7 @@ class WorkflowDefinition:
             trigger=data.get("trigger", "manual"),
             steps=steps,
             enabled=data.get("enabled", True),
+            webhook_key=data.get("webhook_key", ""),
         )
 
     @classmethod
@@ -163,6 +165,7 @@ class WorkflowManager:
                 "trigger": wf.trigger,
                 "steps": len(wf.steps),
                 "enabled": wf.enabled,
+                "has_webhook_key": bool(wf.webhook_key),
             }
             for wf in self._workflows.values()
         ]

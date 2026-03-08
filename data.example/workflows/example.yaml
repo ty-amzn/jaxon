@@ -2,6 +2,10 @@ name: example
 description: Example workflow demonstrating multi-step chains
 trigger: manual
 enabled: true
+# Per-workflow API key for webhook auth (optional).
+# If set, this key is required instead of the global ASSISTANT_WEBHOOK_SECRET.
+# Generate with: openssl rand -hex 32
+# webhook_key: ""
 steps:
   - name: check-status
     tool: shell_exec

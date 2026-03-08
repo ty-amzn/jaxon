@@ -72,6 +72,7 @@ services:
       - OBSERVATORY_JAXON_URL=http://jaxon:51430
       - OBSERVATORY_TOWNSQUARE_URL=http://townsquare:51431
       - OBSERVATORY_PAPERTRADER_URL=http://papertrader:51433
+      - OBSERVATORY_QDRANT_URL=http://qdrant:6333
     volumes:
       - ./observatory/data:/app/data
     restart: unless-stopped

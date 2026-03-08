@@ -18,3 +18,4 @@ class Settings(BaseSettings):
     jaxon_url: str = ""           # e.g. http://jaxon:51430
     townsquare_url: str = ""      # e.g. http://townsquare:51431
     papertrader_url: str = ""     # e.g. http://papertrader:51433
+    qdrant_url: str = ""          # e.g. http://qdrant:6333
