@@ -1,6 +1,15 @@
 """Tests for LLM types and client utilities."""
 
-from assistant.llm.types import Message, Role, ToolCall, ToolResult, StreamEvent, StreamEventType
+from assistant.llm.types import (
+    Message,
+    Role,
+    ToolCall,
+    ToolResult,
+    StreamEvent,
+    StreamEventType,
+    Provider,
+    LLMConfig,
+)
 from assistant.llm.context import build_messages
 
 
@@ -35,3 +44,27 @@ def test_stream_event():
     event = StreamEvent(type=StreamEventType.TEXT_DELTA, text="hello")
     assert event.type == StreamEventType.TEXT_DELTA
     assert event.text == "hello"
+
+
+class TestLLMTypes:
+    """Tests for LLM types."""
+
+    def test_provider_enum(self):
+        """Test Provider enum values."""
+        assert Provider.CLAUDE.value == "claude"
+        assert Provider.OLLAMA.value == "ollama"
+
+    def test_llm_config(self):
+        """Test LLMConfig creation."""
+        config = LLMConfig(
+            provider=Provider.CLAUDE,
+            model="claude-sonnet-4-20250514",
+            max_tokens=4096,
+            api_key="test-key",
+        )
+
+        assert config.provider == Provider.CLAUDE
+        assert config.model == "claude-sonnet-4-20250514"
+        assert config.max_tokens == 4096
+        assert config.api_key == "test-key"
+        assert config.base_url == ""

@@ -186,4 +186,35 @@ docker compose up -d
   password and do not commit it to version control. It is already in
   `.gitignore` via `data/`.
 - Tool permission gates apply normally; the bot will ask for approval (logged
-  to `data/logs/audit.jsonl`) before executing destructive tools.
+  to `data/logs/audit.jsonl`) before executing destructive tools. See
+  **Tool approval limitations** below for WhatsApp-specific caveats.
+
+---
+
+## Tool approval limitations
+
+Unlike Telegram and Slack (which use inline buttons tied to each request),
+WhatsApp approvals are **text-based**. When a tool needs permission the bot
+sends a message like:
+
+```
+🔒 Permission needed [write]:
+Execute: rm /tmp/old-cache
+
+Reply YES to approve or NO to deny.
+```
+
+**Recognised approval words:** `y`, `yes`, `ok`, `approve`, `sure`, `yep`,
+`yeah`, `go ahead`. Any other reply (including `yes please` or `okay`) is
+treated as a denial.
+
+**Known limitations:**
+
+| Limitation | Detail |
+|------------|--------|
+| FIFO ordering | If multiple tools request approval at the same time, a "yes" reply always resolves the **oldest** pending request. There is no way to target a specific request by ID. |
+| Implicit deny | There are no explicit deny keywords — any text that is not an approval word silently denies the request. |
+| 10-minute timeout | If no reply is received within 10 minutes the request is automatically denied and the bot sends a timeout notice. The user must re-trigger the tool to get a new prompt. |
+
+In practice these rarely cause issues because WhatsApp message latency makes
+concurrent multi-tool approvals uncommon.

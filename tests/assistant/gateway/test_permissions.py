@@ -80,3 +80,28 @@ async def test_permission_write_file():
     allowed, req = await pm.check("write_file", {"path": "/tmp/test", "content": "x"})
     assert allowed is True
     assert req.requires_approval is True
+
+
+def test_schedule_reminder_classified_as_write():
+    """schedule_reminder tool should be classified as WRITE."""
+    async def noop_approval(req):
+        return True
+
+    pm = PermissionManager(noop_approval)
+    request = pm.classify_tool_call(
+        "schedule_reminder",
+        {"description": "test", "trigger_type": "date", "trigger_args": {}, "message": "hi"},
+    )
+    assert request.action_category == ActionCategory.WRITE
+    assert request.requires_approval
+
+
+def test_workflow_tool_classified_as_write():
+    """run_workflow tool should be classified as WRITE."""
+    async def noop_approval(req):
+        return True
+
+    pm = PermissionManager(noop_approval)
+    request = pm.classify_tool_call("run_workflow", {"name": "test-wf"})
+    assert request.action_category == ActionCategory.WRITE
+    assert request.requires_approval
